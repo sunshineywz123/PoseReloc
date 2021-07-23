@@ -1,0 +1,18 @@
+# @package _global_
+
+type: merge_anno
+task_name: null
+match_type: 'softmax'
+split: 'train'
+
+names: 
+    - '023-porcelain-others'
+
+datamodule:
+    data_dir: ${work_dir}/data/sfm_model
+
+    out_path: ${work_dir}/data/cache/${task_name}/${split}.json
+
+hydra:
+    run:
+        dir: ${work_dir}

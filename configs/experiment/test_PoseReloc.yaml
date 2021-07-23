@@ -1,0 +1,19 @@
+# @package _global_
+
+type: inference
+
+match_type: softmax
+task_name: null
+
+model:
+    pretrain_model_path: ${data_dir}/models/checkpoints/${task_name}/epoch=19.ckpt
+    extractor_model_path: ${data_dir}/models/extractors/SuperPoint/superpoint_v1.pth
+
+input:
+    # data_dir: ${data_dir}/scan_data/023-porcelain-others/obj1
+    # sfm_model_dir: ${data_dir}/sfm_model/023-porcelain-others
+    data_dir: /home/wangzihao/code/PoseReloc/data/023-porcelain-others/obj1
+    sfm_model_dir: /home/wangzihao/code/PoseReloc/data/sfm_model/023-porcelain-others
+
+output:
+    vis_dir: '/home/wangzihao/runs/vis3d/PoseReloc'
