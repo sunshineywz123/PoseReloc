@@ -139,7 +139,9 @@ def dump_vis3d(idx, cfg, image0, image1, image_full,
     """ Visualize by vis3d """
     from vis3d import Vis3D
     
-    seq_name = '_'.join(cfg.input.data_dir.split('/')[1:])
+    seq_name = '_'.join(cfg.input.data_dir.split('/')[-2:])
+    if cfg.suffix:
+        seq_name += '_' + cfg.suffix
     vis3d = Vis3D(cfg.output.vis_dir, seq_name)
     vis3d.set_scene_id(idx)
 
@@ -223,6 +225,7 @@ def inference(cfg):
         image1 = image0.copy()
         dump_vis3d(idx, cfg, image0, image1, image_full,
                    mkpts2d, mkpts3d_2d, mconf, inliers) 
+        
         idx += 1
 
     evaluator.summarize()
