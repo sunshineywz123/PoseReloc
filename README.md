@@ -7,7 +7,7 @@ Scanning data: /data/wangzihao/code/PoseReloc/data
 Reconstruction results: /data/wangzihao/code/PoseReloc/data/sfm_model
 ```
 
-Some useful model:
+Some useful models:
 
 ```
 SuperPoint pretrained model: /data/wangzihao/code/sort_PoseReloc/data/models/extractors/SuperPoint/superpoint_v1.pth
@@ -36,7 +36,7 @@ python run.py +preprocess=merge_anno names=object_names_to_merge task_name=task_
 # 2 Training
 
 ```python
-python train.py +experiment=train_PoseReloc.yaml task_name=task_name exp_name=exp_name
+python train.py +experiment=train_PoseReloc task_name=task_name exp_name=exp_name
 ```
 
 
