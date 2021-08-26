@@ -30,6 +30,13 @@ def make_matching_plot_fast(image0, image1, kpts0, kpts1,
 
     mkpts0, mkpts1 = np.round(mkpts0).astype(int), np.round(mkpts1).astype(int)
     color = (np.array(color[:, :3]) * 255).astype(int)[:, ::-1]
+    for (x0, y0), (x1, y1), c in zip(mkpts0, mkpts1, color):
+        c = c.tolist()
+        cv2.line(out, (x0, y0), (x1 + margin + W0, y1), 
+                 color=c, thickness=1, lineType=cv2.LINE_AA)
+        cv2.circle(out, (x0, y0), 2, c, -1, lineType=cv2.LINE_AA)
+        cv2.circle(out, (x1 + margin + W0, y1), 2, c, -1,
+                   lineType=cv2.LINE_AA)
     
     # FIXME: vis num_matches_to_show pairs
     if num_matches_to_show:
@@ -59,7 +66,9 @@ def vis_match_pairs(pred, feats0, feats1, name0, name1):
     image1_path = name1
     
     image0 = cv2.imread(image0_path)
+    image0 = cv2.cvtColor(image0, cv2.COLOR_RGB2GRAY)
     image1 = cv2.imread(image1_path)
+    image1 = cv2.cvtColor(image1, cv2.COLOR_RGB2GRAY)
     
     matches = pred['matches0'][0].detach().cpu().numpy()
     valid = matches > -1
@@ -73,7 +82,7 @@ def vis_match_pairs(pred, feats0, feats1, name0, name1):
 
     make_matching_plot_fast(
         image0, image1, kpts0, kpts1,
-        mkpts0, mkpts1, color, text=[], path=None
+        mkpts0, mkpts1, color, text=[]
     )
 
 
