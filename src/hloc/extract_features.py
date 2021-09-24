@@ -13,7 +13,7 @@ confs = {
             'keypoints_threshold': 0.02,
         }
     },
-    'spp_det': {
+    'superpoint': {
         'output': 'feats-spp',
         'model': {
             'name': 'spp_det',
@@ -101,3 +101,12 @@ def sift(img_lists, feature_out, cfg):
 
     feature_file.close()
     logging.info('Finishing exporting features.')
+
+
+def main(img_lists, feature_out, cfg):
+    if cfg.network.detection == 'sift':
+        sift(img_lists, feature_out, cfg)
+    elif cfg.network.detection == 'superpoint':
+        spp(img_lists, feature_out, cfg)
+    else:
+        raise NotImplementedError

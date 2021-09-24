@@ -106,6 +106,7 @@ def reproj(K, pose, pts_3d):
     else:
         pose_homo = pose
     
+    pts_3d = pts_3d.reshape(-1, 3)
     pts_3d_homo = np.concatenate([pts_3d, np.ones((pts_3d.shape[0], 1))], axis=1)
     pts_3d_homo = pts_3d_homo.T
 

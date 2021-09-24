@@ -12,7 +12,7 @@ confs = {
             'match_threshold': 0.2,
         }
     },
-    'spg_match': {
+    'superglue': {
         'output': 'matches-spg',
         'conf': {
             'descriptor_dim': 256,
@@ -35,7 +35,7 @@ def nn(cfg, feature_path, covis_pairs, matches_out, vis_match=False):
     assert osp.exists(feature_path), feature_path
     feature_file = h5py.File(feature_path, 'r')
     match_file = h5py.File(matches_out, 'w')
-    logging(f'Exporting matches to {feature_path}')
+    logging.info(f'Exporting matches to {feature_path}')
 
     with open(covis_pairs, 'r') as f:
         pair_list = f.read().rstrip('\n').split('\n')
@@ -155,3 +155,12 @@ def spg(cfg, feature_path, covis_pairs, matches_out, vis_match=False):
     
     match_file.close()
     logging.info('Finishing exporting matches.')
+
+
+def main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False):
+    if cfg.network.matching == 'superglue':
+        spg(cfg, feature_out, covis_pairs_out, matches_out, vis_match)
+    elif cfg.network.matching == 'nn':
+        nn(cfg, feature_out, covis_pairs_out, matches_out, vis_match)
+    else:
+        raise NotImplementedError

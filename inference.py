@@ -1,4 +1,4 @@
-from re import M
+import time
 import cv2
 import glob
 import torch
@@ -17,10 +17,10 @@ def get_img_full_path(img_path):
     return img_path.replace('/color/', '/color_full/')
 
 def get_gt_pose_path(img_path):
-    return img_path.replace('color', 'poses').replace('.png', '.txt')
+    return img_path.replace('/color/', '/poses/').replace('.png', '.txt')
 
 def get_intrin_path(img_path):
-    return img_path.replace('color', 'intrin').replace('.png', '.txt')
+    return img_path.replace('/color/', '/intrin/').replace('.png', '.txt')
 
 def get_3d_box_path(data_dir):
     refined_box_path = osp.join(data_dir, 'RefinedBox.txt')
@@ -43,9 +43,11 @@ def get_3d_anno(anno_3d_path):
     return anno_3d
 
 
-def get_default_paths(data_dir, sfm_model_dir, match_type):
-    anno_dir = osp.join(sfm_model_dir, 'outputs_{}/anno'.format(match_type))
-    anno_3d_path = osp.join(anno_dir, 'anno_3d.json')
+def get_default_paths(cfg):
+    data_dir = cfg.input.data_dir
+    sfm_model_dir = cfg.input.sfm_model_dir
+    anno_dir = osp.join(sfm_model_dir, f'outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}/anno')
+    anno_3d_path = osp.join(anno_dir, f'anno_3d_{cfg.feature_method}.json')
     
     img_lists = []
     color_dir = osp.join(data_dir, 'color')
@@ -75,13 +77,13 @@ def load_model(cfg):
 
         return trained_model
     
-    def load_extractor_model(model_path):
+    def load_extractor_model(cfg, model_path):
         """ Load extractor model(SuperGlue) """
         from src.models.extractors.SuperPoint.superpoint_v1 import SuperPoint
         from src.hloc.extract_features import confs
         from src.utils.model_io import load_network
     
-        extractor_model = SuperPoint(confs['spp_det']['conf'])
+        extractor_model = SuperPoint(confs[cfg.network.detection]['conf'])
         extractor_model.cuda()
         extractor_model.eval()
         load_network(extractor_model, model_path)
@@ -89,7 +91,7 @@ def load_model(cfg):
         return extractor_model
     
     trained_model = load_trained_model(cfg.model.pretrain_model_path)
-    extractor_model = load_extractor_model(cfg.model.extractor_model_path)
+    extractor_model = load_extractor_model(cfg, cfg.model.extractor_model_path)
     return trained_model, extractor_model
 
 
@@ -181,19 +183,22 @@ def inference(cfg):
     from src.evaluators.spg_evaluator import Evaluator
     
     trained_model, extractor_model = load_model(cfg)
-    img_lists, paths = get_default_paths(cfg.input.data_dir, cfg.input.sfm_model_dir, cfg.match_type)
+    img_lists, paths = get_default_paths(cfg)
 
-    dataset = HLOCDataset(img_lists, confs['spp_det']['preprocessing'])
+    dataset = HLOCDataset(img_lists, confs[cfg.network.detection]['preprocessing'])
     loader = DataLoader(dataset, num_workers=1)
-    evaluator = Evaluator() # todo
+    evaluator = Evaluator() 
 
     anno_3d = get_3d_anno(paths['anno_3d_path'])
     idx = 0
+    time_cost = 0
     for data in tqdm.tqdm(loader):
         img_path = data['path'][0]
         inp = data['image'].cuda()
         
         # feature extraction
+        torch.cuda.synchronize()
+        start = time.time()
         pred_detection = extractor_model(inp)
         pred_detection = {k: v[0].cpu().numpy() for k, v in pred_detection.items()}
 
@@ -211,10 +216,14 @@ def inference(cfg):
         # evaluate
         intrin_path = get_intrin_path(img_path)
         K_crop = np.loadtxt(intrin_path)
-        pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d, mkpts3d)
+        pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d, mkpts3d, scale=1000)
         
         gt_pose_path = get_gt_pose_path(img_path)
         pose_gt = np.loadtxt(gt_pose_path)
+
+        torch.cuda.synchronize()
+        end = time.time()
+        time_cost += end - start
         evaluator.evaluate(pose_pred, pose_gt)
 
         # visualize
@@ -229,7 +238,9 @@ def inference(cfg):
         idx += 1
 
     evaluator.summarize()
-        
+    time_cost += end - start
+    print('=> average time cost: ', time_cost / len(dataset))
+
 
 @hydra.main(config_path='configs/', config_name='config.yaml')
 def main(cfg: DictConfig):

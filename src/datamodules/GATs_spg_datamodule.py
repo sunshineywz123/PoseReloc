@@ -1,9 +1,10 @@
+from re import M
 from pytorch_lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
-from src.datasets.spg_dataset import SPGDataset
+from src.datasets.GATs_spg_dataset import GATsSPGDataset
 
 
-class SPGDataModule(LightningDataModule):
+class GATsSPGDataModule(LightningDataModule):
     def __init__(self, *args, **kwargs):
         super().__init__()
         
@@ -11,19 +12,22 @@ class SPGDataModule(LightningDataModule):
         self.batch_size = kwargs['batch_size']
         self.num_workers = kwargs['num_workers']
         self.pin_memory = kwargs['pin_memory']
-        
+        self.num_leaf = kwargs['num_leaf']
+        self.shape2d = kwargs['shape2d']
+        self.shape3d = kwargs['shape3d']
+
         self.data_train = None
         self.data_val = None
         self.data_test = None
-    
+
     def prepare_data(self):
         pass
-    
+
     def setup(self, stage=None):
-        """Load data. Set variable: self.data_train, self.data_val, self.data_test"""
-        trainset = SPGDataset(anno_file=self.anno_file)
-        print('=> Read anno file: ', self.anno_file)
-        # testset = SPGDataset(anno_file=self.anno_file) # FIXME: add test dataset
+        """ Load data. Set variable: self.data_train, self.data_val, self.data_test"""
+        trainset = GATsSPGDataset(anno_file=self.anno_file, num_leaf=self.num_leaf,
+                                  shape2d=self.shape2d, shape3d=self.shape3d)
+        print("=> Read anno file: ", self.anno_file)
 
         self.data_train = trainset
         self.data_val = trainset
@@ -35,7 +39,7 @@ class SPGDataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            shuffle=True,
+            shuffle=True
         )
     
     def val_dataloader(self):
@@ -44,7 +48,7 @@ class SPGDataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            shuffle=False,
+            shuffle=False
         )
     
     def test_dataloader(self):
@@ -53,5 +57,5 @@ class SPGDataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
-            shuffle=False,
+            shuffle=False
         )

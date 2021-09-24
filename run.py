@@ -14,7 +14,8 @@ def parseScanData(cfg):
     #TODO: add arkit data processing
     pass
 
-def merge_(anno_2d_file, anno_3d_file, img_id, ann_id, images, annotations):
+def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
+           idxs_file, img_id, ann_id, images, annotations):
     """ Merge annotations about difference objs"""
     with open(anno_2d_file, 'r') as f:
         annos_2d = json.load(f)
@@ -33,7 +34,9 @@ def merge_(anno_2d_file, anno_3d_file, img_id, ann_id, images, annotations):
             'id': ann_id,
             'pose_file': anno_2d['pose_file'],
             'anno2d_file': anno_2d['anno_file'],
-            'anno3d_file': anno_3d_file
+            'avg_anno3d_file': avg_anno_3d_file,
+            'collect_anno3d_file': collect_anno_3d_file,
+            'idxs_file': idxs_file
         }
         annotations.append(anno)
     return img_id, ann_id
@@ -44,7 +47,7 @@ def merge_anno(cfg):
     anno_dirs = []
     
     for name in cfg.names:
-        anno_dir = osp.join(cfg.datamodule.data_dir, name, f'outputs_{cfg.match_type}', 'anno')
+        anno_dir = osp.join(cfg.datamodule.data_dir, name, f'outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}', 'anno')
         anno_dirs.append(anno_dir) 
     
     img_id = 0
@@ -55,13 +58,16 @@ def merge_anno(cfg):
     for anno_dir in anno_dirs:
         logger.info(f'Merging anno dir: {anno_dir}')
         anno_2d_file = osp.join(anno_dir, 'anno_2d.json')
-        anno_3d_file = osp.join(anno_dir, 'anno_3d.json')
+        avg_anno_3d_file = osp.join(anno_dir, 'anno_3d_average.json')
+        collect_anno_3d_file = osp.join(anno_dir, 'anno_3d_collect.json')
+        idxs_file = osp.join(anno_dir, 'idxs.npy')
 
-        if not osp.isfile(anno_2d_file) or not osp.isfile(anno_3d_file):
+        if not osp.isfile(anno_2d_file) or not osp.isfile(avg_anno_3d_file) or not osp.isfile(collect_anno_3d_file):
             logger.info(f'No annotation in: {anno_dir}')
             continue
         
-        img_id, ann_id = merge_(anno_2d_file, anno_3d_file, img_id, ann_id, images, annotations)
+        img_id, ann_id = merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
+                                idxs_file, img_id, ann_id, images, annotations)
     
     logger.info(f'Total num: {len(images)}')
     instance = {'images': images, 'annotations': annotations}
@@ -101,22 +107,22 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     from src.hloc import extract_features, pairs_from_covisibility, match_features, \
                          generate_empty, triangulation
 
-    outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type)
+    outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
 
-    feature_out = osp.join(outputs_dir, 'feats-svcnn.h5')
+    feature_out = osp.join(outputs_dir, f'feats-{cfg.network.detection}.h5')
     covis = cfg.sfm.covis_num
     covis_pairs_out = osp.join(outputs_dir, f'pairs-covis{covis}.txt')
-    matches_out = osp.join(outputs_dir, 'feats-svcnn_det+match.h5')
+    matches_out = osp.join(outputs_dir, f'matches-{cfg.network.matching}.h5')
     empty_dir = osp.join(outputs_dir, 'sfm_empty')
-    deep_sfm_dir = osp.join(outputs_dir, 'sfm_svcnn')
+    deep_sfm_dir = osp.join(outputs_dir, 'sfm_ws')
     
     if cfg.redo:
         os.system(f'rm -rf {outputs_dir}') 
         Path(outputs_dir).mkdir(exist_ok=True, parents=True)
 
-        extract_features.spp(img_lists, feature_out, cfg)
+        extract_features.main(img_lists, feature_out, cfg)
         pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
-        match_features.spg(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
+        match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
         generate_empty.generate_model(img_lists, empty_dir)
         triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
     
@@ -131,9 +137,17 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root):
     bbox_path = bbox_path if osp.isfile(bbox_path) else osp.join(data_dir0, 'Box.txt')
 
     match_type = cfg.match_type
-    outputs_dir = osp.join(outputs_dir_root, 'outputs_'+cfg.match_type)
-    feature_out = osp.join(outputs_dir, 'feats-svcnn.h5')
-    deep_sfm_dir = osp.join(outputs_dir, 'sfm_svcnn')
+    outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
+    # orig_feature_out = osp.join(outputs_dir, 'feats-svcnn.h5')
+    feature_out = osp.join(outputs_dir, f'feats-{cfg.network.detection}.h5')
+    # deep_sfm_dir_orig = osp.join(outputs_dir, 'sfm_svcnn')
+    deep_sfm_dir = osp.join(outputs_dir, 'sfm_ws')
+
+    # if osp.isfile(orig_feature_out) and not osp.isfile(feature_out):
+    #     os.system(f'mv {orig_feature_out} {feature_out}')
+    # if osp.isdir(deep_sfm_dir_orig) and not osp.isdir(deep_sfm_dir):
+    #     os.system(f'mv {deep_sfm_dir_orig} {deep_sfm_dir}')
+    
     model_path = osp.join(deep_sfm_dir, 'model')
 
     # select track length to limit the number of 3d points below thres.

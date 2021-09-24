@@ -1,13 +1,13 @@
-from re import M
+from unicodedata import decomposition
 import h5py
+from numpy.core.fromnumeric import cumsum
+import tqdm
 import json
 import os.path as osp
 import numpy as np
 
 from collections import defaultdict
 from pathlib import Path
-
-from torch.utils import data
 
 from src.utils.colmap import read_write_model
 
@@ -34,7 +34,7 @@ def get_default_path(cfg, outputs_dir):
                          |       |
                    database.db  model
     """
-    deep_sfm_dir = osp.join(outputs_dir, 'sfm_svcnn')
+    deep_sfm_dir = osp.join(outputs_dir, 'sfm_ws')
     model_dir = osp.join(deep_sfm_dir, 'model')
     anno_dir = osp.join(outputs_dir, 'anno')
     
@@ -137,6 +137,72 @@ def count_features(img_lists, features, images, kp3d_id_mapping):
     return feature_dim, kp3d_idx_feature, kp3d_idx_score, kp3d_idx_to_img_kp2d_idx
 
 
+# FIXME: to be deleted
+def collect_3d_ann_v1(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim, num_leaf):
+    kp3d_descriptors = {}
+    kp3d_scores = {}
+    kp3d_position = np.empty(shape=(0, 3))
+
+    idx = 0
+    for new_point_idx, old_points_idxs in points_idxs.items():
+        descriptors = np.empty(shape=(0, feature_dim))
+        scores = np.empty(shape=(0, 1))
+        for old_point_idx in old_points_idxs:
+            descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0)
+            scores = np.append(scores, kp3d_id_score[old_point_idx].reshape(-1, 1), axis=0)
+
+        kp3d_position = np.append(kp3d_position, xyzs[new_point_idx].reshape(1, 3), axis=0)
+        kp3d_descriptors.update({idx: descriptors.tolist()})
+        kp3d_scores.update({idx: scores.tolist()})
+        idx += 1
+    return kp3d_position, kp3d_descriptors, kp3d_scores
+
+
+def collect_descriptors(descriptors, feature_dim, num_leaf):
+    num_descriptors = descriptors.shape[0]
+    if num_descriptors < num_leaf:
+        ret_descriptors = np.append(descriptors, np.ones((feature_dim, num_leaf - num_descriptors)))
+    else:
+        ret_descriptors = descriptors[:num_leaf]
+    
+    return ret_descriptors
+
+
+def collect_scores(scores, num_leaf):
+    num_scores = scores.shape[0]
+    if num_scores < num_leaf:
+        ret_scores = np.append(scores, np.zeros((num_leaf - num_scores, 1)), axis=0)
+    else:
+        ret_scores = scores[:num_leaf]
+    
+    return ret_scores
+
+
+def collect_3d_ann_v2(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim, num_leaf):
+    kp3d_position = np.empty(shape=(0, 3))
+    kp3d_descriptors = np.empty(shape=(0, feature_dim))
+    kp3d_scores = np.empty(shape=(0, 1))
+
+    for new_point_idx, old_points_idxs in points_idxs.items():
+        descriptors = np.empty(shape=(0, feature_dim))
+        scores = np.empty(shape=(0, 1))
+        for old_point_idx in old_points_idxs:
+            descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0)
+            scores = np.append(scores, kp3d_id_score[old_point_idx].reshape(-1, 1), axis=0)
+
+        descriptors = collect_descriptors(descriptors, feature_dim, num_leaf)
+        scores = collect_scores(scores, num_leaf)
+
+        kp3d_position = np.append(kp3d_position, xyzs[new_point_idx].reshape(1, 3), axis=0)
+        kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0)
+        kp3d_scores = np.append(kp3d_scores, scores, axis=0)
+    
+    assert kp3d_descriptors.shape[0] == kp3d_position.shape[0] * num_leaf
+    assert kp3d_scores.shape[0] == kp3d_position.shape[0] * num_leaf
+
+    return kp3d_position, kp3d_descriptors, kp3d_scores
+
+
 def average_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim):
     """ 
     average position, descriptors and scores for 3d points 
@@ -166,6 +232,30 @@ def average_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_di
         kp3d_scores = np.append(kp3d_scores, avg_score, axis=0)
     
     return kp3d_position, kp3d_descriptors, kp3d_scores 
+
+
+def gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim):
+    """ 
+    Gather affiliated 2d points' positions, (mean/concated)descriptors and scores for each 3d points
+    """
+    kp3d_descriptors = np.empty(shape=(0, feature_dim))
+    kp3d_scores = np.empty(shape=(0, 1))
+    kp3d_position = np.empty(shape=(0, 3))
+    idxs = []
+
+    for new_point_idx, old_points_idxs in points_idxs.items():
+        descriptors = np.empty(shape=(0, feature_dim))
+        scores = np.empty(shape=(0, 1))
+        for old_point_idx in old_points_idxs:
+            descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0)
+            scores = np.append(scores, kp3d_id_score[old_point_idx].reshape(-1, 1), axis=0)
+        
+        kp3d_position = np.append(kp3d_position, xyzs[new_point_idx].reshape(1, 3), axis=0) 
+        kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0)
+        kp3d_scores = np.append(kp3d_scores, scores, axis=0)
+        idxs.append(descriptors.shape[0])
+    
+    return kp3d_position, kp3d_descriptors, kp3d_scores, np.array(idxs)
 
 
 def save_3d_anno(xyzs, descriptors, scores, out_path):
@@ -217,7 +307,7 @@ def get_assign_matrix(xys, xyzs, kp3d_idx_to_kp2d_idx, kp3d_id_mapping):
     return num_matches, assign_matrix
 
 
-def save_2d_anno_for_each_image(img_path, keypoints_2d, descriptors_2d, scores_2d, 
+def save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, scores_2d, 
                                 assign_matrix, num_matches):
     """ save annotation for each image
                    data_dir
@@ -229,7 +319,7 @@ def save_2d_anno_for_each_image(img_path, keypoints_2d, descriptors_2d, scores_2
         image_name  anno_file       pose_file    
     """
     data_dir = osp.dirname(osp.dirname(img_path))
-    anno_dir = osp.join(data_dir, 'anno')
+    anno_dir = osp.join(data_dir, f'anno_{cfg.network.detection}')
     Path(anno_dir).mkdir(exist_ok=True, parents=True)
 
     img_name = osp.basename(img_path)
@@ -249,7 +339,55 @@ def save_2d_anno_for_each_image(img_path, keypoints_2d, descriptors_2d, scores_2
     return anno_2d_path
 
 
-def save_2d_anno(img_lists, features, filter_xyzs, points_idxs, 
+def save_3d_anno_dict(xyzs, descriptors, scores, out_path):
+    if isinstance(descriptors, np.ndarray):
+        descriptors = descriptors.tolist()
+
+    if isinstance(scores, np.ndarray):
+        scores = scores.tolist()
+    
+    anno_3d = {
+        'keypoints3d': xyzs.tolist(), # [n, 3]
+        'descriptors3d': descriptors, # dict: {id: array}
+        'scores3d': scores
+    }
+
+    with open(out_path, 'w') as f:
+        json.dump(anno_3d, f)
+
+
+def save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs,
+                      kp3d_idx_to_img_kp2d_idx, anno2d_out_path):
+    annotations = []
+    anno_id = 0
+    
+    kp3d_id_mapping = id_mapping(points_idxs)
+    for img_path in img_lists:
+        feature = features[img_path]
+        kp3d_idx_to_kp2d_idx = kp3d_idx_to_img_kp2d_idx[img_path]
+
+        keypoints_2d, descriptors_2d, scores_2d = read_features(feature)
+        num_matches, assign_matrix = get_assign_matrix(
+            keypoints_2d, filter_xyzs,
+            kp3d_idx_to_kp2d_idx, kp3d_id_mapping
+        )
+
+        if num_matches != 0:
+            anno_2d_path = save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d,
+                                                       scores_2d, assign_matrix, num_matches)
+            pose_path = get_pose_path(img_path)
+            anno_id += 1
+            annotation = {
+                'anno_id': anno_id, 'anno_file': anno_2d_path,
+                'img_file': img_path, 'pose_file': pose_path
+            }
+            annotations.append(annotation)
+    
+    with open(anno2d_out_path, 'w') as f:
+        json.dump(annotations, f)
+
+
+def save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, 
                  kp3d_idx_to_img_kp2d_idx, anno2d_out_path):
     """ Save 2d annotations for each image and gather all 2d annotations """
     annotations = []
@@ -268,9 +406,8 @@ def save_2d_anno(img_lists, features, filter_xyzs, points_idxs,
         )
 
         if num_matches != 0:
-            anno_2d_path = save_2d_anno_for_each_image(img_path, keypoints_2d, descriptors_2d, scores_2d, assign_matrix, num_matches) 
+            anno_2d_path = save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, scores_2d, assign_matrix, num_matches) 
             pose_path = get_pose_path(img_path)
-            
             anno_id += 1
             annotation = {
                 'anno_id': anno_id, 'anno_file': anno_2d_path,
@@ -281,6 +418,26 @@ def save_2d_anno(img_lists, features, filter_xyzs, points_idxs,
     with open(anno2d_out_path, 'w') as f:
         json.dump(annotations, f)
  
+
+def mean_descriptors(descriptors, idxs):
+    cumsum_idxs = np.cumsum(idxs)
+    pre_cumsum_idxs = np.cumsum(idxs)[:-1]
+    pre_cumsum_idxs = np.insert(pre_cumsum_idxs, 0, 0)
+
+    descriptors_instance = [np.mean(descriptors[start: end], axis=0).reshape(1, -1) for start, end in zip(pre_cumsum_idxs, cumsum_idxs)]
+    avg_descriptors = np.concatenate(descriptors_instance, axis=0)
+    return avg_descriptors
+
+
+def mean_scores(scores, idxs):
+    cumsum_idxs = np.cumsum(idxs)
+    pre_cumsum_idxs = np.cumsum(idxs)[:-1]
+    pre_cumsum_idxs = np.insert(pre_cumsum_idxs, 0, 0)
+
+    scores_instance = [np.mean(scores[start: end], axis=0).reshape(1, -1) for start, end in zip(pre_cumsum_idxs, cumsum_idxs)]
+    avg_scores = np.concatenate(scores_instance, axis=0)
+    return avg_scores
+
 
 def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
                 points_idxs, xyzs):
@@ -303,7 +460,6 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
         3. Generate assign matrix;
         4. Save annotations;
     """
-    
     model_dir, anno_out_dir = get_default_path(cfg, outputs_dir)
 
     cameras, images, points3D = read_write_model.read_model(model_dir, ext='.bin')
@@ -315,13 +471,43 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
         = count_features(img_lists, features, images, kp3d_id_mapping)
 
     # step 2
-    filter_xyzs, filter_descriptors, filter_scores = average_3d_ann(kp3d_id_feature, kp3d_id_score,
-                                                                    xyzs, points_idxs, feature_dim)
+    filter_xyzs, filter_descriptors, filter_scores, idxs = gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs,
+                                                                        points_idxs, feature_dim)
+    
+    avg_descriptors, avg_scores = mean_descriptors(filter_descriptors, idxs), mean_scores(filter_scores, idxs)
 
-    # step 3 & 4
     anno2d_out_path = osp.join(anno_out_dir, 'anno_2d.json')
-    anno3d_out_path = osp.join(anno_out_dir, 'anno_3d.json')
+    save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
+    
+    avg_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_average.json')
+    collect_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_collect.json')
+    save_3d_anno(filter_xyzs, avg_descriptors, avg_scores, avg_anno3d_out_path)
+    save_3d_anno(filter_xyzs, filter_descriptors, filter_scores, collect_anno3d_out_path)
 
-    save_2d_anno(img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
-    save_3d_anno(filter_xyzs, filter_descriptors, filter_scores, anno3d_out_path)
+    idxs_out_path = osp.join(anno_out_dir, 'idxs.npy')
+    np.save(idxs_out_path, idxs)
+    # save_3d_anno(filter_xyzs, filter)
+    
+    # method = cfg.feature.method
+    # if method == "average":
+    #     filter_xyzs, filter_descriptors, filter_scores = average_3d_ann(kp3d_id_feature, kp3d_id_score,
+    #                                                                     xyzs, points_idxs, feature_dim)
+
+    #     # step 3 & 4
+    #     anno2d_out_path = osp.join(anno_out_dir, f'anno_2d_{cfg.feature.method}.json')
+    #     anno3d_out_path = osp.join(anno_out_dir, f'anno_3d_{cfg.feature.method}.json')
+
+    #     save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
+    #     save_3d_anno(filter_xyzs, filter_descriptors, filter_scores, anno3d_out_path)
+    # elif method == "collect":
+    #     filter_xyzs, filter_descriptors, filter_scores = collect_3d_ann_v2(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, 
+    #                                                                     feature_dim, num_leaf=cfg.feature.num_leaf)
+        
+    #     anno2d_out_path = osp.join(anno_out_dir, f'anno_2d_{cfg.feature.method}.json')
+    #     anno3d_out_path = osp.join(anno_out_dir, f'anno_3d_{cfg.feature.method}.json')
+        
+    #     save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
+    #     save_3d_anno_dict(filter_xyzs, filter_descriptors, filter_scores, anno3d_out_path)
+    # else:
+    #     raise NotImplementedError
     

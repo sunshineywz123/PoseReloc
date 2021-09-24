@@ -49,7 +49,9 @@ class SPGDataset(Dataset):
         num_3d_orig = keypoints3d.shape[0]
 
         if pad:
-            keypoints3d, descriptors3d, scores3d = data_utils.pad_keypoints3d_random(keypoints3d, descriptors3d, scores3d, self.shape3d)
+            keypoints3d = data_utils.pad_keypoints3d_random(keypoints3d, self.shape3d)
+            descriptors3d, scores3d = data_utils.pad_features3d_random(descriptors3d, scores3d, self.shape3d)
+
         return keypoints3d, descriptors3d, scores3d, num_3d_orig
          
     def read_anno(self, img_id):
@@ -64,7 +66,7 @@ class SPGDataset(Dataset):
         image = cv2.imread(color_path)
         height, width, _ = image.shape
 
-        anno3d_file = anno['anno3d_file']
+        anno3d_file = anno['avg_anno3d_file']
         keypoints3d, descriptors3d, scores3d, num_3d_orig = self.read_anno3d(anno3d_file, pad=self.pad)
 
         anno2d_file = anno['anno2d_file']
@@ -81,7 +83,8 @@ class SPGDataset(Dataset):
             "descriptors3d": descriptors3d,
             "scores2d": scores2d,
             "scores3d": scores3d,
-            "image_size": torch.Tensor([height, width])
+            "image_size": torch.Tensor([height, width]),
+            'image_path': color_path
         }
         return anno, conf_matrix 
     

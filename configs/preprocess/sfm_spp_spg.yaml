@@ -11,21 +11,70 @@ dataset:
   
     data_dir:
         - ${work_dir}/data/scan_data/023-porcelain-others obj1 obj2 obj3
+        - ${work_dir}/data/scan_data/017-porcelain-bottle pcl1 pcl2 pcl3
+        - ${work_dir}/data/scan_data/007-bluemoon-bottle lyl1 lyl2 lyl3
+        - ${work_dir}/data/scan_data/020-dove-box dove1 dov2
+        - ${work_dir}/data/scan_data/021-porcelain-bottle bottle1 bottle2 bottle3
+        - ${work_dir}/data/scan_data/015-yanghenda-doll yhd1 yhd2 yhd3
+        - ${work_dir}/data/scan_data/012-pikachu-doll pk1 pk2 pk3
+        - ${work_dir}/data/scan_data/006-piano-others pn1 pn2 pn3
+        - ${work_dir}/data/scan_data/022-haimianbaobao-others hmbb1 hmbb2 hmbb3
+        - ${work_dir}/data/scan_data/010-shampoo-bottle xfs1 xfs2 xfs3 ?
+        - ${work_dir}/data/scan_data/0402-toymen-others toymen-1 toymen-2 toymen-3
+        - ${work_dir}/data/scan_data/0404-koppla-box koppla-1 koppla-2 koppla-3 
+        - ${work_dir}/data/scan_data/0406-toycalculator-others toycalculator-1 toycalculator-2 toycalculator-3
+        - ${work_dir}/data/scan_data/0407-clock-others clock-1 clock-2 clock-3
+        - ${work_dir}/data/scan_data/0408-colorbox-box colorbox-1 colorbox-2 colorbox-3
+        - ${work_dir}/data/scan_data/0409-aptamil-box aptamil-1 aptamil-2
+        - ${work_dir}/data/scan_data/0410-huiyuan-box huiyuan-1 huiyuan-2
+        - ${work_dir}/data/scan_data/0411-doveshampoo-others doveshampoo-1 doveshampoo-2
+        - ${work_dir}/data/scan_data/0412-pikachubowl-others pikachubowl-1 pikachubowl-2
+        - ${work_dir}/data/scan_data/0413-juliecookies-box juliecookies-1 juliecookies-2 juliecookies-3
+        - ${work_dir}/data/scan_data/0414-babydiapers-others babydiapers-1 babydiapers-2 babydiapers-3
+        - ${work_dir}/data/scan_data/0415-captaincup-others captaincup-1 captaincup-2 captaincup-3
+        - ${work_dir}/data/scan_data/0416-tongyinoodles-others tongyinoodles-1 tongyinoodles-2 tongyinoodles-3
+        - ${work_dir}/data/scan_data/0417-kangshifunoodles-others kangshifunoodles-1 kangshifunoodles-2 kangshifunoodles-3
+        - ${work_dir}/data/scan_data/0418-cookies1-others cookies1-1 cookies1-2
+        - ${work_dir}/data/scan_data/0419-cookies2-others cookies2-1 cookies2-2 cookies2-3
+        - ${work_dir}/data/scan_data/0420-liuliumei-others liuliumei-1 liuliumei-2 liuliumei-3
+        - ${work_dir}/data/scan_data/0421-cannedfish-others cannedfish-1 cannedfish-2 cannedfish-3
+        - ${work_dir}/data/scan_data/0422-qvduoduo-box qvduoduo-1 qvduoduo-2 qvduoduo-3
+        - ${work_dir}/data/scan_data/0423-oreo-box oreo-1 oreo-2 oreo-3
+        - ${work_dir}/data/scan_data/0425-vitacare-others vitacare-1 vitacare-2 ?
+        - ${work_dir}/data/scan_data/0426-prunes-others prunes-1 prunes-2 prunes-3
+        - ${work_dir}/data/scan_data/0427-raisins-others raisins-1 raisins-2
+        - ${work_dir}/data/scan_data/0430-newtolmeat-others newtolmeat-1 newtolmeat-2 newtolmeat-3
+        - ${work_dir}/data/scan_data/0432-sesamesedge-others sesamesedge-1 sesamesedge-2 sesamesedge-3
+        - ${work_dir}/data/scan_data/0434-plum-others plum-1 plum-2 plum-3
+        - ${work_dir}/data/scan_data/0436-sedge-others sedge-1 sedge-2 sedge-3
+        - ${work_dir}/data/scan_data/0438-royal-others royal-1 royal-2 royal-3
+        - ${work_dir}/data/scan_data/0439-nongfuspring-others nongfuspring-1 nongfuspring-2 nongfuspring-3
+        - ${work_dir}/data/scan_data/0440-goatmilk-others goatmilk-1 goatmilk-2 goatmilk-3
+        - ${work_dir}/data/scan_data/0442-hersheys-others hersheys-1 hersheys-2 hersheys-3
+        - ${work_dir}/data/scan_data/0443-wheatbear-others wheatbear-1 wheatbear-2
+        - ${work_dir}/data/scan_data/0444-weizen-others weizen-1 weizen-2 weizen-3
+        - ${work_dir}/data/scan_data/0445-pistonhead-others pistonhead-1 pistonhead-2 pistonhead-3
+
   
     outputs_dir: ${work_dir}/data/sfm_model/{}
-    anno_dir: ${dataset.outputs_dir}/outputs_${match_type}/anno
+    # anno_dir: ${dataset.outputs_dir}/outputs_${match_type}/anno
 
 network:
-    detection: spp_det
+    detection: superpoint
     detection_model_path: ${work_dir}/data/models/extractors/SuperPoint/superpoint_v1.pth
 
-    matching: spg_match
+    matching: superglue
     matching_model_path: ${work_dir}/data/models/matchers/SuperGlue/superglue_outdoor.pth
 
 sfm:
     gap: 3
     covis_num: 8
     track_length: 8
+
+# feature:
+    # method: 'average'
+    # num_leaf: 6
+
 
 disable_lightning_logs: True
     

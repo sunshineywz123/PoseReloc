@@ -18,11 +18,10 @@ seed: 12345
 
 task_name: null
 exp_name: hello_world
-feature_method: average
 trainer:
     _target_: pytorch_lightning.Trainer
     gpus: 
-        - 2
+        - 3
     min_epochs: 1
     max_epochs: 20
     gradient_clip_val: 0.5
@@ -33,7 +32,8 @@ trainer:
     # resume_from_checkpoint: ${work_dir}/last.ckpt
 
 model:
-    _target_: src.models.spg_model.LitModelSPG
+    # _target_: src.models.spg_model.LitModelSPG
+    _target_: src.models.GATs_spg_model.LitModelGATsSPG
     optimizer: adam
     lr: 1e-4
     weight_decay: 0. 
@@ -45,14 +45,14 @@ model:
     descriptor_dim: 256
     keypoints_encoder: [32, 64, 128]
     sinkhorn_iterations: 100
-    match_threshold: 0.1
+    match_threshold: 0.2
     match_type: 'softmax'
 
     pos_weights: 0.5
     neg_weights: 0.5
 
 datamodule:
-    _target_: src.datamodules.spg_datamodule.SPGDataModule
+    _target_: src.datamodules.GATs_spg_datamodule.GATsSPGDataModule
     # data_dir: ${data_dir}/sfm_model/${name}
     data_dirs: ${data_dir}/sfm_model
     anno_dirs: outputs_${model.match_type}/anno
@@ -60,7 +60,10 @@ datamodule:
     # anno_dir: ${datamodule.data_dir}/outputs_${model.match_type}/anno
     batch_size: 4
     num_workers: 4
+    num_leaf: 5
     pin_memory: True
+    shape2d: 800
+    shape3d: 1500
 
 callbacks:
     model_checkpoint:

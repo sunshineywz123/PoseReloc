@@ -57,12 +57,26 @@ class KeypointEncoder(nn.Module):
         return self.encoder(torch.cat(inputs, dim=1))
 
 
-def attention(query, key, value):
+def dot_attention(query, key, value):
     dim = query.shape[1]
     scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim ** 0.5
     prob = torch.nn.functional.softmax(scores, dim=-1)
     return torch.einsum('bhnm,bdhm->bdhn', prob, value), prob
 
+
+def linear_attention(query, key, value):
+    eps = 1e-6
+    query = F.elu(query) + 1
+    key = F.elu(key) + 1 
+
+    v_length = value.size(3)
+    value = value / v_length
+
+    KV = torch.einsum('bdhm,bqhm->bqdh', key, value)
+    Z = 1 / (torch.einsum('bdhm,bdh->bhm', query, key.sum(3)) + eps)
+    queried_values = torch.einsum('bdhm,bqdh,bhm->bqhm', query, KV, Z) * v_length
+    return queried_values.contiguous(), None
+    
 
 class MultiHeadedAttention(nn.Module):
     """ Multi-head attention to increase model expressivity"""
@@ -81,7 +95,8 @@ class MultiHeadedAttention(nn.Module):
                 l(x).view(batch_dim, self.dim, self.num_heads, -1)
                 for l, x in zip(self.proj, (query, key, value))
         ]
-        x, prob = attention(query, key, value)
+        # x, prob = dot_attention(query, key, value)
+        x, prob = linear_attention(query, key, value)
         self.prob.append(prob)
         return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
 
@@ -153,7 +168,7 @@ def log_optimal_transport(scores, alpha, iters:int):
     Z = Z - norm
     return Z
 
-
+ 
 def arange_like(x, dim: int):
     return x.new_ones(x.shape[dim]).cumsum(0) - 1 # traceable in 1.1
 
@@ -181,7 +196,7 @@ class SuperGlue(nn.Module):
                         layers=hparams['keypoints_encoder']
                     )
 
-        GNN_layers = ['self', 'cross'] * 9 # FIXME: set in config
+        GNN_layers = ['self', 'cross'] * 9 
         self.gnn = AttentionalGNN(
                         feature_dim=hparams['descriptor_dim'],
                         layer_names=GNN_layers
@@ -227,7 +242,7 @@ class SuperGlue(nn.Module):
         kpts_3d = normalize_3d_keypoints(kpts_3d) # FIXME: normalize by box scale
 
         # keypoints MLP encoder
-        desc_2d = desc_2d + self.kenc_2d(kpts_2d, scores_2d)
+        # desc_2d = desc_2d + self.kenc_2d(kpts_2d, scores_2d)
         # desc_3d = desc_3d + self.kenc_3d(kpts_3d, scores_3d) # without 3d positional encoding?
 
         # Multi-layer Transformer network
@@ -239,7 +254,7 @@ class SuperGlue(nn.Module):
         # Normalize mdesc to avoid NaN
         mdesc_2d = F.normalize(mdesc_2d, p=2, dim=1)
         mdesc_3d = F.normalize(mdesc_3d, p=2, dim=1)
-            
+        
         # Compute matching descriptor distance
         if self.match_type == 'sinkhorn':
             scores = torch.einsum('bdn,bdm->bnm', mdesc_2d, mdesc_3d)
@@ -275,6 +290,7 @@ class SuperGlue(nn.Module):
 
         elif self.match_type == 'softmax':
             dim = torch.Tensor([mdesc_2d.shape[1]]).cuda()
+            # scores = torch.einsum('bdn, bdm->bnm', mdesc_2d, mdesc_3d) / 0.1 # orig version
             scores = torch.einsum('bdn, bdm->bnm', mdesc_2d, mdesc_3d) / 0.1
 
             conf_matrix = F.softmax(scores, 1) * F.softmax(scores, 2)
@@ -286,8 +302,9 @@ class SuperGlue(nn.Module):
             zero = conf_matrix.new_tensor(0)
             mscores0 = torch.where(mutual0, max0.values, zero)
             mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
+            # self.hparams['match_threshold'] = 0.05
             valid0 = mutual0 & (mscores0 > self.hparams['match_threshold'])
-            valid0 = mscores0 > self.hparams['match_threshold']
+            # valid0 = mscores0 > self.hparams['match_threshold']
             valid1 = mutual1 & valid0.gather(1, indices1)
             indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
             indices1 = torch.where(valid1, indices1, indices1.new_tensor(-1))

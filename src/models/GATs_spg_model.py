@@ -1,16 +1,18 @@
+from numpy.core.numeric import _ones_like_dispatcher
 import torch
 import pytorch_lightning as pl
 
-from src.architectures.SuperGlue import SuperGlue
+from src.architectures.GATs_SuperGlue import GATsSuperGlue
 from src.losses.focal_loss import FocalLoss
 
-class LitModelSPG(pl.LightningModule):
+
+class LitModelGATsSPG(pl.LightningModule):
     
     def __init__(self, *args, **kwargs):
         super().__init__()
         
         self.save_hyperparameters()
-        self.architecture = SuperGlue(hparams=self.hparams)
+        self.architecture = GATsSuperGlue(hparams=self.hparams)
         self.crit = FocalLoss(alpha=1, gamma=2, neg_weights=self.hparams.neg_weights, pos_weights=self.hparams.pos_weights)
 
         self.train_loss_hist = []
@@ -19,24 +21,24 @@ class LitModelSPG(pl.LightningModule):
     
     def forward(self, x):
         return self.architecture(x)
-    
+
     def training_step(self, batch, batch_idx):
         self.save_flag = False
-        
-        data, conf_matrix_gt = batch 
+
+        data, conf_matrix_gt = batch
         preds, conf_matrix_pred = self.architecture(data)
 
         loss_mean = self.crit(conf_matrix_pred, conf_matrix_gt)
         self.log('train/loss', loss_mean, on_step=False, on_epoch=True, prog_bar=False)
         return {'loss': loss_mean, 'preds': preds}
-
+    
     def validation_step(self, batch, batch_idx):
         loss_mean = 0
         preds = None
         self.log('val/loss', loss_mean, on_step=False, on_epoch=True, prog_bar=False)
 
         return {'loss': loss_mean, 'preds': preds}
-
+    
     def test_step(self, batch, batch_idx):
         pass
 
@@ -54,13 +56,11 @@ class LitModelSPG(pl.LightningModule):
             optimizer = torch.optim.Adam(
                 self.parameters(),
                 lr=self.hparams.lr,
-                weight_decay=self.hparams.weight_decay,
+                weight_decay=self.hparams.weight_decay
             )
             lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
                                                                 milestones=self.hparams.milestones,
                                                                 gamma=self.hparams.gamma)
-        
             return [optimizer], [lr_scheduler]
         else:
-            raise Exception('Invalid optimizer name.')
-            
+            raise Exception("Invalid optimizer name.")
