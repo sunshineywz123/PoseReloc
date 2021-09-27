@@ -41,29 +41,31 @@ class GATsSPGDataset(Dataset):
                                                                                      height, width, self.shape2d)
         return keypoints2d, descriptors2d, scores2d, assign_matrix, num_2d_orig
     
-    def read_anno3d(self, avg_anno3d_file, collect_anno3d_file, idxs_file, pad=True):
+    def read_anno3d(self, avg_anno3d_file, clt_anno3d_file, idxs_file, pad=True):
         """ Read(and pad) 3d info"""
-        with open(avg_anno3d_file, 'r') as f:
-            avg_data = json.load(f)
+        avg_data = np.load(avg_anno3d_file)
+        # with open(avg_anno3d_file, 'r') as f:
+            # avg_data = json.load(f)
         
-        with open(collect_anno3d_file, 'r') as f:
-            collect_data = json.load(f)
+        clt_data = np.load(clt_anno3d_file)
+        # with open(collect_anno3d_file, 'r') as f:
+            # collect_data = json.load(f)
 
         idxs = np.load(idxs_file)
 
-        keypoints3d = torch.Tensor(collect_data['keypoints3d']) # [m, 3]
+        keypoints3d = torch.Tensor(clt_data['keypoints3d']) # [m, 3]
         avg_descriptors3d = torch.Tensor(avg_data['descriptors3d']) # [dim, m]
-        collect_descriptors = torch.Tensor(collect_data['descriptors3d']) # [dim, k]
+        clt_descriptors = torch.Tensor(clt_data['descriptors3d']) # [dim, k]
         avg_scores = torch.Tensor(avg_data['scores3d']) # [m, 1]
-        collect_scores = torch.Tensor(collect_data['scores3d'])  # [k, 1]
+        clt_scores = torch.Tensor(clt_data['scores3d'])  # [k, 1]
 
         num_3d_orig = keypoints3d.shape[0]
         if pad:
             keypoints3d = data_utils.pad_keypoints3d_random(keypoints3d, self.shape3d)
             avg_descriptors3d, avg_scores = data_utils.pad_features3d_random(avg_descriptors3d, avg_scores, self.shape3d)
-            collect_descriptors, collect_scores = data_utils.build_features3d_leaves(collect_descriptors, collect_scores, idxs,
-                                                                                     self.shape3d, num_leaf=self.num_leaf)
-        return keypoints3d, avg_descriptors3d, avg_scores, collect_descriptors, collect_scores, num_3d_orig
+            clt_descriptors, clt_scores = data_utils.build_features3d_leaves(clt_descriptors, clt_scores, idxs,
+                                                                            self.shape3d, num_leaf=self.num_leaf)
+        return keypoints3d, avg_descriptors3d, avg_scores, clt_descriptors, clt_scores, num_3d_orig
     
     def read_anno(self, img_id):
         """
@@ -98,7 +100,6 @@ class GATsSPGDataset(Dataset):
             'image_size': torch.Tensor([height, width]),
         }
         return anno, conf_matrix
-
     
     def __getitem__(self, index):
         img_id = self.anns[index]

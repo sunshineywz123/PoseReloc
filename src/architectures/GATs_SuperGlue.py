@@ -119,8 +119,8 @@ class MultiHeadedAttention(nn.Module):
             l(x).view(batch_dim, self.dim, self.num_heads, -1)
             for l, x in zip(self.proj, (query, key, value))
         ]
-        # x, prob = dot_attention(query, key, value)
-        x, prob = linear_attention(query, key, value)
+        x, prob = dot_attention(query, key, value)
+        # x, prob = linear_attention(query, key, value)
         self.prob.append(prob)
         return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
 

@@ -267,8 +267,9 @@ def save_3d_anno(xyzs, descriptors, scores, out_path):
         'scores3d': scores.tolist(), # [n, 1]
     }
     
-    with open(out_path, 'w') as f:
-        json.dump(anno_3d, f) 
+    np.savez(out_path, keypoints3d=xyzs, descriptors3d=descriptors, scores3d=scores)
+    # with open(out_path, 'w') as f:
+        # json.dump(anno_3d, f) 
  
  
 def get_assign_matrix(xys, xyzs, kp3d_idx_to_kp2d_idx, kp3d_id_mapping):
@@ -333,27 +334,12 @@ def save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, sco
         'num_matches': num_matches
     }
     
+    # np.savez(anno_2d_path, keypoints2d=keypoints_2d, descriptors2d=descriptors_2d, 
+            #  scores2d=scores_2d, assign_matrix=assign_matrix, num_matches=num_matches)
     with open(anno_2d_path, 'w') as f:
         json.dump(anno_2d, f)    
     
     return anno_2d_path
-
-
-def save_3d_anno_dict(xyzs, descriptors, scores, out_path):
-    if isinstance(descriptors, np.ndarray):
-        descriptors = descriptors.tolist()
-
-    if isinstance(scores, np.ndarray):
-        scores = scores.tolist()
-    
-    anno_3d = {
-        'keypoints3d': xyzs.tolist(), # [n, 3]
-        'descriptors3d': descriptors, # dict: {id: array}
-        'scores3d': scores
-    }
-
-    with open(out_path, 'w') as f:
-        json.dump(anno_3d, f)
 
 
 def save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs,
@@ -479,35 +465,10 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
     anno2d_out_path = osp.join(anno_out_dir, 'anno_2d.json')
     save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
     
-    avg_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_average.json')
-    collect_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_collect.json')
+    avg_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_average.npz')
+    collect_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_collect.npz')
     save_3d_anno(filter_xyzs, avg_descriptors, avg_scores, avg_anno3d_out_path)
     save_3d_anno(filter_xyzs, filter_descriptors, filter_scores, collect_anno3d_out_path)
 
     idxs_out_path = osp.join(anno_out_dir, 'idxs.npy')
     np.save(idxs_out_path, idxs)
-    # save_3d_anno(filter_xyzs, filter)
-    
-    # method = cfg.feature.method
-    # if method == "average":
-    #     filter_xyzs, filter_descriptors, filter_scores = average_3d_ann(kp3d_id_feature, kp3d_id_score,
-    #                                                                     xyzs, points_idxs, feature_dim)
-
-    #     # step 3 & 4
-    #     anno2d_out_path = osp.join(anno_out_dir, f'anno_2d_{cfg.feature.method}.json')
-    #     anno3d_out_path = osp.join(anno_out_dir, f'anno_3d_{cfg.feature.method}.json')
-
-    #     save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
-    #     save_3d_anno(filter_xyzs, filter_descriptors, filter_scores, anno3d_out_path)
-    # elif method == "collect":
-    #     filter_xyzs, filter_descriptors, filter_scores = collect_3d_ann_v2(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, 
-    #                                                                     feature_dim, num_leaf=cfg.feature.num_leaf)
-        
-    #     anno2d_out_path = osp.join(anno_out_dir, f'anno_2d_{cfg.feature.method}.json')
-    #     anno3d_out_path = osp.join(anno_out_dir, f'anno_3d_{cfg.feature.method}.json')
-        
-    #     save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
-    #     save_3d_anno_dict(filter_xyzs, filter_descriptors, filter_scores, anno3d_out_path)
-    # else:
-    #     raise NotImplementedError
-    
