@@ -51,7 +51,7 @@ class AttentionalGNN(nn.Module):
         super().__init__()
         
         self.layers = nn.ModuleList([
-            GraphAttentionLayer(256, 256, 0.6, 0.2) if i % 3 == 0 else AttentionPropagation(feature_dim, 4)
+            GraphAttentionLayer(256, 256, 0.6, 0.2, True) if i % 3 == 0 else AttentionPropagation(feature_dim, 4)
             for i in range(len(layer_names))
         ])
         self.names = layer_names
@@ -119,8 +119,8 @@ class MultiHeadedAttention(nn.Module):
             l(x).view(batch_dim, self.dim, self.num_heads, -1)
             for l, x in zip(self.proj, (query, key, value))
         ]
-        x, prob = dot_attention(query, key, value)
-        # x, prob = linear_attention(query, key, value)
+        # x, prob = dot_attention(query, key, value)
+        x, prob = linear_attention(query, key, value)
         self.prob.append(prob)
         return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
 
@@ -249,7 +249,7 @@ class GATsSuperGlue(nn.Module):
 
         if self.match_type == 'softmax':
             dim = torch.Tensor([mdesc2d_query.shape[1]]).cuda()
-            scores = torch.einsum('bdn,bdm->bnm', mdesc2d_query, mdesc3d_db) / 0.05
+            scores = torch.einsum('bdn,bdm->bnm', mdesc2d_query, mdesc3d_db) / 0.1
             conf_matrix = F.softmax(scores, 1) * F.softmax(scores, 2)
 
             max0, max1 = conf_matrix[:, :, :].max(2), conf_matrix[:, :, :].max(1)
@@ -259,6 +259,7 @@ class GATsSuperGlue(nn.Module):
             zero = conf_matrix.new_tensor(0)
             mscores0 = torch.where(mutual0, max0.values, zero)
             mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
+            self.hparams['match_threshold'] = 0.1
             valid0 = mutual0 & (mscores0 > self.hparams['match_threshold'])
             valid1 = mutual1 & valid0.gather(1, indices1)
             indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
