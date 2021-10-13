@@ -43,8 +43,14 @@ python train.py +experiment=train_PoseReloc task_name=task_name exp_name=exp_nam
 
 # 3 Inference
 
+SPG version
 
 ```python
 python inference.py +experiment=test_PoseReloc task_name=task_name model.pretrain_model_path=/path/to/checkpoint/ input.data_dir=/path/to/test_sequence/ input.data_dir=/path/to/test_object_reconstruction_model
 ```
 
+GATs version
+
+```
+python inference_gats.py +experiment=test_GATs_PoseReloc model.pretrain_model_path=data/path/to/checkpoint suffix=vis3d_seq_suffix
+```
