@@ -156,20 +156,37 @@ def pad_features3d_random(descriptors, scores, n_target_shape):
 
 def build_features3d_leaves(descriptors, scores, idxs, n_target_shape, num_leaf):
     """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf""" 
-    assert idxs.min() > num_leaf, "The num of affilated 2d points of some 3d points is less than num_leaf."
+    # assert idxs.min() > num_leaf, "The num of affilated 2d points of some 3d points is less than num_leaf."
 
     dim = descriptors.shape[0]
     orig_num = idxs.shape[0]
     n_pad = n_target_shape - orig_num
 
+    # pad dustbin descriptors and scores
+    descriptors_dustbin = torch.cat([descriptors, torch.ones(dim, 1)], dim=1)
+    scores_dustbin = torch.cat([scores, torch.zeros(1, 1)], dim=0)
+    dustbin_id = descriptors_dustbin.shape[1] - 1
+    
     upper_idxs = np.cumsum(idxs, axis=0)
     lower_idxs = np.insert(upper_idxs[:-1], 0, 0)
-    affilicate_idxs_ = [np.random.permutation(np.arange(start, end))[:num_leaf] for start, end in zip(lower_idxs, upper_idxs)]
+    # affilicate_idxs_ = [np.random.permutation(np.arange(start, end).tolist().append([dustbin_id] * (num_leaf - (end - start))))[:num_leaf]
+                        # for start, end in zip(lower_idxs, upper_idxs)]
+    affilicate_idxs_ = []
+    for start, end in zip(lower_idxs, upper_idxs):
+        if num_leaf > end - start:
+            idxs = np.arange(start, end).tolist()
+            idxs += [dustbin_id] * (num_leaf - (end - start))
+            shuffle_idxs = np.random.permutation(np.array(idxs)) 
+            affilicate_idxs_.append(shuffle_idxs)
+        else:
+            shuffle_idxs = np.random.permutation(np.arange(start, end))[:num_leaf]
+            affilicate_idxs_.append(shuffle_idxs)
+         
     affilicate_idxs = np.concatenate(affilicate_idxs_, axis=0)
 
     assert affilicate_idxs.shape[0] == orig_num * num_leaf
-    descriptors = descriptors[:, affilicate_idxs] # [dim, num_leaf * orig_num]
-    scores = scores[affilicate_idxs, :] # [num_leaf * orig_num, 1]
+    descriptors = descriptors_dustbin[:, affilicate_idxs] # [dim, num_leaf * orig_num]
+    scores = scores_dustbin[affilicate_idxs, :] # [num_leaf * orig_num, 1]
     
     if n_pad < 0:
         descriptors = descriptors[:, :num_leaf * n_target_shape]
