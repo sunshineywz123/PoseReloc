@@ -14,7 +14,6 @@ from torch.utils.data import DataLoader
 from omegaconf.dictconfig import DictConfig
 from src.utils import data_utils
 
-
 def get_img_full_path(img_path):
     return img_path.replace('/color/', '/color_full/')
 
@@ -271,16 +270,23 @@ def inference(cfg):
 
         matches = pred['matches0'].detach().cpu().numpy()
         valid = matches > -1
-        kpts2d = pred_detection['keypoints']
-        kpts3d = inp_data['keypoints3d'][0].detach().cpu().numpy()
+
+        kpts2d_q = pred_detection['keypoints']
+        kpts3d_db = inp_data['keypoints3d'][0].detach().cpu().numpy()
         # kpts3d = anno_3d['keypoints3d'][0].detach().cpu().numpy()
         confidence = pred['matching_scores0'].detach().cpu().numpy()
-        mkpts2d, mkpts3d, mconf = kpts2d[valid], kpts3d[matches[valid]], confidence[valid]
+        mkpts2d_q, mkpts3d_db, mconf = kpts2d_q[valid], kpts3d_db[matches[valid]], confidence[valid]
+
+        # valid_detection = dict()
+        # valid_detection['descriptors'] = pred_detection['descriptors'][:, valid]
+        # valid_detection['keypoints'] = pred_detection['keypoints'][valid]
+        # valid_detection['scores'] = pred_detection['scores'][valid]
+        # pred_detection = valid_detection
 
         # evaluate
         intrin_path = get_intrin_path(img_path)
         K_crop = np.loadtxt(intrin_path)
-        pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d, mkpts3d, scale=1000)
+        pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d_q, mkpts3d_db, scale=1000)
 
         gt_pose_path = get_gt_pose_path(img_path)
         pose_gt = np.loadtxt(gt_pose_path)
@@ -292,15 +298,27 @@ def inference(cfg):
 
         # Gather keyframe information and tracking
         if cfg.use_tracker:
+            # TODO: augment 3d point_ids with invalid points been -1
+            mkpts3d_db_inlier = mkpts3d_db[inliers.flatten()]
+            mkpts2d_q_inlier = mkpts2d_q[inliers.flatten()]
+
+            n_kpt = kpts2d_q.shape[0]
+
+            valid_query_id = np.where(valid != False)[0][inliers.flatten()]
+            kpts3d_full = np.ones([n_kpt, 3]) * 10086
+            kpts3d_full[valid_query_id] = mkpts3d_db_inlier
+            kpt3d_ids = matches[valid][inliers.flatten()]
+
             kf_dict = {
                 'im_path': img_path,
-                # 'image': data['image'],
                 'kpt_pred': pred_detection,
                 'valid_mask': valid,
-                'mkpts2d': mkpts2d[inliers.flatten()],
-                'mkpts3d': mkpts3d[inliers.flatten()],
-                'pnp_inlier': inliers,
-                '3d_ids': matches[valid],
+                'mkpts2d': mkpts2d_q_inlier,
+                'mkpts3d': mkpts3d_db_inlier,
+                'kpt3d_full': kpts3d_full,
+                'inliers': inliers,
+                'kpt3d_ids': kpt3d_ids,
+                'valid_query_id': valid_query_id,
                 'pose_pred': pose_pred,
                 'pose_gt': pose_gt,
                 'K': K_crop
@@ -321,11 +339,11 @@ def inference(cfg):
         # visualize
         image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt, save_img=cfg.save_demo, demo_dir=cfg.demo_dir)
 
-        mkpts3d_2d = reproj(K_crop, pose_gt, mkpts3d)
+        mkpts3d_2d = reproj(K_crop, pose_gt, mkpts3d_db)
         image0 = Image.open(img_path).convert('LA')
         image1 = image0.copy()
         dump_vis3d(idx, cfg, image0, image1, image_full,
-                   mkpts2d, mkpts3d_2d, mconf, inliers)
+                   mkpts2d_q, mkpts3d_2d, mconf, inliers)
 
         idx += 1
 
