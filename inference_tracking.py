@@ -216,7 +216,6 @@ def dump_vis3d(idx, cfg, image0, image1, image_full,
     vis3d.add_image(image_full_pil, name='results')
 
 
-@torch.no_grad()
 def inference(cfg):
     """ Inference & visualize"""
     from src.datasets.hloc_dataset import HLOCDataset
@@ -254,47 +253,48 @@ def inference(cfg):
     clt_data = np.load(paths['clt_anno_3d_path'])
 
     for data in tqdm.tqdm(loader):
-        img_path = data['path'][0]
-        inp = data['image'].cuda()
+        with torch.no_grad():
+            img_path = data['path'][0]
+            inp = data['image'].cuda()
 
-        # feature extraction
-        torch.cuda.synchronize()
-        start = time.time()
-        pred_detection = extractor_model(inp)
-        pred_detection = {k: v[0].cpu().numpy() for k, v in pred_detection.items()}
+            # feature extraction
+            torch.cuda.synchronize()
+            start = time.time()
+            pred_detection = extractor_model(inp)
+            pred_detection = {k: v[0].cpu().numpy() for k, v in pred_detection.items()}
 
-        # posereloc inference
-        inp_data = pack_data(pred_detection, avg_data, clt_data,
-                             paths['idxs_path'], num_leaf, data['size'])
-        pred, _ = trained_model(inp_data)
+            # posereloc inference
+            inp_data = pack_data(pred_detection, avg_data, clt_data,
+                                 paths['idxs_path'], num_leaf, data['size'])
+            pred, _ = trained_model(inp_data)
 
-        matches = pred['matches0'].detach().cpu().numpy()
-        valid = matches > -1
+            matches = pred['matches0'].detach().cpu().numpy()
+            valid = matches > -1
 
-        kpts2d_q = pred_detection['keypoints']
-        kpts3d_db = inp_data['keypoints3d'][0].detach().cpu().numpy()
-        # kpts3d = anno_3d['keypoints3d'][0].detach().cpu().numpy()
-        confidence = pred['matching_scores0'].detach().cpu().numpy()
-        mkpts2d_q, mkpts3d_db, mconf = kpts2d_q[valid], kpts3d_db[matches[valid]], confidence[valid]
+            kpts2d_q = pred_detection['keypoints']
+            kpts3d_db = inp_data['keypoints3d'][0].detach().cpu().numpy()
+            # kpts3d = anno_3d['keypoints3d'][0].detach().cpu().numpy()
+            confidence = pred['matching_scores0'].detach().cpu().numpy()
+            mkpts2d_q, mkpts3d_db, mconf = kpts2d_q[valid], kpts3d_db[matches[valid]], confidence[valid]
 
-        # valid_detection = dict()
-        # valid_detection['descriptors'] = pred_detection['descriptors'][:, valid]
-        # valid_detection['keypoints'] = pred_detection['keypoints'][valid]
-        # valid_detection['scores'] = pred_detection['scores'][valid]
-        # pred_detection = valid_detection
+            # valid_detection = dict()
+            # valid_detection['descriptors'] = pred_detection['descriptors'][:, valid]
+            # valid_detection['keypoints'] = pred_detection['keypoints'][valid]
+            # valid_detection['scores'] = pred_detection['scores'][valid]
+            # pred_detection = valid_detection
 
-        # evaluate
-        intrin_path = get_intrin_path(img_path)
-        K_crop = np.loadtxt(intrin_path)
-        pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d_q, mkpts3d_db, scale=1000)
+            # evaluate
+            intrin_path = get_intrin_path(img_path)
+            K_crop = np.loadtxt(intrin_path)
+            pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d_q, mkpts3d_db, scale=1000)
 
-        gt_pose_path = get_gt_pose_path(img_path)
-        pose_gt = np.loadtxt(gt_pose_path)
+            gt_pose_path = get_gt_pose_path(img_path)
+            pose_gt = np.loadtxt(gt_pose_path)
 
-        torch.cuda.synchronize()
-        end = time.time()
-        time_cost += end - start
-        evaluator.evaluate(pose_pred, pose_gt)
+            torch.cuda.synchronize()
+            end = time.time()
+            time_cost += end - start
+            evaluator.evaluate(pose_pred, pose_gt)
 
         # Gather keyframe information and tracking
         if cfg.use_tracker:
@@ -319,7 +319,7 @@ def inference(cfg):
                 'inliers': inliers,
                 'kpt3d_ids': kpt3d_ids,
                 'valid_query_id': valid_query_id,
-                'pose_pred': pose_pred,
+                'pose_pred': pose_pred_homo,
                 'pose_gt': pose_gt,
                 'K': K_crop
             }

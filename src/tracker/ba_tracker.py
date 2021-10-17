@@ -242,10 +242,63 @@ class BATracker:
         self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query, mkpt2ds_kf, kpt2d_proj=kpt2d_rep_q,
                               T_0to1=T_0to1, K=frame_info_dict['K'])
 
-    def apply_ba(self):
+    def test_ba(self):
+        import argparse
+        import os
+        import sys
+        sys.path.append('/home/zhangsiyu/repos/PoseReloc/DeepLM')
+        import torch
+        import BACore
+        import numpy as np
+
+        from BAProblem.rotation import AngleAxisRotatePoint
+        from BAProblem.loss import SnavelyReprojectionError
+        from BAProblem.io import LoadBALFromFile
+        from TorchLM.solver import Solve
+
+        from time import time
+
+        # parser = argparse.ArgumentParser(description='Bundle adjuster')
+        # parser.add_argument('--balFile', default='data/problem-1723-156502-pre.txt')
+        # parser.add_argument('--device', default='cuda')  # cpu/cuda
+        # args = parser.parse_args()
+        device = 'cuda'
+        filename = '/home/zhangsiyu/repos/PoseReloc/DeepLM/data/problem-49-7776-pre.txt'
+
+        # Load BA data
+        points, cameras, features, ptIdx, camIdx = LoadBALFromFile(filename)
+
+        # Optionally use CUDA
+        points, cameras, features, ptIdx, camIdx = points.to(device), \
+                                                   cameras.to(device), features.to(device), ptIdx.to(device), camIdx.to(
+            device)
+
+        if device == 'cuda':
+            torch.cuda.synchronize()
+
+        t1 = time()
+        # optimize
+        Solve(variables=[points, cameras],
+              constants=[features],
+              indices=[ptIdx, camIdx],
+              fn=SnavelyReprojectionError,
+              numIterations=15,
+              numSuccessIterations=15)
+        t2 = time()
+
+        print("Time used %f secs." % (t2 - t1))
+
+    def apply_ba(self, kpt2ds, kpt2d3d_ids, kpt2d_fids, kpt3d_list, cams):
         from DeepLM.BAProblem.loss import SnavelyReprojectionError
         from DeepLM.TorchLM.solver import Solve
         import torch
+        device = 'cuda'
+        points = torch.tensor(kpt3d_list, device=device, dtype=torch.float64, requires_grad=False)
+        cameras = torch.tensor(cams, device=device, dtype=torch.float64, requires_grad=False)
+        valid2d_idx = np.where(kpt2d3d_ids != -1)[0]
+        features = torch.tensor(kpt2ds[valid2d_idx], device=device, dtype=torch.float64, requires_grad=False)
+        ptIdx = torch.tensor(kpt2d3d_ids[valid2d_idx], device=device, dtype=torch.int64, requires_grad=False)
+        camIdx = torch.tensor(kpt2d_fids[valid2d_idx], device=device, dtype=torch.int64, requires_grad=False)
 
         # TODO: organize tracker inform, convert to DeepLM format
         points, cameras, features, ptIdx, camIdx = points.to(device), \
@@ -289,28 +342,71 @@ class BATracker:
         # frame_info_dict.pop('data')
         # kpt2ds_pred_query = self.cuda2cpu(self.extractor(inp))
         kpt2ds_pred_query = frame_info_dict['kpt_pred']
+        kpt2ds_pred_query.pop('scores')
 
-        kpt2ds_pred_kf = kf_frame_info['kpt_pred']
+        # Get KF 2D keypoints from data
+        kpt_idx_start, kpt_idx_end = self.kf_kpt_index_dict[self.last_kf_id]
+        kpt_idx = np.arange(kpt_idx_start, kpt_idx_end+1)
+        kpt2ds_pred_kf = \
+            { 'keypoints': self.kpt2ds[kpt_idx],
+              'descriptors': self.kpt2d_descs[kpt_idx].transpose()}
+        # kpt2ds_pred_kf = kf_frame_info['kpt_pred']
+
+        # Apply match
         match_results = self.apply_match(kpt2ds_pred_kf, kpt2ds_pred_query)
         match_kq = match_results['matches0'][0].cpu().numpy()
         valid = np.where(match_kq != -1)
         mkpts2d_kf = kpt2ds_pred_kf['keypoints'][valid]
-        mkpts2d_query = kpt2ds_pred_query['keypionts'][match_kq[valid]]
+        mkpts2d_query = kpt2ds_pred_query['keypoints'][match_kq[valid]]
+        kpt_idx_valid = kpt_idx[valid]
+
+        # Update
+        kpt2ds_match_f = np.copy(self.kpt2d_match)
+        kpt2d3d_ids_f = np.copy(self.kpt2d3d_ids)
+
+        # Update 2D inform
+        n_kpt_q = len(mkpts2d_query)
+        kpt2ds_f = np.concatenate([self.kpt2ds, mkpts2d_query]) # update 2D keypoints
+        kpt2ds_match_f[valid] += 1 # update 2D match
+        kpt2ds_match_f = np.concatenate([kpt2ds_match_f, np.ones([n_kpt_q])])
+
+        # Check 2D-3D correspondence
+        kf_2d_3d_ids = self.kpt2d3d_ids[kpt_idx_valid]
+        kpt_idx_wo3d = np.where(kf_2d_3d_ids == -1)[0] # local index of point without 3D index
+        mkpts2d_kf_triang = mkpts2d_kf[kpt_idx_wo3d]
+        mkpts2d_query_triang = mkpts2d_query[kpt_idx_wo3d]
 
         # Triangulation
         Tco_kf = np.linalg.inv(kf_frame_info['pose_pred'])
         Tco_query = np.linalg.inv(pose_init)
         kpt3ds_triang = self.apply_triangulation(frame_info_dict['K'],
                                                  Tco_kf, Tco_query,
-                                                 mkpts2d_kf, mkpts2d_query)
+                                                 mkpts2d_kf_triang, mkpts2d_query_triang)
 
         # Visualize 2D-2D match and initial 3D points
         kpt2d_rep_kf = project(kpt3ds_triang, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
         kpt2d_rep_query = project(kpt3ds_triang, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
         T_0to1 = np.dot(kf_frame_info['pose_gt'], np.linalg.inv(frame_info_dict['pose_gt']))
         im_query = cv2.imread(frame_info_dict['im_path'], cv2.IMREAD_GRAYSCALE)
-        self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query, mkpts2d_kf, kpt2d_proj=kpt2d_rep_query,
+        self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query_triang, mkpts2d_kf_triang,
+                              kpt2d_proj=kpt2d_rep_query,
                               T_0to1=T_0to1, K=frame_info_dict['K'])
 
-        # TODO: add data structure to store known matching inform
-        self.apply_ba()
+        # Update 2D-3D correspondence
+        query_2d3d_ids = np.ones(n_kpt_q) * -1
+        kpt_idx_w3d = np.where(kf_2d_3d_ids != -1)[0]
+        query_2d3d_ids[kpt_idx_w3d] = kf_2d_3d_ids[kpt_idx_w3d]
+
+        kpt3d_start_id = len(self.kpt3d_list)
+        query_2d3d_ids[kpt_idx_wo3d] = np.arange(kpt3d_start_id, kpt3d_start_id + len(kpt3ds_triang))
+        kpt2d3d_ids_f = np.concatenate([self.kpt2d3d_ids, query_2d3d_ids])
+
+        # Add 3D points
+        kpt3d_list_f = np.concatenate([self.kpt3d_list, kpt3ds_triang])
+        cams_f = np.concatenate([self.cams,  [self.get_cam_param(frame_info_dict['K'], pose_init)]])
+
+        kpt2d_fids_f = np.concatenate([self.kpt2d_fids, np.ones([n_kpt_q]) * self.id])
+
+        # Apply BA with deep LM
+        self.apply_ba(kpt2ds_f, kpt2d3d_ids_f, kpt2d_fids_f, kpt3d_list_f, cams_f)
+        
