@@ -8,7 +8,7 @@ def project(xyz, K, RT, need_depth=False):
     RT: [3, 4]
     """
     xyz = np.dot(xyz, RT[:, :3].T)
-    xyz += + RT[:, 3:].T
+    xyz += RT[:, 3:].T
     depth = xyz[:, 2:].flatten()
     xyz = np.dot(xyz, K.T)
     xy = xyz[:, :2] / xyz[:, 2:]

@@ -4,6 +4,7 @@ from .vis_utils import Visualizer, project
 from src.utils.vis_utils import reproj, ransac_PnP
 from src.models.matchers.nn.nearest_neighbour import NearestNeighbour
 device = 'cuda'
+from matplotlib import pyplot as plt
 
 
 class BATracker:
@@ -13,7 +14,7 @@ class BATracker:
         self.id = 0
         self.last_kf_id = -1
         self.vis = Visualizer('./vis')
-        self.vis.set_new_seq('tracking_test')
+        # self.vis.set_new_seq('tracking_test')
         self.extractor = self.load_extractor_model(cfg, cfg.model.extractor_model_path)
         self.matcher = NearestNeighbour()
         self.pose_list = []
@@ -149,7 +150,7 @@ class BATracker:
             valid_id_ndup = valid_qid[kf_3d_ids_ndup]
             kpt3d_start_id = len(self.kpt3d_list)
             kf_kpt2d3d_id[valid_id_ndup] = np.arange(kpt3d_start_id, kpt3d_start_id + len(kf_kpt3ds_new))
-
+            kf_kpt2d3d_id = np.asarray(kf_kpt2d3d_id, dtype=int)
             self.kpt2d3d_ids = np.concatenate([self.kpt2d3d_ids, kf_kpt2d3d_id], axis=0)
 
             # Update 3D keypoints
@@ -161,6 +162,32 @@ class BATracker:
 
         self.last_kf_id = self.id
         self.id += 1
+
+    def frame_visualization(self, kpt2ds, kpt2d3d_ids, kpt3d_list, cams_f):
+        for kf_id, kf_info in self.kf_frames.items():
+            kf_cam_parm = cams_f[kf_id]
+            K, kf_pose_pred = self.get_cam_params_back(kf_cam_parm)
+
+            # Get 2D points
+            kpt_idx_start, kpt_idx_end = self.kf_kpt_index_dict[kf_id]
+            kpt_idx = np.arange(kpt_idx_start, kpt_idx_end + 1)
+            kf_kps2d = kpt2ds[kpt_idx]
+
+            # Get 3D points
+            kf_2d3d_ids = kpt2d3d_ids[kpt_idx]
+            kf_kpts3d = kpt3d_list[kf_2d3d_ids[np.where(kf_2d3d_ids != -1)]]
+            kf_kpts_proj = project(kf_kpts3d, K, kf_pose_pred[:3])
+
+            # Load image and visualization
+            kf_im_path = kf_info['im_path']
+            kf_im = cv2.imread(kf_im_path)
+
+            from matplotlib import pyplot as plt
+            plt.close()
+            plt.imshow(kf_im)
+            plt.plot(kf_kps2d[:, 0], kf_kps2d[:, 1], 'r+')
+            plt.plot(kf_kpts_proj[:, 0], kf_kpts_proj[:, 1], 'b+')
+            plt.show()
 
     def cuda2cpu(self, pred_detection_cuda):
         return {k: v[0].cpu().numpy() for k, v in pred_detection_cuda.items()}
@@ -208,13 +235,13 @@ class BATracker:
         trans0 = pose0[:3, 3]
         trans1 = pose1[:3, 3]
 
-        rot0 = mat2euler(pose0[:3, :3])
-        rot1 = mat2euler(pose0[:3, :3])
+        rot0 = np.array(mat2euler(pose0[:3, :3]))
+        rot1 = np.array(mat2euler(pose1[:3, :3]))
         trans_t = 2 * trans0 - trans1
         rot_t = 2 * rot0 - rot1
         pose_new = np.eye(4)
 
-        pose_new[:, :3] = euler2mat(rot_t[0], rot_t[1], rot_t[2])
+        pose_new[:3, :3] = euler2mat(rot_t[0], rot_t[1], rot_t[2])
         pose_new[:, 3] = trans_t
         return pose_new
 
@@ -233,14 +260,15 @@ class BATracker:
         # Solve PnP to find initial pose
         pose_init, pose_init_homo, inliers = ransac_PnP(frame_info_dict['K'], mkpts2d_query, kpt3ds_kf)
         trans_dist, rot_dist = self.cm_degree_5_metric(pose_init_homo, frame_info_dict['pose_gt'])
-
-        # Visualize correspondence
-        kpt2d_rep_q = project(kpt3ds_kf, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
-        T_0to1 = np.dot(kf_frame_info['pose_gt'], np.linalg.inv(frame_info_dict['pose_gt']))
-        mkpt2ds_kf = kf_frame_info['mkpts2d'][valid_ids]
-        # kpt2d_rep_kf = project(kpt3ds, kf_frame_info['K'], kf_frame_info['pose_gt'][:3])
-        self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query, mkpt2ds_kf, kpt2d_proj=kpt2d_rep_q,
-                              T_0to1=T_0to1, K=frame_info_dict['K'])
+        print(f"\nFlow pose error:{trans_dist} - {rot_dist}")
+        # # Visualize correspondence
+        # kpt2d_rep_q = project(kpt3ds_kf, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
+        # T_0to1 = np.dot(kf_frame_info['pose_gt'], np.linalg.inv(frame_info_dict['pose_gt']))
+        # mkpt2ds_kf = kf_frame_info['mkpts2d'][valid_ids]
+        # # kpt2d_rep_kf = project(kpt3ds, kf_frame_info['K'], kf_frame_info['pose_gt'][:3])
+        # self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query, mkpt2ds_kf, kpt2d_proj=kpt2d_rep_q,
+        #                       T_0to1=T_0to1, K=frame_info_dict['K'])
+        return pose_init_homo
 
     def test_ba(self):
         import argparse
@@ -300,7 +328,47 @@ class BATracker:
         ptIdx = torch.tensor(kpt2d3d_ids[valid2d_idx], device=device, dtype=torch.int64, requires_grad=False)
         camIdx = torch.tensor(kpt2d_fids[valid2d_idx], device=device, dtype=torch.int64, requires_grad=False)
 
-        # TODO: organize tracker inform, convert to DeepLM format
+        ################ DISPLAY AND VALIDATE INPUTS #########################
+        features_ = features.cpu().numpy()
+        ptIdx_ = ptIdx.cpu().numpy()
+        camIdx_ = camIdx.cpu().numpy()
+        cameras_ = cameras.cpu().numpy()
+        points_ = points.cpu().numpy()
+        rep_error = []
+        for i in range(len(features)):
+            pts2d = features_[i]
+            pts3d = points_[ptIdx_[i]]
+            cam = cameras_[camIdx_[i]]
+            K, pose = self.get_cam_params_back(cam)
+            rep_2d = project([pts3d], K, pose[:3])
+            rep_error.append(np.linalg.norm(pts2d - rep_2d))
+
+        print(f'Input stat:\n'
+              f'- min:{np.min(rep_error)}\n'
+              f'- max:{np.max(rep_error)}\n'
+              f'- med:{np.median(rep_error)}')
+        ################ DISPLAY AND VALIDATE INPUTS #########################
+
+        # Display Initial Reprojection Error by frame
+        kpt2ds_np = kpt2ds[valid2d_idx]
+        kpt3d_idx = kpt2d3d_ids[valid2d_idx]
+        camera_idx = np.asarray(kpt2d_fids[valid2d_idx], dtype=int)
+        kpt3ds = kpt3d_list
+        cams_np = cams[camera_idx]
+        for frame_idx in np.unique(camera_idx):
+            kpt_idx = np.where(camera_idx == frame_idx)[0]
+            # kpt_idx = kpt_idx[np.where(kpt3d_idx[kpt_idx] > len(self.kpt3d_list))]
+            kps2d = kpt2ds_np[kpt_idx]
+            kps3d = kpt3ds[kpt3d_idx[kpt_idx]]
+            kps_cam = cams_np[kpt_idx]
+            K, pose_mat = self.get_cam_params_back(kps_cam[0])
+            kps_rep = project(kps3d, K, pose_mat[:3])
+            kps_rep_error = np.linalg.norm(kps2d - kps_rep, axis=1)
+            print(f'Frame:{frame_idx}\n'
+                  f'- min:{np.min(kps_rep_error)}\n'
+                  f'- max:{np.max(kps_rep_error)}\n'
+                  f'- med:{np.median(kps_rep_error)}')
+
         points, cameras, features, ptIdx, camIdx = points.to(device), \
                                                    cameras.to(device), features.to(device), ptIdx.to(device), camIdx.to(
             device)
@@ -316,6 +384,47 @@ class BATracker:
               numIterations=15,
               numSuccessIterations=15)
 
+        points_opt_np = points.cpu().detach().numpy()
+        cam_opt_np = cameras.cpu().detach().numpy()
+
+        # Display Optimized Reprojection Error by frame
+        kpt2ds_np = kpt2ds[valid2d_idx]
+        kpt3d_idx = kpt2d3d_ids[valid2d_idx]
+        camera_idx = np.asarray(kpt2d_fids[valid2d_idx], dtype=int)
+        kpt3ds = points_opt_np
+        cams_np = cam_opt_np[camera_idx]
+        for frame_idx in np.unique(camera_idx):
+            kpt_idx = np.where(camera_idx == frame_idx)[0]
+            # kpt_idx = kpt_idx[np.where(kpt3d_idx[kpt_idx] > len(self.kpt3d_list))]
+            kps2d = kpt2ds_np[kpt_idx]
+            kps3d = kpt3ds[kpt3d_idx[kpt_idx]]
+            kps_cam = cams_np[kpt_idx]
+            K, pose_mat = self.get_cam_params_back(kps_cam[0])
+            kps_rep = project(kps3d, K, pose_mat[:3])
+            kps_rep_error = np.linalg.norm(kps2d - kps_rep, axis=1)
+            print(f'Frame:{frame_idx}\n'
+                  f'- min:{np.min(kps_rep_error)}\n'
+                  f'- max:{np.max(kps_rep_error)}\n'
+                  f'- med:{np.median(kps_rep_error)}')
+
+        return points_opt_np, cam_opt_np
+
+    def get_cam_params_back(self, cam_params):
+        """ Convert BAL format to frame parameter to matrix form"""
+        r_vec = cam_params[:3]
+        t = cam_params[3:6]
+        f = cam_params[6]
+        k1 = cam_params[7]
+        k2 = cam_params[8]
+        K = np.array(
+            [[f, 0, k1],
+             [0, f, k2],
+             [0, 0, 1]])
+        pose_mat = np.eye(4)
+        pose_mat[:3, :3] = cv2.Rodrigues(r_vec)[0]
+        pose_mat[:3, 3] = t
+        return K, pose_mat
+
     def get_cam_param(self, K, pose):
         """ Convert frame parameter to BAL format"""
         f = K[0, 0]
@@ -326,16 +435,16 @@ class BATracker:
         return np.concatenate([R.flatten(), t, [f, k1, k2]])
 
     def track(self, frame_info_dict):
-        if self.id == self.last_kf_id:
-            return
+        if len(self.pose_list) >= 2:
+            pose_init = self.motion_prediction()
+        else:
+            pose_init = self.flow_track(frame_info_dict)
+
         # Load image
         kf_frame_info = self.kf_frames[self.last_kf_id]
         im_kf = cv2.imread(kf_frame_info['im_path'], cv2.IMREAD_GRAYSCALE)
 
-        if len(self.pose_list) >= 2:
-            pose_init = self.motion_prediction()
-        else:
-            pose_init = self.pose_list[-1]
+        # self.frame_visualization()
 
         # Extract and match 2D keypoints
         # inp = frame_info_dict['data']['image'].cuda()
@@ -383,30 +492,136 @@ class BATracker:
                                                  Tco_kf, Tco_query,
                                                  mkpts2d_kf_triang, mkpts2d_query_triang)
 
-        # Visualize 2D-2D match and initial 3D points
-        kpt2d_rep_kf = project(kpt3ds_triang, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
+        # Remove triangulation points with extremly large error
+        kpt2d_rep_kf = project(kpt3ds_triang, kf_frame_info['K'],  kf_frame_info['pose_gt'][:3])
         kpt2d_rep_query = project(kpt3ds_triang, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
-        T_0to1 = np.dot(kf_frame_info['pose_gt'], np.linalg.inv(frame_info_dict['pose_gt']))
-        im_query = cv2.imread(frame_info_dict['im_path'], cv2.IMREAD_GRAYSCALE)
-        self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query_triang, mkpts2d_kf_triang,
-                              kpt2d_proj=kpt2d_rep_query,
-                              T_0to1=T_0to1, K=frame_info_dict['K'])
+
+        rep_diff_q = np.linalg.norm(kpt2d_rep_query - mkpts2d_query_triang, axis=1)
+        rep_diff_kf = np.linalg.norm(kpt2d_rep_kf - mkpts2d_kf_triang, axis=1)
+        triang_rm_idx_q = np.where(rep_diff_q > 20)[0]
+        triang_rm_idx_kf = np.where(rep_diff_kf > 20)[0]
+        triang_rm_idx = np.unique(np.concatenate([triang_rm_idx_q, triang_rm_idx_kf]))
+        triang_keep_idx = np.array([i for i in range(len(kpt2d_rep_query))
+                                    if i not in triang_rm_idx]) # index over mkpts2d_q
+
+        mkpts2d_kf_triang = mkpts2d_kf_triang[triang_keep_idx]
+        mkpts2d_query_triang = mkpts2d_query_triang[triang_keep_idx]
+        kpt2d_rep_kf = kpt2d_rep_kf[triang_keep_idx]
+        kpt2d_rep_query = kpt2d_rep_query[triang_keep_idx]
+
+        ########### Visualize 2D-2D match and initial 3D points ##########
+        # T_0to1 = np.dot(kf_frame_info['pose_gt'], np.linalg.inv(frame_info_dict['pose_gt']))
+        # im_query = cv2.imread(frame_info_dict['im_path'], cv2.IMREAD_GRAYSCALE)
+        # self.vis.set_new_seq('match2d_qk')
+        # self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query_triang, mkpts2d_kf_triang,
+        #                       kpt2d_proj=kpt2d_rep_query,
+        #                       T_0to1=T_0to1, K=frame_info_dict['K'])
+        #
+        # self.vis.set_new_seq('match_repo_q')
+        # self.vis.add_kpt_corr(self.id, im_query, im_query, mkpts2d_query_triang, kpt2d_rep_query)
+        # self.vis.set_new_seq('match_repo_kf')
+        # self.vis.add_kpt_corr(self.id, im_kf, im_kf, mkpts2d_kf_triang, kpt2d_rep_query)
+        #
+        # from matplotlib import pyplot as plt
+        # plt.close()
+        # plt.imshow(im_query)
+        # plt.plot(kpt2d_rep_query[:, 0], kpt2d_rep_query[:, 1], 'bo')
+        # plt.plot(mkpts2d_query_triang[:, 0], mkpts2d_query_triang[:, 1], 'r+')
+        # plt.show()
+        ########### Visualize 2D-2D match and initial 3D points ##########
 
         # Update 2D-3D correspondence
         query_2d3d_ids = np.ones(n_kpt_q) * -1
         kpt_idx_w3d = np.where(kf_2d_3d_ids != -1)[0]
         query_2d3d_ids[kpt_idx_w3d] = kf_2d_3d_ids[kpt_idx_w3d]
+        mkpts2d_query_exist = mkpts2d_query[kpt_idx_w3d]
+        mkpts2d_kf_exist = mkpts2d_kf[kpt_idx_w3d]
 
+        ########## Visualize 2D-2D match and existing 3D points ##############
+        # kpt3d_exist = self.kpt3d_list[ kf_2d_3d_ids[kpt_idx_w3d]]
+        # kpt2d_rep_exist = project(kpt3d_exist, frame_info_dict['K'],  frame_info_dict['pose_gt'][:3])
+        #
+        # self.vis.set_new_seq('repo_match_pts')
+        # self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query_exist, mkpts2d_kf_exist,
+        #                       kpt2d_proj=kpt2d_rep_exist,
+        #                       T_0to1=T_0to1, K=frame_info_dict['K'])
+        #
+        # plt.close()
+        # plt.imshow(im_query)
+        # plt.plot(kpt2d_rep_exist[:, 0], kpt2d_rep_exist[:, 1], 'bo')
+        # plt.plot(mkpts2d_query_exist[:, 0], mkpts2d_query_exist[:, 1], 'r+')
+        # plt.show()
+        ########## Visualize 2D-2D match and existing 3D points ##############
+
+        # Update correspondence for newly triangulated points
         kpt3d_start_id = len(self.kpt3d_list)
-        query_2d3d_ids[kpt_idx_wo3d] = np.arange(kpt3d_start_id, kpt3d_start_id + len(kpt3ds_triang))
+        query_2d3d_ids[kpt_idx_wo3d[triang_keep_idx]] = np.arange(kpt3d_start_id, kpt3d_start_id + len(triang_keep_idx))
+        query_2d3d_ids = np.asarray(query_2d3d_ids, dtype=int)
         kpt2d3d_ids_f = np.concatenate([self.kpt2d3d_ids, query_2d3d_ids])
 
         # Add 3D points
-        kpt3d_list_f = np.concatenate([self.kpt3d_list, kpt3ds_triang])
+        kpt3d_list_f = np.concatenate([self.kpt3d_list, kpt3ds_triang[triang_keep_idx]])
         cams_f = np.concatenate([self.cams,  [self.get_cam_param(frame_info_dict['K'], pose_init)]])
-
         kpt2d_fids_f = np.concatenate([self.kpt2d_fids, np.ones([n_kpt_q]) * self.id])
 
+        # ###################  Calculate Reprojection Error and visualization  ######################################
+        # kpt_idxs = np.where(kpt2d_fids_f == 1)[0]
+        # start_idx = np.min(kpt_idxs)
+        # kpt_idxs = kpt_idxs[np.where(kpt2d3d_ids_f[kpt_idxs] != -1)[0]]
+        #
+        # kpt3d_full = kpt3d_list_f[kpt2d3d_ids_f[kpt_idxs]]
+        # kpt2d_full = kpt2ds_f[kpt_idxs]
+        # # rep3d_full = project(kpt3d_full, frame_info_dict['K'], frame_info_dict['pose_gt'][:3])
+        # rep3d_full = project(kpt3d_full, frame_info_dict['K'], pose_init[:3])
+        # kps_error_full = np.linalg.norm(kpt2d_full- rep3d_full, axis=1)
+        # print(f'Full points:'
+        #       f'- min:{np.min(kps_error_full)}\n'
+        #       f'- max:{np.max(kps_error_full)}\n'
+        #       f'- med:{np.median(kps_error_full)}')
+        #
+        # kps2d_triang_ids = np.where(kpt2d3d_ids_f[start_idx:] > len(self.kpt3d_list))[0] + start_idx
+        # kpt3d_triang_ids = kpt2d3d_ids_f[kps2d_triang_ids]
+        # rep3d = project(kpt3d_list_f[kpt3d_triang_ids], frame_info_dict['K'], pose_init[:3])
+        #
+        # kps_rep_error = np.linalg.norm(kpt2ds_f[kps2d_triang_ids] - rep3d, axis=1)
+        # print(f'Triang points:'
+        #       f'- min:{np.min(kps_rep_error)}\n'
+        #       f'- max:{np.max(kps_rep_error)}\n'
+        #       f'- med:{np.median(kps_rep_error)}')
+        #
+        # kps2d_exist_ids = np.where(kpt2d3d_ids_f[start_idx:] <= len(self.kpt3d_list))[0] + start_idx
+        # kps2d_nonzero_ids = np.where(kpt2d3d_ids_f[start_idx:] >= 0)[0] + start_idx
+        # kps2d_exist_ids = np.intersect1d(kps2d_exist_ids, kps2d_nonzero_ids)
+        # kpt3d_exists_id = kpt2d3d_ids_f[kps2d_exist_ids]
+        # kpt3d_exist = kpt3d_list_f[kpt3d_exists_id]
+        # # rep3d_exist = project(kpt3d_exist, frame_info_dict['K'], frame_info_dict['pose_gt'][:3])
+        # rep3d_exist = project(kpt3d_exist, frame_info_dict['K'], pose_init[:3])
+        # kps_rep_error = np.linalg.norm(kpt2ds_f[kps2d_exist_ids] - rep3d_exist, axis=1)
+        # print(f'Exist points:'
+        #       f'- min:{np.min(kps_rep_error)}\n'
+        #       f'- max:{np.max(kps_rep_error)}\n'
+        #       f'- med:{np.median(kps_rep_error)}')
+        #
+        # from matplotlib import pyplot as plt
+        # kps_disp = kpt2ds_f[kps2d_triang_ids]
+        # Kps_rep = rep3d
+        # plt.close()
+        # plt.imshow(im_query)
+        # plt.plot(Kps_rep[:, 0], Kps_rep[:, 1], 'bo')
+        # plt.plot(kps_disp[:, 0], kps_disp[:, 1], 'r+')
+        # plt.show()
+        #
+        # from matplotlib import pyplot as plt
+        # kps_disp = kpt2ds_f[kps2d_exist_ids]
+        # Kps_rep = rep3d_exist
+        # plt.close()
+        # plt.imshow(im_query)
+        # plt.plot(Kps_rep[:, 0], Kps_rep[:, 1], 'bo')
+        # plt.plot(kps_disp[:, 0], kps_disp[:, 1], 'r+')
+        # plt.show()
+        # ###################  Calculate Reprojection Error and visualization  ######################################
+
         # Apply BA with deep LM
-        self.apply_ba(kpt2ds_f, kpt2d3d_ids_f, kpt2d_fids_f, kpt3d_list_f, cams_f)
-        
+        self.frame_visualization(kpt2ds_f, kpt2d3d_ids_f, kpt3d_list_f, cams_f)
+        kpt3d_list_f, cams_f = self.apply_ba(kpt2ds_f, kpt2d3d_ids_f, kpt2d_fids_f, kpt3d_list_f, cams_f)
+        self.frame_visualization(kpt2ds_f, kpt2d3d_ids_f, kpt3d_list_f, cams_f)

@@ -4,12 +4,18 @@ from .rotation import *
 def Distort(xp, yp, cam):
 	l1 = cam[:, 7]
 	l2 = cam[:, 8]
-	r2 = xp * xp + yp * yp
-	distortion = 1.0 + r2 * (l1 + l2 * r2)
+	focal = cam[:, 6]
 
-	focal = cam[:,6]
-	predicted_x = -focal * xp * distortion
-	predicted_y = -focal * yp * distortion
+	# FIXME: modify implementation here,
+	#  	take cam[:, 7] and cam[:, 8] as cx and cy instead of k1 and k2
+
+	# r2 = xp * xp + yp * yp
+	# distortion = 1.0 + r2 * (l1 + l2 * r2)
+	# predicted_x = -focal * xp * distortion
+	# predicted_y = -focal * yp * distortion
+
+	predicted_x = focal * xp + l1
+	predicted_y = focal * yp + l2
 
 	return predicted_x, predicted_y
 
