@@ -126,17 +126,14 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1):
     
     pts_3d *= scale
 
-    try:
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
-        rotation = cv2.Rodrigues(rvec)[0]
+    _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs, reprojectionError=5,
+                                                iterationsCount=10000, flags=cv2.SOLVEPNP_EPNP)
 
-        tvec /= scale
-        pose = np.concatenate([rotation, tvec], axis=-1)
-        pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
-    except:
-        pose = None
-        pose_homo = None
-        inliers = None
+    rotation = cv2.Rodrigues(rvec)[0]
+
+    tvec /= scale
+    pose = np.concatenate([rotation, tvec], axis=-1)
+    pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
 
     return pose, pose_homo, inliers
 

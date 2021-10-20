@@ -225,7 +225,7 @@ def inference(cfg):
     if cfg.use_tracker:
         from src.tracker import BATracker
         tracker = BATracker(cfg)
-        track_interval = 3
+        track_interval = 1000
     else:
         tracker = None
         track_interval = -1
@@ -294,11 +294,11 @@ def inference(cfg):
             torch.cuda.synchronize()
             end = time.time()
             time_cost += end - start
-            evaluator.evaluate(pose_pred, pose_gt)
+            if not cfg.use_tracker:
+                evaluator.evaluate(pose_pred, pose_gt)
 
         # Gather keyframe information and tracking
         if cfg.use_tracker:
-            # TODO: augment 3d point_ids with invalid points been -1
             mkpts3d_db_inlier = mkpts3d_db[inliers.flatten()]
             mkpts2d_q_inlier = mkpts2d_q[inliers.flatten()]
 
@@ -327,6 +327,7 @@ def inference(cfg):
             frame_dict = {
                 'im_path': img_path,
                 'kpt_pred': pred_detection,
+                'pose_pred': pose_pred_homo,
                 'pose_gt': pose_gt,
                 'K': K_crop,
                 'data': data
@@ -336,8 +337,12 @@ def inference(cfg):
             else:
                 tracker.track(frame_dict)
 
+            # with torch.no_grad():
+            #     evaluator.evaluate(pose_opt[:3], pose_gt)
+
         # visualize
-        image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt, save_img=cfg.save_demo, demo_dir=cfg.demo_dir)
+        image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt,
+                                save_img=cfg.save_demo, demo_dir=cfg.demo_dir)
 
         mkpts3d_2d = reproj(K_crop, pose_gt, mkpts3d_db)
         image0 = Image.open(img_path).convert('LA')

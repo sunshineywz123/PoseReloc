@@ -108,7 +108,7 @@ class Visualizer(object):
                                                 metrics=metrics,
                                                 meta=None)
 
-    def add_kpt_corr(self, fid, img0, img1, kps0, kps1, match01=None, T_0to1=None, K=None,
+    def add_kpt_corr(self, fid, img0, img1, kps0, kps1, match01=None, T_0to1=None, K=None, K2=None,
                      kpt2d_proj=None, metrics=None):
         if match01 is None:
             mkpts0 = kps0
@@ -120,7 +120,9 @@ class Visualizer(object):
             mkpts1 = kps1[match01]
 
         if T_0to1 is not None:
-            epipolar_error = self.compute_epipolar_error(mkpts0, mkpts1, T_0to1, K, K)
+            if K2 is None:
+                K2 = K
+            epipolar_error = self.compute_epipolar_error(mkpts0, mkpts1, T_0to1, K, K2)
         else:
             epipolar_error = None
 
