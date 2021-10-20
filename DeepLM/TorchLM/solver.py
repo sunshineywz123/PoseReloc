@@ -288,6 +288,14 @@ class LMSolver:
 				residuals = fn(*varIndexed, *constantsPar)
 				residuals = residuals.view(residuals.shape[0], -1)
 
+				rep_err = np.linalg.norm(residuals.detach().cpu().numpy(), axis=1)
+				if self.verbose:
+					print(f'LM with: {len(rep_err)} kpts\n'
+						  f'- min:{np.min(rep_err)}\n'
+						  f'- max:{np.max(rep_err)}\n'
+						  f'- med:{np.median(rep_err)}\n'
+						  f'- sum:{np.sum(rep_err)}')
+
 				cost = torch.sum(0.5 * residuals * residuals)
 				# collect gradients and jacobians
 
