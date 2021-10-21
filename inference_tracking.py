@@ -13,6 +13,8 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from omegaconf.dictconfig import DictConfig
 from src.utils import data_utils
+from src.utils.movie_writer import MovieWriter
+
 
 def get_img_full_path(img_path):
     return img_path.replace('/color/', '/color_full/')
@@ -142,7 +144,7 @@ def pack_data(detection, avg_data, clt_data, idxs_file, num_leaf, image_size):
     return inp_data
 
 
-def vis_reproj(paths, img_path, pose_pred, pose_gt, save_img=False, demo_dir=None):
+def vis_reproj(paths, img_path, pose_pred, pose_gt, pose_init=None, pose_opt=None, scale=2):
     """ Draw 2d box reprojected by 3d box"""
     from src.utils.objScanner_utils import parse_3d_box, parse_K
     from src.utils.vis_utils import reproj, draw_3d_box
@@ -155,27 +157,48 @@ def vis_reproj(paths, img_path, pose_pred, pose_gt, save_img=False, demo_dir=Non
 
     image_full_path = get_img_full_path(img_path)
     image_full = cv2.imread(image_full_path)
+    h, w, c = image_full.shape
+    h_res = int(h/scale)
+    w_res = int(w/scale)
+    image_full = cv2.resize(image_full, (w_res, h_res))
 
     # Draw gt 3d box
-    reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d)
+    reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d) / scale
     draw_3d_box(image_full, reproj_box_2d_gt, color='y')
 
     # Draw pred 3d box
     if pose_pred is not None:
-        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d)
-        draw_3d_box(image_full, reproj_box_2d_pred, color='g')
+        im_pred = np.copy(image_full)
+        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d) / scale
+        draw_3d_box(im_pred, reproj_box_2d_pred, color='g')
+    else:
+        im_pred = None
 
-    if save_img:
-        assert demo_dir, "Please assign a directory for saving results."
-        img_idx = int(osp.basename(img_path).split('.')[0])
-        obj_name = img_path.split('/')[-3]
-        save_dir = osp.join(demo_dir, obj_name)
-        Path(save_dir).mkdir(exist_ok=True, parents=True)
+    if pose_init is not None:
+        im_init = np.copy(image_full)
+        reproj_box_2d_pred = reproj(K_full, pose_init, box_3d) / scale
+        draw_3d_box(im_init, reproj_box_2d_pred, color='g')
+    else:
+        im_init = None
 
-        save_path = osp.join(save_dir, '{:05d}.jpg'.format(img_idx))
-        cv2.imwrite(save_path, image_full)
+    if pose_opt is not None:
+        im_opt = np.copy(image_full)
+        reproj_box_2d_pred = reproj(K_full, pose_opt, box_3d) / scale
+        draw_3d_box(im_opt, reproj_box_2d_pred, color='g')
+    else:
+        im_opt = None
 
-    return image_full
+    # if save_img:
+    #     assert demo_dir, "Please assign a directory for saving results."
+    #     img_idx = int(osp.basename(img_path).split('.')[0])
+    #     obj_name = img_path.split('/')[-3]
+    #     save_dir = osp.join(demo_dir, obj_name)
+    #     Path(save_dir).mkdir(exist_ok=True, parents=True)
+    #
+    #     save_path = osp.join(save_dir, '{:05d}.jpg'.format(img_idx))
+    #     cv2.imwrite(save_path, image_full)
+
+    return im_pred, im_init, im_opt
 
 
 def dump_vis3d(idx, cfg, image0, image1, image_full,
@@ -239,6 +262,27 @@ def inference(cfg):
     dataset = HLOCDataset(img_lists, confs[cfg.network.detection]['preprocessing'])
     loader = DataLoader(dataset, num_workers=1)
     evaluator = Evaluator()
+    mwr_pred = MovieWriter()
+    mwr_init = MovieWriter()
+    mwr_opt = MovieWriter()
+    mwr_pred_out = './pred.mp4'
+    mwr_init_out = './init.mp4'
+    mwr_opt_out = './opt.mp4'
+    err_pred = []
+    err_init = []
+    err_opt = []
+    ba_logs = dict()
+    ba_logs['err_pred_trans'] = []
+    ba_logs['err_pred_rot'] = []
+    ba_logs['err_pred_cmd5'] = []
+
+    ba_logs['err_init_trans'] = []
+    ba_logs['err_init_rot'] = []
+    ba_logs['err_init_cmd5'] = []
+
+    ba_logs['err_opt_trans'] = []
+    ba_logs['err_opt_rot'] = []
+    ba_logs['err_opt_cmd5'] = []
 
     # anno_3d = get_3d_anno(paths['anno_3d_path'])
     idx = 0
@@ -251,7 +295,7 @@ def inference(cfg):
     # clt_data = json.load(f)
     avg_data = np.load(paths['avg_anno_3d_path'])
     clt_data = np.load(paths['clt_anno_3d_path'])
-
+    num_idx = 10000000000
     for data in tqdm.tqdm(loader):
         with torch.no_grad():
             img_path = data['path'][0]
@@ -334,21 +378,80 @@ def inference(cfg):
             }
             if idx % track_interval == 0:
                 tracker.add_kf(kf_dict)
+                pose_init = pose_pred_homo
+                pose_opt = pose_pred_homo
+                ba_log = None
             else:
-                tracker.track(frame_dict)
-
+                pose_init, pose_opt, ba_log = tracker.track(frame_dict)
+                a = 1 + 1
             # with torch.no_grad():
             #     evaluator.evaluate(pose_opt[:3], pose_gt)
+            im_pred, im_init, im_opt = vis_reproj(paths, img_path, pose_pred_homo, pose_gt, pose_init, pose_opt)
+            from src.tracker.vis_utils import put_text
+            if ba_log is not None:
+                for k, v in ba_log.items():
+                    print(f"{k}:{v}")
+
+                put_text(im_pred, f"Frame:{idx} trans_err:{ba_log['pred_err_trans']} "
+                                  f"rot_err:{ba_log['pred_err_rot']} "
+                                  f"AP:{np.mean(ba_logs['err_pred_cmd5'])}")
+                put_text(im_init, f"Frame:{idx} trans_err:{ba_log['init_err_trans']} "
+                                  f"rot_err:{ba_log['init_err_rot']} "
+                                  f"AP:{np.mean(ba_logs['err_init_cmd5'])}")
+                put_text(im_opt, f"Frame:{idx} trans_err:{ba_log['opt_err_trans']} "
+                                 f"rot_err:{ba_log['opt_err_rot']} "
+                                 f"AP:{np.mean(ba_logs['err_opt_cmd5'])}")
+
+                ba_logs['err_pred_trans'].append(ba_log['pred_err_trans'])
+                ba_logs['err_pred_rot'].append(ba_log['pred_err_rot'])
+                ba_logs['err_pred_cmd5'].append(ba_log['pred_err_trans'] <=5 and ba_log['pred_err_rot']<=5)
+
+                ba_logs['err_init_trans'].append(ba_log['init_err_trans'])
+                ba_logs['err_init_rot'].append(ba_log['init_err_rot'])
+                ba_logs['err_init_cmd5'].append(ba_log['init_err_trans'] <= 5 and ba_log['init_err_rot'] <= 5)
+
+                ba_logs['err_opt_trans'].append(ba_log['opt_err_trans'])
+                ba_logs['err_opt_rot'].append(ba_log['opt_err_rot'])
+                ba_logs['err_opt_cmd5'].append(ba_log['opt_err_trans'] <= 5 and ba_log['opt_err_rot'] <= 5)
+
+                ba_logs[idx] = ba_log
+
+                # from matplotlib import pyplot as plt
+                # plt.imshow(im_pred)
+                # plt.show()
+                # plt.imshow(im_init)
+                # plt.show()
+                # plt.imshow(im_opt)
+                # plt.show()
+                mwr_init.write(im_init, mwr_init_out, fps=5)
+                mwr_pred.write(im_pred, mwr_pred_out, fps=5)
+                mwr_opt.write(im_opt, mwr_opt_out, fps=5)
+
+                print(f"Pred:{np.mean(ba_logs['err_pred_cmd5'])}")
+                print(f"Init:{np.mean(ba_logs['err_init_cmd5'])}")
+                print(f"Opt:{np.mean(ba_logs['err_opt_cmd5'])}")
+
+                if idx % 10 == 0 or idx > num_idx:
+                    # with open('./res.json', 'w') as f:
+                    #     json.dump(ba_logs, f, indent=4)
+
+                    if idx > num_idx:
+                        mwr_pred.end()
+                        mwr_init.end()
+                        mwr_opt.end()
+                        break
+
+        else:
+            image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt)
 
         # visualize
-        image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt,
-                                save_img=cfg.save_demo, demo_dir=cfg.demo_dir)
 
-        mkpts3d_2d = reproj(K_crop, pose_gt, mkpts3d_db)
-        image0 = Image.open(img_path).convert('LA')
-        image1 = image0.copy()
-        dump_vis3d(idx, cfg, image0, image1, image_full,
-                   mkpts2d_q, mkpts3d_2d, mconf, inliers)
+
+        # mkpts3d_2d = reproj(K_crop, pose_gt, mkpts3d_db)
+        # image0 = Image.open(img_path).convert('LA')
+        # image1 = image0.copy()
+        # dump_vis3d(idx, cfg, image0, image1, image_full,
+        #            mkpts2d_q, mkpts3d_2d, mconf, inliers)
 
         idx += 1
 
