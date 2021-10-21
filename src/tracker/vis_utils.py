@@ -146,3 +146,16 @@ class Visualizer(object):
                                                 unmatched_kpts1=kps1,
                                                 metrics=metrics,
                                                 meta=None)
+
+
+def put_text(img, inform_text, color=None):
+    import cv2
+    fontScale = 1
+    if color is None:
+        color = (255, 0, 0)
+    org = (50, 50)
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    thickness = 2
+    img = cv2.putText(img, inform_text, org, font,
+                      fontScale, color, thickness, cv2.LINE_AA)
+    return img
