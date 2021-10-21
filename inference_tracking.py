@@ -248,7 +248,7 @@ def inference(cfg):
     if cfg.use_tracker:
         from src.tracker import BATracker
         tracker = BATracker(cfg)
-        track_interval = 1000
+        track_interval = 10
     else:
         tracker = None
         track_interval = -1
@@ -295,8 +295,11 @@ def inference(cfg):
     # clt_data = json.load(f)
     avg_data = np.load(paths['avg_anno_3d_path'])
     clt_data = np.load(paths['clt_anno_3d_path'])
-    num_idx = 10000000000
+    num_idx = 1000000000000
+    need_update = False
     for data in tqdm.tqdm(loader):
+        if idx > num_idx:
+            break
         with torch.no_grad():
             img_path = data['path'][0]
             inp = data['image'].cuda()
@@ -343,31 +346,6 @@ def inference(cfg):
 
         # Gather keyframe information and tracking
         if cfg.use_tracker:
-            mkpts3d_db_inlier = mkpts3d_db[inliers.flatten()]
-            mkpts2d_q_inlier = mkpts2d_q[inliers.flatten()]
-
-            n_kpt = kpts2d_q.shape[0]
-
-            valid_query_id = np.where(valid != False)[0][inliers.flatten()]
-            kpts3d_full = np.ones([n_kpt, 3]) * 10086
-            kpts3d_full[valid_query_id] = mkpts3d_db_inlier
-            kpt3d_ids = matches[valid][inliers.flatten()]
-
-            kf_dict = {
-                'im_path': img_path,
-                'kpt_pred': pred_detection,
-                'valid_mask': valid,
-                'mkpts2d': mkpts2d_q_inlier,
-                'mkpts3d': mkpts3d_db_inlier,
-                'kpt3d_full': kpts3d_full,
-                'inliers': inliers,
-                'kpt3d_ids': kpt3d_ids,
-                'valid_query_id': valid_query_id,
-                'pose_pred': pose_pred_homo,
-                'pose_gt': pose_gt,
-                'K': K_crop
-            }
-
             frame_dict = {
                 'im_path': img_path,
                 'kpt_pred': pred_detection,
@@ -376,21 +354,55 @@ def inference(cfg):
                 'K': K_crop,
                 'data': data
             }
-            if idx % track_interval == 0:
+
+            if need_update:
+                print("Update requested")
+
+            if idx % track_interval == 0 or need_update:
+                mkpts3d_db_inlier = mkpts3d_db[inliers.flatten()]
+                mkpts2d_q_inlier = mkpts2d_q[inliers.flatten()]
+
+                n_kpt = kpts2d_q.shape[0]
+
+                valid_query_id = np.where(valid != False)[0][inliers.flatten()]
+                kpts3d_full = np.ones([n_kpt, 3]) * 10086
+                kpts3d_full[valid_query_id] = mkpts3d_db_inlier
+                kpt3d_ids = matches[valid][inliers.flatten()]
+
+                kf_dict = {
+                    'im_path': img_path,
+                    'kpt_pred': pred_detection,
+                    'valid_mask': valid,
+                    'mkpts2d': mkpts2d_q_inlier,
+                    'mkpts3d': mkpts3d_db_inlier,
+                    'kpt3d_full': kpts3d_full,
+                    'inliers': inliers,
+                    'kpt3d_ids': kpt3d_ids,
+                    'valid_query_id': valid_query_id,
+                    'pose_pred': pose_pred_homo,
+                    'pose_gt': pose_gt,
+                    'K': K_crop
+                }
+
+                need_update = not tracker.update_kf(kf_dict)
+
+                # pose_init = pose_pred_homo
+                # pose_opt = pose_pred_homo
+                # ba_log = None
+            if idx == 0:
                 tracker.add_kf(kf_dict)
-                pose_init = pose_pred_homo
-                pose_opt = pose_pred_homo
-                ba_log = None
-            else:
-                pose_init, pose_opt, ba_log = tracker.track(frame_dict)
-                a = 1 + 1
+                idx += 1
+                continue
+
+            pose_init, pose_opt, ba_log = tracker.track(frame_dict)
+            a = 1 + 1
             # with torch.no_grad():
             #     evaluator.evaluate(pose_opt[:3], pose_gt)
             im_pred, im_init, im_opt = vis_reproj(paths, img_path, pose_pred_homo, pose_gt, pose_init, pose_opt)
             from src.tracker.vis_utils import put_text
             if ba_log is not None:
-                for k, v in ba_log.items():
-                    print(f"{k}:{v}")
+                # for k, v in ba_log.items():
+                #     print(f"{k}:{v}")
 
                 put_text(im_pred, f"Frame:{idx} trans_err:{ba_log['pred_err_trans']} "
                                   f"rot_err:{ba_log['pred_err_rot']} "
@@ -423,24 +435,23 @@ def inference(cfg):
                 # plt.show()
                 # plt.imshow(im_opt)
                 # plt.show()
-                mwr_init.write(im_init, mwr_init_out, fps=5)
-                mwr_pred.write(im_pred, mwr_pred_out, fps=5)
-                mwr_opt.write(im_opt, mwr_opt_out, fps=5)
+                mwr_init.write(im_init, mwr_init_out, fps=10)
+                mwr_pred.write(im_pred, mwr_pred_out, fps=10)
+                mwr_opt.write(im_opt, mwr_opt_out, fps=10)
 
                 print(f"Pred:{np.mean(ba_logs['err_pred_cmd5'])}")
                 print(f"Init:{np.mean(ba_logs['err_init_cmd5'])}")
                 print(f"Opt:{np.mean(ba_logs['err_opt_cmd5'])}")
-
-                if idx % 10 == 0 or idx > num_idx:
-                    # with open('./res.json', 'w') as f:
-                    #     json.dump(ba_logs, f, indent=4)
-
-                    if idx > num_idx:
-                        mwr_pred.end()
-                        mwr_init.end()
-                        mwr_opt.end()
-                        break
-
+                a = 1 + 1
+                # if idx % 10 == 0 or idx > num_idx:
+                #     # with open('./res.json', 'w') as f:
+                #     #     json.dump(ba_logs, f, indent=4)
+                #
+                #     if idx > num_idx:
+                #         mwr_pred.end()
+                #         mwr_init.end()
+                #         mwr_opt.end()
+                #         break
         else:
             image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt)
 

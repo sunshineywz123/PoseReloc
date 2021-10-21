@@ -128,6 +128,7 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1):
     try:
         _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs, reprojectionError=5,
                                                     iterationsCount=10000, flags=cv2.SOLVEPNP_EPNP)
+        # _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
 
         rotation = cv2.Rodrigues(rvec)[0]
 

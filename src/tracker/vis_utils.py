@@ -159,3 +159,11 @@ def put_text(img, inform_text, color=None):
     img = cv2.putText(img, inform_text, org, font,
                       fontScale, color, thickness, cv2.LINE_AA)
     return img
+
+
+def draw_kpt2d(image, kpt2d, color=(0, 0, 255), radius=2, thikness=1):
+    import cv2
+    for coord in kpt2d:
+        cv2.circle(image, (int(coord[0]), int(coord[1])), radius, color, thikness, 1)
+        # cv2.circle(image, (int(coord[0]), int(coord[1])), 7, color, 1, 1)
+    return image

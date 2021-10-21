@@ -32,7 +32,6 @@ def compute_epipolar_error(kpts0, kpts1, T_0to1, K0, K1):
     return d
 
 
-
 class BATracker:
     def __init__(self, cfg):
         self.kf_frames = dict()
@@ -56,10 +55,14 @@ class BATracker:
 
         self.kpt3d_list = []
         self.kpt2d3d_ids = [] # 3D ids of each 2D keypoint
-        self.update_th = 20
+        self.update_th = 10
         self.frame_id = 0
         self.last_kf_info = None
-        self.win_size = 10
+        self.win_size = 10000
+        self.frame_interval = 10
+        from src.utils.movie_writer import MovieWriter
+        self.mw = MovieWriter()
+        self.out = './track_kpt.mp4'
 
     def load_extractor_model(self, cfg, model_path):
         """ Load extractor model(SuperGlue) """
@@ -105,6 +108,19 @@ class BATracker:
         valid_id = np.where(status.flatten() == 1)
         kpt_new = np.squeeze(kpt_new, axis=1)
         return kpt_new, valid_id
+
+    def update_kf(self, kf_info_dict):
+        if self.last_kf_info is not None:
+            trans_dist, rot_dist = self.cm_degree_5_metric(kf_info_dict['pose_pred'], self.last_kf_info['pose_pred'])
+            if trans_dist > 3 or rot_dist > 3:
+                print("Update rejected")
+                return False
+            else:
+                self.last_kf_info = kf_info_dict
+                return True
+        else:
+            self.last_kf_info = kf_info_dict
+            return True
 
     def add_kf(self, kf_info_dict):
         self.kf_frames[self.id] = kf_info_dict
@@ -316,9 +332,19 @@ class BATracker:
         pose_init, pose_init_homo, inliers = ransac_PnP(frame_info_dict['K'], mkpts2d_query, kpt3ds_kf)
 
         trans_dist, rot_dist = self.cm_degree_5_metric(pose_init_homo, frame_info_dict['pose_gt'])
-        print(f"\nFlow pose error:{trans_dist} - {rot_dist}")
-        trans_dist, rot_dist = self.cm_degree_5_metric(frame_info_dict['pose_pred'], frame_info_dict['pose_gt'])
-        print(f"\nPred pose error:{trans_dist} - {rot_dist}")
+        print(f"Flow pose error:{trans_dist} - {rot_dist}")
+
+        label = f"Flow pose error:{trans_dist} - {rot_dist}"
+        from src.tracker.vis_utils import put_text, draw_kpt2d
+        im_query_vis = cv2.imread(frame_info_dict['im_path'])
+        im_out = draw_kpt2d(im_query_vis, mkpts2d_query)
+        # scale = 1
+        # h, w, c = im_out.shape
+        # h_res = int(h / scale)
+        # w_res = int(w / scale)
+        # im_out = cv2.resize(im_out, (w_res, h_res))
+        im_out = put_text(im_out, label)
+        self.mw.write(im_out, self.out)
         if trans_dist <= 7 and rot_dist <= 7:
             frame_info_dict['mkpts3d'] = kpt3ds_kf
             frame_info_dict['mkpts2d'] = mkpts2d_query
@@ -447,7 +473,7 @@ class BATracker:
         valid2d_idx = np.where(kpt2d3d_ids != -1)[0]
         if np.max(kpt2d_fids) > self.win_size:
             print("[START FILTERING +++++++++++++++]")
-            valid_idx_fid = np.where(kpt2d_fids <= np.max(kpt2d_fids) - self.win_size)
+            valid_idx_fid = np.where(kpt2d_fids > np.max(kpt2d_fids) - self.win_size)
             valid2d_idx = np.intersect1d(valid_idx_fid, valid2d_idx)
         ks = cams[np.array(kpt2d_fids[valid2d_idx], dtype=int), 6:]
         features = torch.tensor(np.concatenate([kpt2ds[valid2d_idx], ks], axis=1), device=device, dtype=torch.float64,
@@ -553,6 +579,7 @@ class BATracker:
         return np.concatenate([R.flatten(), t, [f, k1, k2]])
 
     def track_ba(self, frame_info_dict, verbose=True):
+        print(f"Updating frame id:{self.frame_id}")
         ba_log = dict()
 
         pose_init = frame_info_dict['pose_init']
@@ -629,7 +656,7 @@ class BATracker:
             triang_rm_idx_kf = np.where(rep_diff_kf > 20)[0]
 
             # Remove 3D points distant away
-            triang_rm_idx_dist = np.where(np.linalg.norm(kpt3ds_triang, axis=1) > 0.2)[0]
+            triang_rm_idx_dist = np.where(kpt3ds_triang[:, 2] > 0.15)[0]
             triang_rm_idx = np.unique(np.concatenate([triang_rm_idx_q, triang_rm_idx_kf, triang_rm_idx_dist]))
             # triang_rm_idx = np.unique(np.concatenate([triang_rm_idx_q, triang_rm_idx_kf]))
             triang_keep_idx = np.array([i for i in range(len(kpt2d_rep_query))
@@ -724,18 +751,20 @@ class BATracker:
             kpt_idxs = np.where(kpt2d_fids_f == np.max(kpt2d_fids_f))[0]
             start_idx = np.min(kpt_idxs)
             kpt_idxs = kpt_idxs[np.where(kpt2d3d_ids_f[kpt_idxs] != -1)[0]]
-            # print(len(kpt_idxs))
-            # print(kpt_idxs[:10])
-            kpt3d_full = kpt3d_list_f[kpt2d3d_ids_f[kpt_idxs]]
-            kpt2d_full = kpt2ds_f[kpt_idxs]
-            # print(kpt2d3d_ids_f[kpt_idxs][:10])
-            # rep3d_full = project(kpt3d_full, frame_info_dict['K'], frame_info_dict['pose_gt'][:3])
-            rep3d_full = project(kpt3d_full, frame_info_dict['K'], pose_init[:3])
-            kps_error_full = np.linalg.norm(kpt2d_full- rep3d_full, axis=1)
-            print(f'Full points: {len(kps_error_full)}'
-                  f'- min:{np.min(kps_error_full)}\n'
-                  f'- max:{np.max(kps_error_full)}\n'
-                  f'- med:{np.median(kps_error_full)}')
+            if len(kpt_idxs) != 0:
+                # FIXME: might be problem here
+                # print(len(kpt_idxs))
+                # print(kpt_idxs[:10])
+                kpt3d_full = kpt3d_list_f[kpt2d3d_ids_f[kpt_idxs]]
+                kpt2d_full = kpt2ds_f[kpt_idxs]
+                # print(kpt2d3d_ids_f[kpt_idxs][:10])
+                # rep3d_full = project(kpt3d_full, frame_info_dict['K'], frame_info_dict['pose_gt'][:3])
+                rep3d_full = project(kpt3d_full, frame_info_dict['K'], pose_init[:3])
+                kps_error_full = np.linalg.norm(kpt2d_full- rep3d_full, axis=1)
+                print(f'Full points: {len(kps_error_full)}'
+                      f'- min:{np.min(kps_error_full)}\n'
+                      f'- max:{np.max(kps_error_full)}\n'
+                      f'- med:{np.median(kps_error_full)}')
 
             if n_triang_pt > 0:
                 kps2d_triang_ids = np.where(kpt2d3d_ids_f[start_idx:] >= len(self.kpt3d_list))[0] + start_idx
@@ -748,17 +777,20 @@ class BATracker:
                       f'- med:{np.median(kps_rep_error)}')
 
             kps2d_exist_ids = np.where(kpt2d3d_ids_f[start_idx:] < len(self.kpt3d_list))[0] + start_idx
-            kps2d_nonzero_ids = np.where(kpt2d3d_ids_f[start_idx:] >= 0)[0] + start_idx
-            kps2d_exist_ids = np.intersect1d(kps2d_exist_ids, kps2d_nonzero_ids)
-            kpt3d_exists_id = kpt2d3d_ids_f[kps2d_exist_ids]
-            kpt3d_exist = kpt3d_list_f[kpt3d_exists_id]
-            # rep3d_exist = project(kpt3d_exist, frame_info_dict['K'], frame_info_dict['pose_gt'][:3])
-            rep3d_exist = project(kpt3d_exist, frame_info_dict['K'], pose_init[:3])
-            kps_rep_error = np.linalg.norm(kpt2ds_f[kps2d_exist_ids] - rep3d_exist, axis=1)
-            print(f'Exist points: - {len(kps_rep_error)}\n'
-                  f'- min:{np.min(kps_rep_error)}\n'
-                  f'- max:{np.max(kps_rep_error)}\n'
-                  f'- med:{np.median(kps_rep_error)}')
+            if len(kps2d_exist_ids) > 0:
+                kps2d_nonzero_ids = np.where(kpt2d3d_ids_f[start_idx:] >= 0)[0] + start_idx
+                kps2d_exist_ids = np.intersect1d(kps2d_exist_ids, kps2d_nonzero_ids)
+                if len(kps2d_exist_ids) != 0:
+                    # FIXME: might be problem here
+                    kpt3d_exists_id = kpt2d3d_ids_f[kps2d_exist_ids]
+                    kpt3d_exist = kpt3d_list_f[kpt3d_exists_id]
+                    # rep3d_exist = project(kpt3d_exist, frame_info_dict['K'], frame_info_dict['pose_gt'][:3])
+                    rep3d_exist = project(kpt3d_exist, frame_info_dict['K'], pose_init[:3])
+                    kps_rep_error = np.linalg.norm(kpt2ds_f[kps2d_exist_ids] - rep3d_exist, axis=1)
+                    print(f'Exist points: - {len(kps_rep_error)}\n'
+                          f'- min:{np.min(kps_rep_error)}\n'
+                          f'- max:{np.max(kps_rep_error)}\n'
+                          f'- med:{np.median(kps_rep_error)}')
 
         # from matplotlib import pyplot as plt
         # kps_disp = kpt2ds_f[kps2d_triang_ids]
@@ -783,31 +815,36 @@ class BATracker:
         # self.frame_visualization(kpt2ds_f, kpt2d3d_ids_f, kpt3d_list_f, cams_f)
         # kpt3d_list_f, cams_f = self.apply_ba(kpt2ds_f, kpt2d3d_ids_f, kpt2d_fids_f, kpt3d_list_f, cams_f)
         kpt3d_list_f, cams_f = self.apply_ba_V2(kpt2ds_f, kpt2d3d_ids_f, kpt2d_fids_f,
-                                                kpt3d_list_f, cams_f, verbose=verbose)
+                                                kpt3d_list_f, cams_f, verbose=False)
 
         # self.frame_visualization(kpt2ds_f, kpt2d3d_ids_f, kpt3d_list_f, cams_f)
         K_opt, pose_opt = self.get_cam_params_back(cams_f[-1])
 
-        trans_dist, rot_dist = self.cm_degree_5_metric(frame_info_dict['pose_pred'], frame_info_dict['pose_gt'])
-        trans_dist = np.round(trans_dist, decimals=2)
-        rot_dist = np.round(rot_dist, decimals=2)
-        ba_log['pred_err_trans'] = trans_dist
-        ba_log['pred_err_rot'] = rot_dist
-        print(f"\nPred pose error:{ba_log['pred_err_trans']} - {ba_log['pred_err_rot']}")
+        trans_dist_pred, rot_dist_pred = self.cm_degree_5_metric(frame_info_dict['pose_pred'], frame_info_dict['pose_gt'])
+        trans_dist_pred = np.round(trans_dist_pred, decimals=2)
+        rot_dist_pred = np.round(rot_dist_pred, decimals=2)
+        ba_log['pred_err_trans'] = trans_dist_pred
+        ba_log['pred_err_rot'] = rot_dist_pred
+        print(f"Pred pose error:{ba_log['pred_err_trans']} - {ba_log['pred_err_rot']}")
 
-        trans_dist, rot_dist = self.cm_degree_5_metric(pose_init, frame_info_dict['pose_gt'])
-        trans_dist = np.round(trans_dist, decimals=2)
-        rot_dist = np.round(rot_dist, decimals=2)
-        ba_log['init_err_trans'] = trans_dist
-        ba_log['init_err_rot'] = rot_dist
-        print(f"\nInitial pose error:{ba_log['init_err_trans']} - {ba_log['init_err_rot']}")
+        trans_dist_init, rot_dist_init = self.cm_degree_5_metric(pose_init, frame_info_dict['pose_gt'])
+        trans_dist_init = np.round(trans_dist_init, decimals=2)
+        rot_dist_init = np.round(rot_dist_init, decimals=2)
+        ba_log['init_err_trans'] = trans_dist_init
+        ba_log['init_err_rot'] = rot_dist_init
+        print(f"Initial pose error:{ba_log['init_err_trans']} - {ba_log['init_err_rot']}")
 
         trans_dist, rot_dist = self.cm_degree_5_metric(pose_opt, frame_info_dict['pose_gt'])
         trans_dist = np.round(trans_dist, decimals=2)
         rot_dist = np.round(rot_dist, decimals=2)
         ba_log['opt_err_trans'] = trans_dist
         ba_log['opt_err_rot'] = rot_dist
-        print(f"\nOptimized pose error:{ba_log['opt_err_trans']} - {ba_log['opt_err_rot']}")
+        print(f"Optimized pose error:{ba_log['opt_err_trans']} - {ba_log['opt_err_rot']}")
+
+        trans_improv = np.abs(trans_dist - trans_dist_init)
+        rot_improv = np.abs(rot_dist - rot_dist_init)
+        if trans_improv < 0.1 and rot_improv < 0.1:
+            a = 1 + 1
 
         if False:
             # Compute and visualize final error
@@ -846,23 +883,31 @@ class BATracker:
             plt.imshow(im_query)
             plt.plot(kpt3d_rep2[:, 0], kpt3d_rep2[:, 1], 'r+')
             plt.show()
-
-        if n_kpt_q > self.update_th:
+        # if len(triang_keep_idx) > self.update_th:
+        if self.frame_id % self.frame_interval == 0:
+            print(f"Num updated :{len(triang_keep_idx)}")
+            # valid = np.where(match_kq != -1)
+            # mkpts2d_kf = kpt2ds_pred_kf['keypoints'][valid]
+            # mkpts2d_query = kpt2ds_pred_query['keypoints'][match_kq[valid]]
         # if False:
-            self.kpt2ds = kpt2ds_f
+            unmatched_idx = np.array([i for i in range(len(kpt2ds_pred_query['keypoints'])) if i not in match_kq])
+            num_unmatch = len(unmatched_idx)
+            self.kpt2ds = np.concatenate([kpt2ds_f, kpt2ds_pred_query['keypoints'][unmatched_idx]])
             self.kpt2d_descs = np.concatenate([self.kpt2d_descs,
-                                               kpt2ds_pred_query['descriptors'][:, match_kq[valid]].transpose()])
-            self.kpt2d_fids = kpt2d_fids_f
+                                               kpt2ds_pred_query['descriptors'][:, match_kq[valid]].transpose(),
+                                               kpt2ds_pred_query['descriptors'][:, unmatched_idx].transpose()])
+
+            self.kpt2d_fids = np.concatenate([kpt2d_fids_f, np.ones(num_unmatch, dtype=int) * kpt2d_fids_f[-1]])
             self.cams = cams_f
             # self.kpt2ds_match = kpt2ds_match_f
             self.kpt3d_list = kpt3d_list_f
-            self.kpt2d3d_ids = kpt2d3d_ids_f
+            self.kpt2d3d_ids = np.concatenate([kpt2d3d_ids_f, np.ones(num_unmatch, dtype=int) * -1])
             frame_info_dict['pose_pred'] = pose_init
 
-            kpt_idxs = np.where(kpt2d_fids_f == np.max(kpt2d_fids_f))[0]
-            kpt_idxs = kpt_idxs[np.where(kpt2d3d_ids_f[kpt_idxs] != -1)[0]]
-            print(f"Update keypoint with size:{len(kpt2ds_f)}")
-            self.kf_kpt_index_dict[self.id] = (len(self.kpt2d_fids) - 1 - len(kpt2ds_f[kpt_idxs]),
+            # kpt_idxs_full = np.where(kpt2d_fids_f == np.max(kpt2d_fids_f))[0]
+            # kpt_idxs_w3d = kpt_idxs_full[np.where(kpt2d3d_ids_f[kpt_idxs_full] != -1)[0]]
+
+            self.kf_kpt_index_dict[self.id] = (len(self.kpt2d_fids) - 1 - len(kpt2ds_pred_query['keypoints']),
                                                len(self.kpt2d_fids)-1)
 
             self.kf_frames[self.id] = frame_info_dict
@@ -893,7 +938,7 @@ class BATracker:
         self.frame_id += 1
         return pose_opt, ba_log
 
-    def track(self, frame_info_dict):
+    def track(self, frame_info_dict, flow_track_only=False):
         pose_ftk = self.flow_track(frame_info_dict, self.last_kf_info)
         # decide whether or not to track using BA
         trans_dist_fkt, rot_dist_fkt = self.cm_degree_5_metric(self.last_kf_info['pose_pred'], pose_ftk)
@@ -913,21 +958,41 @@ class BATracker:
         else:
             pose_mo = self.motion_prediction()
 
-        trans_dist_mo, rot_dist_mo = self.cm_degree_5_metric(self.last_kf_info['pose_pred'], pose_mo)
-
-        print(f"FTK dist:{trans_dist_fkt}\nMo dist:{trans_dist_mo}")
-
         if trans_dist_fkt > 3:
+            print("+++++++++++ Using motion model")
             frame_info_dict['pose_init'] = pose_mo
-            # self.pose_list.append(pose_mo)
-            trans_dist = trans_dist_mo
         else:
             frame_info_dict['pose_init'] = pose_ftk
-            trans_dist = trans_dist_fkt
+        if not flow_track_only:
+            pose_opt, ba_log = self.track_ba(frame_info_dict, verbose=True)
+            self.pose_list.append(pose_opt)
+        else:
+            pose_init = frame_info_dict['pose_init']
+            pose_opt = frame_info_dict['pose_init']
+            ba_log = dict()
+            trans_dist_pred, rot_dist_pred = self.cm_degree_5_metric(frame_info_dict['pose_pred'],
+                                                                     frame_info_dict['pose_gt'])
+            trans_dist_pred = np.round(trans_dist_pred, decimals=2)
+            rot_dist_pred = np.round(rot_dist_pred, decimals=2)
+            ba_log['pred_err_trans'] = trans_dist_pred
+            ba_log['pred_err_rot'] = rot_dist_pred
+            print(f"Pred pose error:{ba_log['pred_err_trans']} - {ba_log['pred_err_rot']}")
 
-        # frame_info_dict['pose_init'] = frame_info_dict['pose_pred']
-        pose_opt, ba_log = self.track_ba(frame_info_dict, verbose=False)
-        self.pose_list.append(pose_opt)
+            trans_dist_init, rot_dist_init = self.cm_degree_5_metric(pose_init, frame_info_dict['pose_gt'])
+            trans_dist_init = np.round(trans_dist_init, decimals=2)
+            rot_dist_init = np.round(rot_dist_init, decimals=2)
+            ba_log['init_err_trans'] = trans_dist_init
+            ba_log['init_err_rot'] = rot_dist_init
+            print(f"Initial pose error:{ba_log['init_err_trans']} - {ba_log['init_err_rot']}")
+
+            trans_dist, rot_dist = self.cm_degree_5_metric(pose_opt, frame_info_dict['pose_gt'])
+            trans_dist = np.round(trans_dist, decimals=2)
+            rot_dist = np.round(rot_dist, decimals=2)
+            ba_log['opt_err_trans'] = trans_dist
+            ba_log['opt_err_rot'] = rot_dist
+            print(f"Optimized pose error:{ba_log['opt_err_trans']} - {ba_log['opt_err_rot']}")
+            self.pose_list.append(frame_info_dict['pose_init'])
+
         # if trans_dist > 5:
         #     pose_opt = self.track_ba(frame_info_dict)
         return frame_info_dict['pose_init'], pose_opt, ba_log
