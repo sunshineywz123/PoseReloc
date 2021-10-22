@@ -248,7 +248,7 @@ def inference(cfg):
     if cfg.use_tracker:
         from src.tracker import BATracker
         tracker = BATracker(cfg)
-        track_interval = 10
+        track_interval = 5
     else:
         tracker = None
         track_interval = -1
@@ -358,7 +358,7 @@ def inference(cfg):
             if need_update:
                 print("Update requested")
 
-            if idx % track_interval == 0 or need_update:
+            if (idx % track_interval == 0 or need_update) and inliers is not None and len(inliers) != 0:
                 mkpts3d_db_inlier = mkpts3d_db[inliers.flatten()]
                 mkpts2d_q_inlier = mkpts2d_q[inliers.flatten()]
 

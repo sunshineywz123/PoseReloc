@@ -301,18 +301,20 @@ class BATracker:
 
     def motion_prediction(self):
         from transforms3d.euler import mat2euler, euler2mat
-        pose0 = self.pose_list[-2]
-        pose1 = self.pose_list[-1]
+        pose0 = self.pose_list[-3]
+        pose1 = self.pose_list[-2]
+        pose_t = self.pose_list[-1]
 
-        trans0 = pose0[:3, 3]
-        trans1 = pose1[:3, 3]
+        speed_trans = ((pose1[:3, 3] - pose0[:3, 3]) + (pose_t[:3, 3] - pose1[:3, 3]))/2
 
         rot0 = np.array(mat2euler(pose0[:3, :3]))
         rot1 = np.array(mat2euler(pose1[:3, :3]))
-        trans_t = 2 * trans0 - trans1
-        rot_t = 2 * rot0 - rot1
-        pose_new = np.eye(4)
+        rot_t = np.array(mat2euler(pose1[:3, :3]))
+        speed_rot = ((rot1 - rot0) + (rot_t - rot1)) / 2
+        trans_t = pose_t[:3, 3] + speed_trans
+        rot_t = rot_t + speed_rot
 
+        pose_new = np.eye(4)
         pose_new[:3, :3] = euler2mat(rot_t[0], rot_t[1], rot_t[2])
         pose_new[:3, 3] = trans_t
         return pose_new
@@ -616,10 +618,10 @@ class BATracker:
         mkpts2d_query = kpt2ds_pred_query['keypoints'][match_kq[valid]]
         kpt_idx_valid = kpt_idx[valid]
 
-        self.vis.set_new_seq('match_res')
-        im_query = cv2.imread(frame_info_dict['im_path'])
-        self.vis.add_kpt_corr(self.frame_id, im_kf, im_query, mkpts2d_kf, mkpts2d_query,
-                              T_0to1=T_0to1, K=kf_frame_info['K'], K2=frame_info_dict['K'])
+        # self.vis.set_new_seq('match_res')
+        # im_query = cv2.imread(frame_info_dict['im_path'])
+        # self.vis.add_kpt_corr(self.frame_id, im_kf, im_query, mkpts2d_kf, mkpts2d_query,
+        #                       T_0to1=T_0to1, K=kf_frame_info['K'], K2=frame_info_dict['K'])
 
         # Update
         # kpt2ds_match_f = np.copy(self.kpt2d_match)
@@ -953,16 +955,17 @@ class BATracker:
         # plt.plot(kpt2d[:, 0], kpt2d[:, 1], 'r+')
         # plt.show()
 
-        if len(self.pose_list) < 2:
+        if len(self.pose_list) < 3:
             pose_mo = self.last_kf_info['pose_pred']
         else:
             pose_mo = self.motion_prediction()
 
-        if trans_dist_fkt > 3:
+        if trans_dist_fkt > 5:
             print("+++++++++++ Using motion model")
             frame_info_dict['pose_init'] = pose_mo
         else:
             frame_info_dict['pose_init'] = pose_ftk
+
         if not flow_track_only:
             pose_opt, ba_log = self.track_ba(frame_info_dict, verbose=True)
             self.pose_list.append(pose_opt)
