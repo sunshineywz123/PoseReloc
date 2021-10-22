@@ -31,8 +31,8 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/0407-clock-others
     # data_dir: ${data_dir}/scan_data/0406-toycalculator-others/toycalculator-4
     # sfm_model_dir: ${data_dir}/sfm_model/0406-toycalculator-others
-     data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
-     sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
+    # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
     # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
     # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
     # data_dir: ${data_dir}/scan_data/0409-aptamil-box/aptamil-3
@@ -41,8 +41,8 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/0411-doveshampoo-others
     # data_dir: ${data_dir}/scan_data/010-shampoo-bottle/xfs4
     # sfm_model_dir: ${data_dir}/sfm_model/010-shampoo-bottle
-    # data_dir: ${data_dir}/scan_data/0412-pikachubowl-others/pikachubowl-3
-    # sfm_model_dir: ${data_dir}/sfm_model/0412-pikachubowl-others
+     data_dir: ${data_dir}/scan_data/0412-pikachubowl-others/pikachubowl-3
+     sfm_model_dir: ${data_dir}/sfm_model/0412-pikachubowl-others
 
 
 output:

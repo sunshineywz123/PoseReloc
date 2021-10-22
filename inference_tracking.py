@@ -164,7 +164,7 @@ def vis_reproj(paths, img_path, pose_pred, pose_gt, pose_init=None, pose_opt=Non
 
     # Draw gt 3d box
     reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d) / scale
-    draw_3d_box(image_full, reproj_box_2d_gt, color='y')
+    # draw_3d_box(image_full, reproj_box_2d_gt, color='y')
 
     # Draw pred 3d box
     if pose_pred is not None:
@@ -259,6 +259,12 @@ def inference(cfg):
     im_ids.sort()
     img_lists = [osp.join(osp.dirname(img_lists[0]), f'{im_id}.png') for im_id in im_ids]
 
+    meta_path = osp.join(paths['data_dir'], 'model_meta.json')
+    with open(meta_path, 'r') as f:
+        meta = json.load(f)
+    fx, fy, cx, cy = meta['cam_params']
+    K_full = np.array([[fx, 0, cx],[0, fy, cy], [0, 0, 1]])
+
     dataset = HLOCDataset(img_lists, confs[cfg.network.detection]['preprocessing'])
     loader = DataLoader(dataset, num_workers=1)
     evaluator = Evaluator()
@@ -352,6 +358,8 @@ def inference(cfg):
                 'pose_pred': pose_pred_homo,
                 'pose_gt': pose_gt,
                 'K': K_crop,
+                'K_crop': K_crop,
+                # 'K': K_full,
                 'data': data
             }
 
@@ -395,7 +403,7 @@ def inference(cfg):
                 continue
 
             pose_init, pose_opt, ba_log = tracker.track(frame_dict)
-            a = 1 + 1
+
             # with torch.no_grad():
             #     evaluator.evaluate(pose_opt[:3], pose_gt)
             im_pred, im_init, im_opt = vis_reproj(paths, img_path, pose_pred_homo, pose_gt, pose_init, pose_opt)
