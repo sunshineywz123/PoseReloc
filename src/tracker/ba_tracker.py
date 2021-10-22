@@ -63,6 +63,7 @@ class BATracker:
         from src.utils.movie_writer import MovieWriter
         self.mw = MovieWriter()
         self.out = './track_kpt.mp4'
+        self.init_cnt = 3
 
     def load_extractor_model(self, cfg, model_path):
         """ Load extractor model(SuperGlue) """
@@ -113,12 +114,15 @@ class BATracker:
         if self.last_kf_info is not None:
             pose_last = self.pose_list[-1]
             trans_dist, rot_dist = self.cm_degree_5_metric(kf_info_dict['pose_pred'], pose_last)
-            if trans_dist > 3 or rot_dist > 3:
+            # [Option] Reject invalid updates
+            if trans_dist > 5 or rot_dist > 5:
                 print("Update rejected")
                 return False
             else:
                 self.last_kf_info = kf_info_dict
                 return True
+            # self.last_kf_info = kf_info_dict
+            # return True
         else:
             self.last_kf_info = kf_info_dict
             return True
@@ -896,7 +900,7 @@ class BATracker:
             plt.plot(kpt3d_rep2[:, 0], kpt3d_rep2[:, 1], 'r+')
             plt.show()
         # if len(triang_keep_idx) > self.update_th:
-        if self.frame_id % self.frame_interval == 0:
+        if (self.frame_id % self.frame_interval == 0) or self.init_cnt > 0:
             print(f"Num updated :{len(triang_keep_idx)}")
             # valid = np.where(match_kq != -1)
             # mkpts2d_kf = kpt2ds_pred_kf['keypoints'][valid]
@@ -950,28 +954,40 @@ class BATracker:
         self.frame_id += 1
         return pose_opt, ba_log
 
-    def track(self, frame_info_dict, flow_track_only=False):
-        pose_ftk = self.flow_track(frame_info_dict, self.last_kf_info)
-        # decide whether or not to track using BA
-        trans_dist_fkt, rot_dist_fkt = self.cm_degree_5_metric(self.last_kf_info['pose_pred'], pose_ftk)
+    def track(self, frame_info_dict, flow_track_only=False, auto_mode=False):
+        if not auto_mode:
+            self.init_cnt = -1
+            pose_ftk = self.flow_track(frame_info_dict, self.last_kf_info)
+            # pose_ftk = frame_info_dict['pose_pred']
 
-        # [Option] Whether or not to use Full Image
-        import os.path as osp
-        img_path = frame_info_dict['im_path']
-        im_dir = osp.dirname(img_path.replace('color/', 'rgb/'))
-        im_name = 'image' + osp.basename(img_path).replace('.png', '') + '.png'
-        frame_info_dict['im_path_orig'] = osp.join(im_dir, im_name)
+            trans_dist_fkt, rot_dist_fkt = self.cm_degree_5_metric(self.last_kf_info['pose_pred'], pose_ftk)
 
-        if len(self.pose_list) < 3:
-            pose_mo = self.last_kf_info['pose_pred']
+            # [Option] Whether or not to use Full Image
+            # import os.path as osp
+            # img_path = frame_info_dict['im_path']
+            # im_dir = osp.dirname(img_path.replace('color/', 'rgb/'))
+            # im_name = 'image' + osp.basename(img_path).replace('.png', '') + '.png'
+            # frame_info_dict['im_path_orig'] = osp.join(im_dir, im_name)
+
+            if len(self.pose_list) < 3:
+                pose_mo = self.last_kf_info['pose_pred']
+            else:
+                pose_mo = self.motion_prediction()
+
+            # [Option] use motion prediction when keypoint tracking is not valid
+            if trans_dist_fkt > 5:
+                print("+++++++++++ Using motion model")
+                frame_info_dict['pose_init'] = pose_mo
+            else:
+                frame_info_dict['pose_init'] = pose_ftk
         else:
-            pose_mo = self.motion_prediction()
-
-        if trans_dist_fkt > 5:
-            print("+++++++++++ Using motion model")
-            frame_info_dict['pose_init'] = pose_mo
-        else:
-            frame_info_dict['pose_init'] = pose_ftk
+            if self.init_cnt > 0:
+                print("======= INITIALIZING")
+                self.init_cnt -= 1
+                frame_info_dict['pose_init'] = frame_info_dict['pose_gt']
+            else:
+                pose_mo = self.motion_prediction()
+                frame_info_dict['pose_init'] = pose_mo
 
         if not flow_track_only:
             pose_opt, ba_log = self.track_ba(frame_info_dict, verbose=False)

@@ -18,7 +18,7 @@ network:
 
 input:
     # data_dir: ${data_dir}/scan_data/007-bluemoon-bottle/lyl4
-   #  sfm_model_dir: ${data_dir}/sfm_model/007-bluemoon-bottle
+    # sfm_model_dir: ${data_dir}/sfm_model/007-bluemoon-bottle
     # data_dir: ${data_dir}/scan_data/022-haimianbaobao-others/hmbb5
     # sfm_model_dir: ${data_dir}/sfm_model/022-haimianbaobao-others
     # data_dir: ${data_dir}/scan_data/0404-koppla-box/koppla-4
@@ -35,14 +35,14 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
     # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
     # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
-    # data_dir: ${data_dir}/scan_data/0409-aptamil-box/aptamil-3
-    # sfm_model_dir: ${data_dir}/sfm_model/0409-aptamil-box
+     data_dir: ${data_dir}/scan_data/0409-aptamil-box/aptamil-3
+     sfm_model_dir: ${data_dir}/sfm_model/0409-aptamil-box
     # data_dir: ${data_dir}/scan_data/0411-doveshampoo-others/doveshampoo-3
     # sfm_model_dir: ${data_dir}/sfm_model/0411-doveshampoo-others
     # data_dir: ${data_dir}/scan_data/010-shampoo-bottle/xfs4
     # sfm_model_dir: ${data_dir}/sfm_model/010-shampoo-bottle
-     data_dir: ${data_dir}/scan_data/0412-pikachubowl-others/pikachubowl-3
-     sfm_model_dir: ${data_dir}/sfm_model/0412-pikachubowl-others
+    # data_dir: ${data_dir}/scan_data/0412-pikachubowl-others/pikachubowl-3
+    # sfm_model_dir: ${data_dir}/sfm_model/0412-pikachubowl-others
 
 
 output:

@@ -258,12 +258,14 @@ def inference(cfg):
     im_ids = [int(osp.basename(i).replace('.png', '')) for i in img_lists]
     im_ids.sort()
     img_lists = [osp.join(osp.dirname(img_lists[0]), f'{im_id}.png') for im_id in im_ids]
+    img_lists = img_lists[25:]
 
-    meta_path = osp.join(paths['data_dir'], 'model_meta.json')
-    with open(meta_path, 'r') as f:
-        meta = json.load(f)
-    fx, fy, cx, cy = meta['cam_params']
-    K_full = np.array([[fx, 0, cx],[0, fy, cy], [0, 0, 1]])
+    # Load original K
+    # meta_path = osp.join(paths['data_dir'], 'model_meta.json')
+    # with open(meta_path, 'r') as f:
+    #     meta = json.load(f)
+    # fx, fy, cx, cy = meta['cam_params']
+    # K_full = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]])
 
     dataset = HLOCDataset(img_lists, confs[cfg.network.detection]['preprocessing'])
     loader = DataLoader(dataset, num_workers=1)
@@ -402,7 +404,7 @@ def inference(cfg):
                 idx += 1
                 continue
 
-            pose_init, pose_opt, ba_log = tracker.track(frame_dict)
+            pose_init, pose_opt, ba_log = tracker.track(frame_dict, auto_mode=True)
 
             # with torch.no_grad():
             #     evaluator.evaluate(pose_opt[:3], pose_gt)
