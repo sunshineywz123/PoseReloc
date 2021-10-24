@@ -7,8 +7,10 @@ task_name: null
 num_leaf: 3
 suffix: ''
 save_demo: False
+save_vis3d: False
 demo_dir: ${data_dir}/demo
 model:
+    detection_model_path: ${data_dir}/models/detection/yolo/best.pt
     pretrain_model_path: ${data_dir}/models/checkpoints/${task_name}/epoch=19.ckpt
     extractor_model_path: ${data_dir}/models/extractors/SuperPoint/superpoint_v1.pth
 
@@ -19,8 +21,8 @@ network:
 input:
     # data_dir: ${data_dir}/scan_data/007-bluemoon-bottle/lyl4
     # sfm_model_dir: ${data_dir}/sfm_model/007-bluemoon-bottle
-    data_dir: ${data_dir}/scan_data/022-haimianbaobao-others/hmbb5
-    sfm_model_dir: ${data_dir}/sfm_model/022-haimianbaobao-others
+    # data_dir: ${data_dir}/scan_data/022-haimianbaobao-others/hmbb5
+    # sfm_model_dir: ${data_dir}/sfm_model/022-haimianbaobao-others
     # data_dir: ${data_dir}/scan_data/0404-koppla-box/koppla-4
     # sfm_model_dir: ${data_dir}/sfm_model/0404-koppla-box
     # data_dir: ${data_dir}/scan_data/015-yanghenda-doll/yhd4
@@ -41,6 +43,18 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/010-shampoo-bottle
     # data_dir: ${data_dir}/scan_data/0412-pikachubowl-others/pikachubowl-3
     # sfm_model_dir: ${data_dir}/sfm_model/0412-pikachubowl-others
+    # data_dir: ${data_dir}/scan_data/0447-nabati-box/nabati-5
+    # sfm_model_dir: ${data_dir}/sfm_model/0447-nabati-box
+    # data_dir: ${data_dir}/scan_data/0500-chocfranzzi-box/chocfranzzi-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0500-chocfranzzi-box
+    # data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0511-policecar-others
+    # data_dir: ${data_dir}/scan_data/0512-ugreenhub-box/ugreenhub-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0512-ugreenhub-box
+    # data_dir: ${data_dir}/scan_data/0513-busbox-box/busbox-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0513-busbox-box
+    data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-demo1
+    sfm_model_dir: ${data_dir}/sfm_model/0511-policecar-others
 
 
 output:
