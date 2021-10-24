@@ -1,7 +1,7 @@
 # @package _global_
 
 type: inference
-
+use_tracker: False
 match_type: softmax
 task_name: null
 num_leaf: 3
@@ -35,8 +35,10 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/0406-toycalculator-others
     # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
     # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
-    # data_dir: ${data_dir}/scan_data/0409-aptamil-box/aptamil-3
-    # sfm_model_dir: ${data_dir}/sfm_model/0409-aptamil-box
+    # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
+     data_dir: ${data_dir}/scan_data/0409-aptamil-box/aptamil-3
+     sfm_model_dir: ${data_dir}/sfm_model/0409-aptamil-box
     # data_dir: ${data_dir}/scan_data/0411-doveshampoo-others/doveshampoo-3
     # sfm_model_dir: ${data_dir}/sfm_model/0411-doveshampoo-others
     # data_dir: ${data_dir}/scan_data/010-shampoo-bottle/xfs4
@@ -58,4 +60,4 @@ input:
 
 
 output:
-    vis_dir: '/home/wangzihao/runs/vis3d/PoseReloc'
+    vis_dir: '/nas/users/zhangsiyu/posereloc_vis'

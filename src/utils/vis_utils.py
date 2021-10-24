@@ -125,20 +125,21 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1):
     K = K.astype(np.float64)
     
     pts_3d *= scale
-
     try:
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
+        _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs, reprojectionError=5,
+                                                    iterationsCount=10000, flags=cv2.SOLVEPNP_EPNP)
+        # _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
+
         rotation = cv2.Rodrigues(rvec)[0]
 
         tvec /= scale
         pose = np.concatenate([rotation, tvec], axis=-1)
         pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
-    except:
-        pose = None
-        pose_homo = None
-        inliers = None
 
-    return pose, pose_homo, inliers
+        return pose, pose_homo, inliers
+    except cv2.error:
+        print("CV ERROR")
+        return np.eye(4)[:3], np.eye(4), []
 
 
 def draw_3d_box(image, corners_2d, linewidth=3, color='g'):
