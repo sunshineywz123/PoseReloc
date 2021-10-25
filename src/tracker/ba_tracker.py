@@ -54,16 +54,21 @@ class BATracker:
         self.db_3d_list = np.array([])
 
         self.kpt3d_list = []
+        self.kpt3d_sourceid = []
         self.kpt2d3d_ids = [] # 3D ids of each 2D keypoint
         self.update_th = 10
         self.frame_id = 0
         self.last_kf_info = None
-        self.win_size = 20
+        # self.win_size = 20 # parameter for static scene
+        self.win_size = 10
         self.frame_interval = 3
         from src.utils.movie_writer import MovieWriter
         self.mw = MovieWriter()
         self.out = './track_kpt.mp4'
         self.init_cnt = 3
+        self.use_motion_cnt = 0
+        from src.tracker.vis_utils import Timer
+        self.tm = Timer()
 
     def load_extractor_model(self, cfg, model_path):
         """ Load extractor model(SuperGlue) """
@@ -106,16 +111,19 @@ class BATracker:
         # kpt_last = np.array(, dtype=np.float32)
         kpt_last = np.expand_dims(kpt2d_last, axis=1)
         kpt_new, status, err = cv2.calcOpticalFlowPyrLK(im_kf, im_query, kpt_last, None, **lk_params)
-        valid_id = np.where(status.flatten() == 1)
-        kpt_new = np.squeeze(kpt_new, axis=1)
-        return kpt_new, valid_id
+        if status is not None:
+            valid_id = np.where(status.flatten() == 1)
+            kpt_new = np.squeeze(kpt_new, axis=1)
+            return kpt_new, valid_id
+        else:
+            return None, None
 
     def update_kf(self, kf_info_dict):
         if self.last_kf_info is not None:
             pose_last = self.pose_list[-1]
             trans_dist, rot_dist = self.cm_degree_5_metric(kf_info_dict['pose_pred'], pose_last)
             # [Option] Reject invalid updates
-            if trans_dist > 5 or rot_dist > 5:
+            if trans_dist > 10 or rot_dist > 10:
                 print("Update rejected")
                 return False
             else:
@@ -149,6 +157,7 @@ class BATracker:
 
             # init 3D points & 2D-3D relationship
             self.kpt3d_list = np.array(kf_info_dict['mkpts3d'])
+            self.kpt3d_source_id = np.array(np.ones([len(self.kpt3d_list)], dtype=int) * self.id)
             self.kpt2d3d_ids = np.ones([n_kpt], dtype=int) * -1
 
             kf_3d_ids = np.arange(0, len(kf_info_dict['mkpts3d']))
@@ -203,6 +212,8 @@ class BATracker:
 
             # Update 3D keypoints
             self.kpt3d_list = np.concatenate([self.kpt3d_list, kf_kpt3ds_new], axis=0)
+            self.kpt3d_source_id = np.concatenate([self.kpt3d_list, np.ones(kf_kpt3ds_new.shape[0],
+                                                                            dtype=int) * self.id])
 
             # update mapping from DB id to kpt3d id
             kf_db_ids_new = kf_db_ids[valid_id_ndup] # non-duplicate kf 3d keypoint db id
@@ -229,8 +240,11 @@ class BATracker:
             kf_kpts_proj = project(kf_kpts3d, K, kf_pose_pred[:3])
 
             # Load image and visualization
-            kf_im_path = kf_info['im_path']
-            kf_im = cv2.imread(kf_im_path)
+            if isinstance(kf_info['im_path'], str):
+                kf_im_path = kf_info['im_path']
+                kf_im = cv2.imread(kf_im_path)
+            else:
+                kf_im = kf_info['im_path']
 
             from matplotlib import pyplot as plt
             plt.close()
@@ -252,14 +266,14 @@ class BATracker:
         data = {k: torch.from_numpy(v)[None].float().to(device) for k, v in data.items()}
         matching_result = self.matcher(data)
 
-        match01 = matching_result['matches0'].squeeze().cpu().numpy()
-        valid = np.where(match01 != -1)
-        matches_mask = np.copy(match01)
-        match01 = match01[valid[0]]
+        # match01 = matching_result['matches0'].squeeze().cpu().numpy()
+        # valid = np.where(match01 != -1)
+        # matches_mask = np.copy(match01)
+        # match01 = match01[valid[0]]
         # kps0 = kpt_pred0['keypoints'][valid[0]]
         # kps1 = kpt_pred1['keypoints'][match01]
-
-        # ransac filtering
+        #
+        # # ransac filtering
         # F, mask = cv2.findFundamentalMat(kps0, kps1, method=cv2.FM_RANSAC, ransacReprojThreshold=12.0)
         # if mask is not None:
         #     matchesMask = mask.ravel().tolist()
@@ -325,34 +339,56 @@ class BATracker:
         return pose_new
 
     def flow_track(self, frame_info_dict, kf_frame_info):
-        # Load image
-        # kf_frame_info = self.kf_frames[self.last_kf_id]
-        im_kf = cv2.imread(kf_frame_info['im_path'], cv2.IMREAD_GRAYSCALE)
+        from src.tracker.vis_utils import put_text, draw_kpt2d
+        if isinstance(frame_info_dict['im_path'], str):
+            im_query_vis = cv2.imread(frame_info_dict['im_path'])
+        else:
+            im_query_vis = frame_info_dict['im_path']
+        if isinstance(kf_frame_info['im_path'], str):
+            im_kf = cv2.imread(kf_frame_info['im_path'], cv2.IMREAD_GRAYSCALE)
+        else:
+            im_kf = kf_frame_info['im_path']
+            im_kf = cv2.cvtColor(im_kf, cv2.COLOR_BGR2GRAY)
 
         # Get initial pose with 2D-2D match from optical flow
-        im_query = cv2.imread(frame_info_dict['im_path'], cv2.IMREAD_GRAYSCALE)
+        if isinstance(frame_info_dict['im_path'], str):
+            im_query = cv2.imread(frame_info_dict['im_path'], cv2.IMREAD_GRAYSCALE)
+        else:
+            im_query = cv2.cvtColor(frame_info_dict['im_path'], cv2.COLOR_BGR2GRAY)
+
         mkpts2d_query, valid_ids = self.kpt_flow_track(im_kf, im_query, kf_frame_info['mkpts2d'])
-        kpt3ds_kf = kf_frame_info['mkpts3d'][valid_ids]
-        mkpts2d_query = mkpts2d_query[valid_ids]
+        if valid_ids is not None:
+            kpt3ds_kf = kf_frame_info['mkpts3d'][valid_ids]
+            mkpts2d_query = mkpts2d_query[valid_ids]
+            # Solve PnP to find initial pose
+            pose_init, pose_init_homo, inliers = ransac_PnP(frame_info_dict['K_crop'], mkpts2d_query, kpt3ds_kf)
+            kpt3d_rep = project(kpt3ds_kf, frame_info_dict['K_crop'], pose_init)
+            kpt_dist = np.mean(np.linalg.norm(kpt3d_rep - mkpts2d_query, axis=1))
 
-        # Solve PnP to find initial pose
-        pose_init, pose_init_homo, inliers = ransac_PnP(frame_info_dict['K_crop'], mkpts2d_query, kpt3ds_kf)
+            trans_dist, rot_dist = self.cm_degree_5_metric(pose_init_homo, frame_info_dict['pose_gt'])
 
-        trans_dist, rot_dist = self.cm_degree_5_metric(pose_init_homo, frame_info_dict['pose_gt'])
-        print(f"\nFlow pose error:{trans_dist} - {rot_dist}")
+            print(f"\nFlow pose error:{trans_dist} - {rot_dist}\nKptDist:{kpt_dist}")
+            label = f"Flow pose error:{trans_dist} - {rot_dist}"
+            if trans_dist > 1:
+                from matplotlib import pyplot as plt
+                plt.imshow(im_query_vis)
+                plt.plot(kpt3d_rep[:, 0], kpt3d_rep[:, 1], 'bo')
+                plt.plot(mkpts2d_query[:, 0], mkpts2d_query[:, 1], 'r+')
+                plt.savefig(f'./vis/{self.frame_id}.png')
 
-        label = f"Flow pose error:{trans_dist} - {rot_dist}"
-        from src.tracker.vis_utils import put_text, draw_kpt2d
-        im_query_vis = cv2.imread(frame_info_dict['im_path'])
-        im_out = draw_kpt2d(im_query_vis, mkpts2d_query)
+            im_out = draw_kpt2d(im_query_vis, mkpts2d_query)
+            im_out = put_text(im_out, label)
+        else:
+            im_out = im_query_vis
+            kpt_dist = 1000086
+
         # scale = 1
         # h, w, c = im_out.shape
         # h_res = int(h / scale)
         # w_res = int(w / scale)
         # im_out = cv2.resize(im_out, (w_res, h_res))
-        im_out = put_text(im_out, label)
         self.mw.write(im_out, self.out)
-        if trans_dist <= 7 and rot_dist <= 7:
+        if trans_dist <= 7 and rot_dist <= 7 and kpt_dist < 10:
             frame_info_dict['mkpts3d'] = kpt3ds_kf
             frame_info_dict['mkpts2d'] = mkpts2d_query
             self.last_kf_info = frame_info_dict
@@ -593,7 +629,10 @@ class BATracker:
         pose_init = frame_info_dict['pose_init']
         # Load image
         kf_frame_info = self.kf_frames[self.last_kf_id]
-        im_kf = cv2.imread(kf_frame_info['im_path'], cv2.IMREAD_GRAYSCALE)
+        if isinstance(kf_frame_info['im_path'], str):
+            im_kf = cv2.imread(kf_frame_info['im_path'], cv2.IMREAD_GRAYSCALE)
+        else:
+            im_kf = cv2.cvtColor(kf_frame_info['im_path'], cv2.COLOR_BGR2GRAY)
 
         # self.frame_visualization()
 
@@ -630,10 +669,12 @@ class BATracker:
         mkpts2d_query = kpt2ds_pred_query['keypoints'][match_kq[valid]]
         kpt_idx_valid = kpt_idx[valid]
 
-        # self.vis.set_new_seq('match_res')
-        # im_query = cv2.imread(frame_info_dict['im_path'])
-        # self.vis.add_kpt_corr(self.frame_id, im_kf, im_query, mkpts2d_kf, mkpts2d_query,
-        #                       T_0to1=T_0to1, K=kf_frame_info['K'], K2=frame_info_dict['K'])
+        self.vis.set_new_seq('match_res_40')
+        if isinstance(frame_info_dict['im_path'], str):
+            im_query = cv2.imread(frame_info_dict['im_path'])
+        else:
+            im_query = frame_info_dict['im_path']
+        self.vis.add_kpt_corr(self.frame_id, im_kf, im_query, mkpts2d_kf, mkpts2d_query)
 
         # Update
         # kpt2ds_match_f = np.copy(self.kpt2d_match)
@@ -663,12 +704,31 @@ class BATracker:
         kpt2d_rep_query_exist = project(mkps3d_query_exist, frame_info_dict['K'], pose_init[:3])
         rep_diff_q_exist = np.linalg.norm(kpt2d_rep_query_exist - mkpts2d_query_exist, axis=1)
 
+        # VISUALIZATION: Examine source of kpt3d used
+        kpt3d_source_ids = self.kpt3d_source_id[np.array(kf_2d_3d_ids[kpt_idx_w3d], dtype=int)]
+        unique, counts = np.unique(kpt3d_source_ids, return_counts=True)
+        kpt3s_stat_init = dict(zip(unique, counts))
+
         # [Option] keep only points with reprojection error smaller than 20
-        exist_keep_idx_q = np.where(rep_diff_q_exist < 20)[0]
+        exist_keep_idx_q_rep = np.where(rep_diff_q_exist < 20)[0]
+        # [Option] only remove points from rescently initialized frames
+        rep_source_ids = self.kpt3d_source_id[kf_2d_3d_ids[kpt_idx_w3d]]
+        exist_keep_idx_q_source = np.where(self.id - rep_source_ids > 5)[0]
+        exist_keep_idx_q = np.unique(np.concatenate([exist_keep_idx_q_source, exist_keep_idx_q_rep]))
+
+        # exist_keep_idx_q = exist_keep_idx_q_rep
         kpt_idx_w3d_keep = kpt_idx_w3d[exist_keep_idx_q]
+        print(f"Known point removed:{len(np.where(rep_diff_q_exist >= 20)[0])}")
 
         # kpt_idx_w3d_keep = kpt_idx_w3d
         query_2d3d_ids[kpt_idx_w3d_keep] = kf_2d_3d_ids[kpt_idx_w3d_keep]
+
+        # VISUALIZATION: Examine source of kpt3d used
+        assert len(self.kpt3d_source_id) == len(self.kpt3d_list), "Length non-equal"
+        kpt3d_source_ids = self.kpt3d_source_id[np.array(query_2d3d_ids[np.where(query_2d3d_ids != -1)], dtype=int)]
+        unique, counts = np.unique(kpt3d_source_ids, return_counts=True)
+        kpt3s_stat_final = dict(zip(unique, counts))
+        print(f"Kpt3d -{self.id}:\n{kpt3s_stat_init}\n{kpt3s_stat_final}")
 
         ########## Visualize 2D-2D match and existing 3D points ##############
         # kpt3d_exist = self.kpt3d_list[ kf_2d_3d_ids[kpt_idx_w3d]]
@@ -704,10 +764,11 @@ class BATracker:
             triang_rm_idx_q = np.where(rep_diff_q > 20)[0]
             triang_rm_idx_kf = np.where(rep_diff_kf > 20)[0]
 
-            # Remove 3D points distant away
+            # [Option] Remove 3D points distant away
             triang_rm_idx_dist = np.where(kpt3ds_triang[:, 2] > 0.15)[0]
             triang_rm_idx = np.unique(np.concatenate([triang_rm_idx_q, triang_rm_idx_kf, triang_rm_idx_dist]))
             # triang_rm_idx = np.unique(np.concatenate([triang_rm_idx_q, triang_rm_idx_kf]))
+
             triang_keep_idx = np.array([i for i in range(len(kpt2d_rep_query))
                                         if i not in triang_rm_idx]) # index over mkpts2d_q_triang
 
@@ -754,7 +815,7 @@ class BATracker:
         kpt2d3d_ids_f = np.concatenate([self.kpt2d3d_ids, query_2d3d_ids])
 
         # Add 3D points
-        if len(kpt_idx_wo3d) >0 and len(triang_keep_idx) > 0:
+        if len(kpt_idx_wo3d) > 0 and len(triang_keep_idx) > 0:
             kpt3d_list_f = np.concatenate([self.kpt3d_list, kpt3ds_triang[triang_keep_idx]])
         else:
             kpt3d_list_f = np.copy(self.kpt3d_list)
@@ -859,8 +920,7 @@ class BATracker:
 
         trans_improv = np.abs(trans_dist - trans_dist_init)
         rot_improv = np.abs(rot_dist - rot_dist_init)
-        if trans_improv < 0.1 and rot_improv < 0.1:
-            a = 1 + 1
+        update_valid = trans_improv < 3 and rot_improv < 3
 
         if False:
             # Compute and visualize final error
@@ -900,12 +960,9 @@ class BATracker:
             plt.plot(kpt3d_rep2[:, 0], kpt3d_rep2[:, 1], 'r+')
             plt.show()
         # if len(triang_keep_idx) > self.update_th:
-        if (self.frame_id % self.frame_interval == 0) or self.init_cnt > 0:
+        if (self.frame_id % self.frame_interval == 0 and update_valid) or self.init_cnt > 0 :
             print(f"Num updated :{len(triang_keep_idx)}")
-            # valid = np.where(match_kq != -1)
-            # mkpts2d_kf = kpt2ds_pred_kf['keypoints'][valid]
-            # mkpts2d_query = kpt2ds_pred_query['keypoints'][match_kq[valid]]
-        # if False:
+
             unmatched_idx = np.array([i for i in range(len(kpt2ds_pred_query['keypoints'])) if i not in match_kq])
             num_unmatch = len(unmatched_idx)
             self.kpt2ds = np.concatenate([kpt2ds_f, kpt2ds_pred_query['keypoints'][unmatched_idx]])
@@ -916,6 +973,8 @@ class BATracker:
             self.kpt2d_fids = np.concatenate([kpt2d_fids_f, np.ones(num_unmatch, dtype=int) * kpt2d_fids_f[-1]])
             self.cams = cams_f
             # self.kpt2ds_match = kpt2ds_match_f
+            self.kpt3d_source_id = np.concatenate([self.kpt3d_source_id, np.ones([len(kpt3d_list_f) - len(self.kpt3d_list)],
+                                                                            dtype=int) * self.id])
             self.kpt3d_list = kpt3d_list_f
             self.kpt2d3d_ids = np.concatenate([kpt2d3d_ids_f, np.ones(num_unmatch, dtype=int) * -1])
             frame_info_dict['pose_pred'] = pose_init
@@ -925,34 +984,26 @@ class BATracker:
 
             self.kf_kpt_index_dict[self.id] = (len(self.kpt2d_fids) - 1 - len(kpt2ds_pred_query['keypoints']),
                                                len(self.kpt2d_fids)-1)
-
+            self.kf_frames.pop(self.last_kf_id)
             self.kf_frames[self.id] = frame_info_dict
 
             self.last_kf_id = self.id
             self.id += 1
 
-            # remove frame local window
-            fids = np.unique(self.kpt2d_fids)
-            fids.sort()
-            # if len(fids) > self.win_size:
-            if False:
-                # keep_id = fids[-self.win_size:]
-                # valid_idx = np.where(np.in1d(self.kpt2d_fids, keep_id) == True)[0]
+            if np.max(self.kpt2d_fids) > self.win_size:
+                print("[START Deleting frame infos]")
 
-                rm_id = fids[0]
-                first_id = self.kf_kpt_index_dict[rm_id][1] + 1
-                for k in self.kf_kpt_index_dict.keys():
-                    start_id, end_id = self.kf_kpt_index_dict[k]
-                    self.kf_kpt_index_dict[k] = (start_id - first_id, end_id-first_id)
-
-                self.kpt2ds = self.kpt2ds[first_id:]
-                self.kpt2d_descs = self.kpt2d_descs[first_id:]
-                # self.kpt2ds_match = self.kpt2ds_match[valid_idx]
-                self.kpt2d_fids = self.kpt2d_fids[first_id:]
-                self.kpt2d3d_ids = self.kpt2d3d_ids[first_id:]
+                valid_idx_fid = np.where(self.kpt2d_fids > np.max(self.kpt2d_fids) - self.win_size)
+                num_del = len(self.kpt2d_fids) - len(valid_idx_fid)
+                start_idx, end_idx = self.kf_kpt_index_dict[self.last_kf_id]
+                self.kf_kpt_index_dict[self.last_kf_id] = [start_idx - num_del, end_idx - num_del]
+                self.kpt2d_fids = self.kpt2d_fids[valid_idx_fid]
+                self.kpt2ds = self.kpt2ds[valid_idx_fid]
+                self.kpt2d3d_ids = self.kpt2d3d_ids[valid_idx_fid]
+                self.kpt2d_descs = self.kpt2d_descs[valid_idx_fid]
 
         self.frame_id += 1
-        return pose_opt, ba_log
+        return pose_opt, ba_log, update_valid
 
     def track(self, frame_info_dict, flow_track_only=False, auto_mode=False):
         if not auto_mode:
@@ -960,7 +1011,7 @@ class BATracker:
             pose_ftk = self.flow_track(frame_info_dict, self.last_kf_info)
             # pose_ftk = frame_info_dict['pose_pred']
 
-            trans_dist_fkt, rot_dist_fkt = self.cm_degree_5_metric(self.last_kf_info['pose_pred'], pose_ftk)
+            trans_dist_fkt, rot_dist_fkt = self.cm_degree_5_metric(self.pose_list[-1], pose_ftk)
 
             # [Option] Whether or not to use Full Image
             # import os.path as osp
@@ -970,16 +1021,19 @@ class BATracker:
             # frame_info_dict['im_path_orig'] = osp.join(im_dir, im_name)
 
             if len(self.pose_list) < 3:
-                pose_mo = self.last_kf_info['pose_pred']
+                pose_mo = frame_info_dict['pose_pred']
             else:
                 pose_mo = self.motion_prediction()
 
             # [Option] use motion prediction when keypoint tracking is not valid
-            if trans_dist_fkt > 5:
+            if (trans_dist_fkt > 10 or rot_dist_fkt > 10) and self.use_motion_cnt < 3:
                 print("+++++++++++ Using motion model")
                 frame_info_dict['pose_init'] = pose_mo
+                self.use_motion_cnt += 1
             else:
                 frame_info_dict['pose_init'] = pose_ftk
+                self.use_motion_cnt = 0
+
         else:
             if self.init_cnt > 0:
                 print("======= INITIALIZING")
@@ -990,8 +1044,11 @@ class BATracker:
                 frame_info_dict['pose_init'] = pose_mo
 
         if not flow_track_only:
-            pose_opt, ba_log = self.track_ba(frame_info_dict, verbose=False)
-            self.pose_list.append(pose_opt)
+            pose_opt, ba_log, update_valid = self.track_ba(frame_info_dict, verbose=False)
+            if update_valid:
+                self.pose_list.append(pose_opt)
+            else:
+                self.pose_list.append(frame_info_dict['pose_init'])
         else:
             pose_init = frame_info_dict['pose_init']
             pose_opt = frame_info_dict['pose_init']
