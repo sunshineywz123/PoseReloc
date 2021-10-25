@@ -1,9 +1,6 @@
 import cv2
-from numpy.core.numeric import correlate
 import torch
-
 import numpy as np
-
 
 
 def letterbox(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False,
@@ -44,7 +41,9 @@ def process_img(img0, img_size, stride, cvt_color=True):
     # Preprocess image
     assert img0 is not None, "Image not found!"
 
-    img = letterbox(img0, img_size, stride=stride)[0]
+    # img = letterbox(img0, img_size, stride=stride)[0]
+    img = letterbox(img0, img_size, stride=stride, scaleFill=False, auto=False)[0]
+
     if cvt_color:
         img = img[:, :, ::-1].transpose(2, 0, 1) # BGR to RGB
     else:
@@ -201,3 +200,54 @@ def clip_coords(boxes, img_shape):
     boxes[:, 1].clamp_(0, img_shape[0]) # y1
     boxes[:, 2].clamp_(0, img_shape[1]) # x2
     boxes[:, 3].clamp_(0, img_shape[0]) # y2
+
+
+class YOLOWarper:
+    def __init__(self, cfg):
+        yolo_model_path = cfg.model.detection_model_path
+        self.yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path_or_model=yolo_model_path)
+        self.stride = int(self.yolo_model.stride.max())
+        self.yolo_det_size = 640
+        self.process_img = process_img
+        self.non_max_suppression = non_max_suppression
+        self.scale_coords = scale_coords
+
+    def prepare_data(self, img):
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+
+        img = img.astype(np.float32)
+        img_size = img.shape[:2]
+        img = img[None]
+        img /= 255.
+
+        inp = torch.Tensor(img)[None].cuda()
+        return inp, np.array(img_size)[None]
+
+    def __call__(self, img_path, K):
+        from src.utils import data_utils
+
+        img = cv2.imread(img_path)
+        inp_yolo = self.process_img(img, self.yolo_det_size, self.stride)
+        pred_yolo = self.yolo_model(inp_yolo)[0]
+
+        pred_yolo = self.non_max_suppression(pred_yolo)
+
+        if pred_yolo[0].shape[0] == 0:  # No obj is detected
+            return None
+
+        for i, det in enumerate(pred_yolo):
+            det[:, :4] = self.scale_coords(inp_yolo.shape[2:], det[:, :4], img.shape).round()
+            box = det[0, :4].cpu().numpy().astype(np.int)
+
+        x0, y0, x1, y1 = box
+        resize_shape = np.array([y1 - y0, x1 - x0])
+        K_crop, K_crop_homo = data_utils.get_K_crop_resize(box, K, resize_shape)
+        image_crop = data_utils.get_image_crop_resize(img, box, resize_shape)
+
+        box_new = np.array([0, 0, x1 - x0, y1 - y0])
+        resize_shape = np.array([512, 512])
+        K_crop, K_crop_homo = data_utils.get_K_crop_resize(box_new, K_crop, resize_shape)
+        image_crop = data_utils.get_image_crop_resize(image_crop, box_new, resize_shape)
+
+        inp_spp, img_size = self.prepare_data(image_crop)
+        return inp_spp, image_crop, img_size, K_crop

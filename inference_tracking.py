@@ -50,6 +50,37 @@ def get_3d_anno(anno_3d_path):
     return anno_3d
 
 
+def get_default_paths_demo(cfg):
+    data_dir = cfg.input.data_dir
+    sfm_model_dir = cfg.input.sfm_model_dir
+    anno_dir = osp.join(sfm_model_dir, f'outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}/anno')
+    avg_anno_3d_path = osp.join(anno_dir, 'anno_3d_average.npz')
+    clt_anno_3d_path = osp.join(anno_dir, 'anno_3d_collect.npz')
+    idxs_path = osp.join(anno_dir, 'idxs.npy')
+
+    seq_id = data_dir.split('/')[-1].split('-')[-1]
+    seq1_path = data_dir.replace(seq_id, '1')
+    box_path = osp.join(seq1_path, 'Box.txt')
+    trans_box_path = osp.join(seq1_path, 'Box_trans.txt')
+
+    img_lists = []
+    color_full_dir = osp.join(data_dir, 'color_full')
+    img_lists += glob.glob(color_full_dir + '/*.png', recursive=True)
+
+    intrin_full_path = osp.join(data_dir, 'intrinsics.txt')
+    paths = {
+        'data_dir': data_dir,
+        'sfm_model_dir': sfm_model_dir,
+        'avg_anno_3d_path': avg_anno_3d_path,
+        'clt_anno_3d_path': clt_anno_3d_path,
+        'idxs_path': idxs_path,
+        'intrin_full_path': intrin_full_path,
+        'box_path': box_path,
+        'trans_box_path': trans_box_path
+    }
+    return img_lists, paths
+
+
 def get_default_paths(cfg):
     data_dir = cfg.input.data_dir
     sfm_model_dir = cfg.input.sfm_model_dir
@@ -144,14 +175,80 @@ def pack_data(detection, avg_data, clt_data, idxs_file, num_leaf, image_size):
     return inp_data
 
 
-def vis_reproj(paths, img_path, pose_pred, pose_gt, pose_init=None, pose_opt=None, scale=2):
+def vis_reproj_demo(paths, img_path, pose_pred=None, pose_init=False, pose_opt=None):
+    """ Draw 2d box reprojected by 3d box"""
+    from src.utils.objScanner_utils import parse_3d_box, parse_K
+    from src.utils.vis_utils import reproj, draw_3d_box
+
+    def read_trans(trans_box_path):
+        f = open(trans_box_path, 'r')
+        line = f.readlines()[1]
+
+        data = [float(e) for e in line.split(' ')]
+        scale = np.array(data[0])
+        rot_vec = np.array(data[1:4])
+        trans_vec = np.array(data[4:])
+
+        return scale, rot_vec, trans_vec
+
+    def trans_box(orig_box, scale, rot_vec, trans_vec):
+        scaled_box = orig_box * scale
+
+        trans = np.eye(4)
+        trans[:3, :3] = cv2.Rodrigues(rot_vec)[0]
+        trans[:3, 3:] = trans_vec.reshape(3, 1)
+
+        scaled_box_homo = np.concatenate([scaled_box, np.ones((scaled_box.shape[0], 1))], axis=-1).T
+        trans_box_homo = trans @ scaled_box_homo
+
+        trans_box_homo[:3, :] /= trans_box_homo[3:, :]
+        return trans_box_homo[:3].T
+
+    box_path = paths['box_path']
+    trans_box_path = paths['trans_box_path']
+
+    box_3d, box3d_homo = parse_3d_box(box_path)
+    scale, rot_vec, trans_vec = read_trans(trans_box_path)
+    box_3d_trans = trans_box(box_3d, scale, rot_vec, trans_vec)
+
+    intrin_full_path = paths['intrin_full_path']
+    K_full, K_full_homo = parse_K(intrin_full_path)
+
+    # image_full_path = get_img_full_path(img_path)
+    image_full = cv2.imread(img_path)
+
+    # Draw pred 3d box
+    if pose_pred is not None:
+        image_pred = np.copy(image_full)
+        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d)
+        draw_3d_box(image_pred, reproj_box_2d_pred, color='g')
+    else:
+        image_pred = None
+
+    if pose_init is not None:
+        image_init = np.copy(image_full)
+        reproj_box_2d_pred = reproj(K_full, pose_init, box_3d)
+        draw_3d_box(image_init, reproj_box_2d_pred, color='g')
+    else:
+        image_init = None
+
+    if pose_opt is not None:
+        image_opt = np.copy(image_full)
+        reproj_box_2d_pred = reproj(K_full, pose_opt, box_3d)
+        draw_3d_box(image_opt, reproj_box_2d_pred, color='g')
+    else:
+        image_opt = None
+
+    return image_pred, image_init, image_opt
+
+
+def vis_reproj(paths, img_path, pose_pred, pose_gt=None, pose_init=None, pose_opt=None, scale=2):
     """ Draw 2d box reprojected by 3d box"""
     from src.utils.objScanner_utils import parse_3d_box, parse_K
     from src.utils.vis_utils import reproj, draw_3d_box
 
     box_3d_path = get_3d_box_path(paths['data_dir'])
     box_3d, box3d_homo = parse_3d_box(box_3d_path)
-
     intrin_full_path = paths['intrin_full_path']
     K_full, K_full_homo = parse_K(intrin_full_path)
 
@@ -163,8 +260,9 @@ def vis_reproj(paths, img_path, pose_pred, pose_gt, pose_init=None, pose_opt=Non
     image_full = cv2.resize(image_full, (w_res, h_res))
 
     # Draw gt 3d box
-    reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d) / scale
-    # draw_3d_box(image_full, reproj_box_2d_gt, color='y')
+    if pose_gt is not None:
+        reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d) / scale
+        draw_3d_box(image_full, reproj_box_2d_gt, color='y')
 
     # Draw pred 3d box
     if pose_pred is not None:
@@ -239,6 +337,254 @@ def dump_vis3d(idx, cfg, image0, image1, image_full,
     vis3d.add_image(image_full_pil, name='results')
 
 
+def demo(cfg):
+    """ Inference & visualize"""
+    from src.datasets.hloc_dataset import HLOCDataset
+    from src.hloc.extract_features import confs
+    from src.utils.vis_utils import reproj, ransac_PnP
+    from src.evaluators.spg_evaluator import Evaluator
+    # from src.utils.arkit_utils import get_K
+    if cfg.use_tracker:
+        from src.tracker import BATracker
+        tracker = BATracker(cfg)
+        track_interval = 5
+    else:
+        tracker = None
+        track_interval = -1
+
+    if cfg.use_yolo:
+        from src.utils.yolo_utils import YOLOWarper
+        yolo_warpper = YOLOWarper(cfg)
+    else:
+        yolo_warpper = None
+
+    trained_model, extractor_model = load_model(cfg)
+    img_lists, paths = get_default_paths_demo(cfg)
+    im_ids = [int(osp.basename(i).replace('.png', '')) for i in img_lists]
+    im_ids.sort()
+    img_lists = [osp.join(osp.dirname(img_lists[0]), f'{im_id}.png') for im_id in im_ids]
+    img_lists = img_lists[159:]
+
+    from src.utils.arkit_utils import get_K
+    K, K_homo = get_K(paths['intrin_full_path'])
+
+    dataset = HLOCDataset(img_lists, confs[cfg.network.detection]['preprocessing'])
+    loader = DataLoader(dataset, num_workers=1)
+    evaluator = Evaluator()
+    mwr_pred = MovieWriter()
+    mwr_init = MovieWriter()
+    mwr_opt = MovieWriter()
+    mwr_pred_out = './pred.mp4'
+    mwr_init_out = './init.mp4'
+    mwr_opt_out = './opt.mp4'
+
+    ba_logs = dict()
+    ba_logs['err_pred_trans'] = []
+    ba_logs['err_pred_rot'] = []
+    ba_logs['err_pred_cmd5'] = []
+
+    ba_logs['err_init_trans'] = []
+    ba_logs['err_init_rot'] = []
+    ba_logs['err_init_cmd5'] = []
+
+    ba_logs['err_opt_trans'] = []
+    ba_logs['err_opt_rot'] = []
+    ba_logs['err_opt_cmd5'] = []
+
+    # anno_3d = get_3d_anno(paths['anno_3d_path'])
+    idx = 0
+    num_leaf = cfg.num_leaf
+    time_cost = 0
+
+    # with open(paths['avg_anno_3d_path'], 'r') as f:
+    # avg_data = json.load(f)
+    # with open(paths['clt_anno_3d_path'], 'r') as f:
+    # clt_data = json.load(f)
+    avg_data = np.load(paths['avg_anno_3d_path'])
+    clt_data = np.load(paths['clt_anno_3d_path'])
+    num_idx = 10000000000000
+    need_update = False
+    for data in tqdm.tqdm(loader):
+        if idx > num_idx:
+            break
+        with torch.no_grad():
+            img_path = data['path'][0]
+            if not cfg.use_yolo:
+                inp = data['image'].cuda()
+                img_size = data['size']
+                intrin_path = get_intrin_path(img_path)
+                K_crop = np.loadtxt(intrin_path)
+                image_crop = None
+            else:
+                inp, image_crop, img_size, K_crop = yolo_warpper(img_path, K)
+                img_size = torch.tensor(img_size).cuda()
+
+            # feature extraction
+            torch.cuda.synchronize()
+            start = time.time()
+            pred_detection = extractor_model(inp)
+            pred_detection = {k: v[0].cpu().numpy() for k, v in pred_detection.items()}
+
+            # posereloc inference
+            inp_data = pack_data(pred_detection, avg_data, clt_data,
+                                 paths['idxs_path'], num_leaf, img_size)
+            pred, _ = trained_model(inp_data)
+
+            matches = pred['matches0'].detach().cpu().numpy()
+            valid = matches > -1
+
+            kpts2d_q = pred_detection['keypoints']
+            kpts3d_db = inp_data['keypoints3d'][0].detach().cpu().numpy()
+            # kpts3d = anno_3d['keypoints3d'][0].detach().cpu().numpy()
+            confidence = pred['matching_scores0'].detach().cpu().numpy()
+            mkpts2d_q, mkpts3d_db, mconf = kpts2d_q[valid], kpts3d_db[matches[valid]], confidence[valid]
+
+            # valid_detection = dict()
+            # valid_detection['descriptors'] = pred_detection['descriptors'][:, valid]
+            # valid_detection['keypoints'] = pred_detection['keypoints'][valid]
+            # valid_detection['scores'] = pred_detection['scores'][valid]
+            # pred_detection = valid_detection
+
+            # evaluate
+            pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d_q, mkpts3d_db, scale=1000)
+
+            # gt_pose_path = get_gt_pose_path(img_path)
+            # pose_gt = np.loadtxt(gt_pose_path)
+
+            torch.cuda.synchronize()
+            end = time.time()
+            time_cost += end - start
+
+        # Gather keyframe information and tracking
+        if cfg.use_tracker:
+            frame_dict = {
+                'im_path': image_crop,
+                'kpt_pred': pred_detection,
+                'pose_pred': pose_pred_homo,
+                'pose_gt': pose_pred_homo,
+                'K': K_crop,
+                'K_crop': K_crop,
+                # 'K': K_full,
+                'data': data
+            }
+
+            if need_update:
+                print("Update requested")
+
+            if (idx % track_interval == 0 or need_update) and inliers is not None and len(inliers) != 0:
+                mkpts3d_db_inlier = mkpts3d_db[inliers.flatten()]
+                mkpts2d_q_inlier = mkpts2d_q[inliers.flatten()]
+
+                n_kpt = kpts2d_q.shape[0]
+
+                valid_query_id = np.where(valid != False)[0][inliers.flatten()]
+                kpts3d_full = np.ones([n_kpt, 3]) * 10086
+                kpts3d_full[valid_query_id] = mkpts3d_db_inlier
+                kpt3d_ids = matches[valid][inliers.flatten()]
+
+                kf_dict = {
+                    'im_path': image_crop,
+                    'kpt_pred': pred_detection,
+                    'valid_mask': valid,
+                    'mkpts2d': mkpts2d_q_inlier,
+                    'mkpts3d': mkpts3d_db_inlier,
+                    'kpt3d_full': kpts3d_full,
+                    'inliers': inliers,
+                    'kpt3d_ids': kpt3d_ids,
+                    'valid_query_id': valid_query_id,
+                    'pose_pred': pose_pred_homo,
+                    'pose_gt': pose_pred_homo,
+                    'K': K_crop
+                }
+
+                need_update = not tracker.update_kf(kf_dict)
+
+                # pose_init = pose_pred_homo
+                # pose_opt = pose_pred_homo
+                # ba_log = None
+            if idx == 0:
+                tracker.add_kf(kf_dict)
+                idx += 1
+                continue
+
+            pose_init, pose_opt, ba_log = tracker.track(frame_dict, auto_mode=False)
+
+            # with torch.no_grad():
+            #     evaluator.evaluate(pose_opt[:3], pose_gt)
+
+            im_pred, im_init, im_opt = vis_reproj_demo(paths, img_path, pose_pred, pose_init, pose_opt)
+
+            from src.tracker.vis_utils import put_text
+            if ba_log is not None:
+                # for k, v in ba_log.items():
+                #     print(f"{k}:{v}")
+
+                put_text(im_pred, f"Frame:{idx} trans_err:{ba_log['pred_err_trans']} "
+                                  f"rot_err:{ba_log['pred_err_rot']} "
+                                  f"AP:{np.mean(ba_logs['err_pred_cmd5'])}")
+                put_text(im_init, f"Frame:{idx} trans_err:{ba_log['init_err_trans']} "
+                                  f"rot_err:{ba_log['init_err_rot']} "
+                                  f"AP:{np.mean(ba_logs['err_init_cmd5'])}")
+                put_text(im_opt, f"Frame:{idx} trans_err:{ba_log['opt_err_trans']} "
+                                 f"rot_err:{ba_log['opt_err_rot']} "
+                                 f"AP:{np.mean(ba_logs['err_opt_cmd5'])}")
+
+                ba_logs['err_pred_trans'].append(ba_log['pred_err_trans'])
+                ba_logs['err_pred_rot'].append(ba_log['pred_err_rot'])
+                ba_logs['err_pred_cmd5'].append(ba_log['pred_err_trans'] <=5 and ba_log['pred_err_rot']<=5)
+
+                ba_logs['err_init_trans'].append(ba_log['init_err_trans'])
+                ba_logs['err_init_rot'].append(ba_log['init_err_rot'])
+                ba_logs['err_init_cmd5'].append(ba_log['init_err_trans'] <= 5 and ba_log['init_err_rot'] <= 5)
+
+                ba_logs['err_opt_trans'].append(ba_log['opt_err_trans'])
+                ba_logs['err_opt_rot'].append(ba_log['opt_err_rot'])
+                ba_logs['err_opt_cmd5'].append(ba_log['opt_err_trans'] <= 5 and ba_log['opt_err_rot'] <= 5)
+
+                ba_logs[idx] = ba_log
+
+                # from matplotlib import pyplot as plt
+                # plt.imshow(im_pred)
+                # plt.show()
+                # plt.imshow(im_init)
+                # plt.show()
+                # plt.imshow(im_opt)
+                # plt.show()
+                mwr_init.write(im_init, mwr_init_out, fps=30)
+                mwr_pred.write(im_pred, mwr_pred_out, fps=30)
+                mwr_opt.write(im_opt, mwr_opt_out, fps=30)
+
+                print(f"Pred:{np.mean(ba_logs['err_pred_cmd5'])}")
+                print(f"Init:{np.mean(ba_logs['err_init_cmd5'])}")
+                print(f"Opt:{np.mean(ba_logs['err_opt_cmd5'])}")
+                # if idx % 10 == 0 or idx > num_idx:
+                #     # with open('./res.json', 'w') as f:
+                #     #     json.dump(ba_logs, f, indent=4)
+                #
+                #     if idx > num_idx:
+                #         mwr_pred.end()
+                #         mwr_init.end()
+                #         mwr_opt.end()
+                #         break
+        else:
+            image_full = vis_reproj(paths, img_path, pose_pred_homo, pose_gt)
+
+        # visualize
+
+
+        # mkpts3d_2d = reproj(K_crop, pose_gt, mkpts3d_db)
+        # image0 = Image.open(img_path).convert('LA')
+        # image1 = image0.copy()
+        # dump_vis3d(idx, cfg, image0, image1, image_full,
+        #            mkpts2d_q, mkpts3d_2d, mconf, inliers)
+
+        idx += 1
+
+    evaluator.summarize()
+    time_cost += end - start
+    print('=> average time cost: ', time_cost / len(dataset))
+
+
 def inference(cfg):
     """ Inference & visualize"""
     from src.datasets.hloc_dataset import HLOCDataset
@@ -258,8 +604,7 @@ def inference(cfg):
     im_ids = [int(osp.basename(i).replace('.png', '')) for i in img_lists]
     im_ids.sort()
     img_lists = [osp.join(osp.dirname(img_lists[0]), f'{im_id}.png') for im_id in im_ids]
-    img_lists = img_lists[25:]
-
+    # img_lists = img_lists[0:350]
     # Load original K
     # meta_path = osp.join(paths['data_dir'], 'model_meta.json')
     # with open(meta_path, 'r') as f:
@@ -276,9 +621,7 @@ def inference(cfg):
     mwr_pred_out = './pred.mp4'
     mwr_init_out = './init.mp4'
     mwr_opt_out = './opt.mp4'
-    err_pred = []
-    err_init = []
-    err_opt = []
+
     ba_logs = dict()
     ba_logs['err_pred_trans'] = []
     ba_logs['err_pred_rot'] = []
@@ -311,6 +654,9 @@ def inference(cfg):
         with torch.no_grad():
             img_path = data['path'][0]
             inp = data['image'].cuda()
+            img_size = data['size']
+            intrin_path = get_intrin_path(img_path)
+            K_crop = np.loadtxt(intrin_path)
 
             # feature extraction
             torch.cuda.synchronize()
@@ -320,7 +666,7 @@ def inference(cfg):
 
             # posereloc inference
             inp_data = pack_data(pred_detection, avg_data, clt_data,
-                                 paths['idxs_path'], num_leaf, data['size'])
+                                 paths['idxs_path'], num_leaf, img_size)
             pred, _ = trained_model(inp_data)
 
             matches = pred['matches0'].detach().cpu().numpy()
@@ -339,8 +685,6 @@ def inference(cfg):
             # pred_detection = valid_detection
 
             # evaluate
-            intrin_path = get_intrin_path(img_path)
-            K_crop = np.loadtxt(intrin_path)
             pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d_q, mkpts3d_db, scale=1000)
 
             gt_pose_path = get_gt_pose_path(img_path)
@@ -404,7 +748,7 @@ def inference(cfg):
                 idx += 1
                 continue
 
-            pose_init, pose_opt, ba_log = tracker.track(frame_dict, auto_mode=True)
+            pose_init, pose_opt, ba_log = tracker.track(frame_dict, auto_mode=False)
 
             # with torch.no_grad():
             #     evaluator.evaluate(pose_opt[:3], pose_gt)

@@ -181,7 +181,7 @@ def vis_reproj(paths, img_path, pose_pred, save_img=False, demo_dir=None):
 
     box_path = paths['box_path']
     trans_box_path = paths['trans_box_path']
-    
+
     box_3d, box3d_homo = parse_3d_box(box_path)
     scale, rot_vec, trans_vec = read_trans(trans_box_path)
     box_3d_trans = trans_box(box_3d, scale, rot_vec, trans_vec)
@@ -194,7 +194,7 @@ def vis_reproj(paths, img_path, pose_pred, save_img=False, demo_dir=None):
 
     # Draw pred 3d box
     if pose_pred is not None:
-        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d)
+        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d_trans)
         draw_3d_box(image_full, reproj_box_2d_pred, color='g')
 
     if save_img:
@@ -280,12 +280,12 @@ def inference(cfg):
         x0, y0, x1, y1 = box
         resize_shape = np.array([y1 - y0, x1 - x0])
         K_crop, K_crop_homo = data_utils.get_K_crop_resize(box, K, resize_shape)
-        image_crop, trans1 = data_utils.get_image_crop_resize(img_full, box, resize_shape)
+        image_crop = data_utils.get_image_crop_resize(img_full, box, resize_shape)
 
         box_new = np.array([0, 0, x1 - x0, y1 - y0])
         resize_shape = np.array([512, 512])
         K_crop, K_crop_homo = data_utils.get_K_crop_resize(box_new, K_crop, resize_shape)
-        image_crop, trans2 = data_utils.get_image_crop_resize(image_crop, box_new, resize_shape)
+        image_crop = data_utils.get_image_crop_resize(image_crop, box_new, resize_shape)
 
         inp_spp, img_size = prepare_data(image_crop)
         pred_detection = extractor_model(inp_spp)
