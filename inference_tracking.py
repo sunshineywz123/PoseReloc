@@ -260,9 +260,9 @@ def vis_reproj(paths, img_path, pose_pred, pose_gt=None, pose_init=None, pose_op
     image_full = cv2.resize(image_full, (w_res, h_res))
 
     # Draw gt 3d box
-    if pose_gt is not None:
-        reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d) / scale
-        draw_3d_box(image_full, reproj_box_2d_gt, color='y')
+    # if pose_gt is not None:
+    #     reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d) / scale
+    #     draw_3d_box(image_full, reproj_box_2d_gt, color='y')
 
     # Draw pred 3d box
     if pose_pred is not None:
@@ -363,7 +363,7 @@ def demo(cfg):
     im_ids = [int(osp.basename(i).replace('.png', '')) for i in img_lists]
     im_ids.sort()
     img_lists = [osp.join(osp.dirname(img_lists[0]), f'{im_id}.png') for im_id in im_ids]
-    img_lists = img_lists[159:]
+    # img_lists = img_lists[:200]
 
     from src.utils.arkit_utils import get_K
     K, K_homo = get_K(paths['intrin_full_path'])
@@ -789,9 +789,9 @@ def inference(cfg):
                 # plt.show()
                 # plt.imshow(im_opt)
                 # plt.show()
-                mwr_init.write(im_init, mwr_init_out, fps=10)
-                mwr_pred.write(im_pred, mwr_pred_out, fps=10)
-                mwr_opt.write(im_opt, mwr_opt_out, fps=10)
+                mwr_init.write(im_init, mwr_init_out, fps=30)
+                mwr_pred.write(im_pred, mwr_pred_out, fps=30)
+                mwr_opt.write(im_opt, mwr_opt_out, fps=30)
 
                 print(f"Pred:{np.mean(ba_logs['err_pred_cmd5'])}")
                 print(f"Init:{np.mean(ba_logs['err_init_cmd5'])}")

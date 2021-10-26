@@ -59,8 +59,8 @@ class BATracker:
         self.update_th = 10
         self.frame_id = 0
         self.last_kf_info = None
-        # self.win_size = 20 # parameter for static scene
-        self.win_size = 10
+        self.win_size = 20 # for static scene
+        # self.win_size = 10 # for dynamic scene
         self.frame_interval = 3
         from src.utils.movie_writer import MovieWriter
         self.mw = MovieWriter()
@@ -124,7 +124,8 @@ class BATracker:
             trans_dist, rot_dist = self.cm_degree_5_metric(kf_info_dict['pose_pred'], pose_last)
             # [Option] Reject invalid updates
             if trans_dist > 10 or rot_dist > 10:
-                print("Update rejected")
+                trans_dist_gt, rot_dist_gt = self.cm_degree_5_metric(kf_info_dict['pose_pred'], kf_info_dict['pose_gt'])
+                print(f"Update rejected:{trans_dist}/{rot_dist} - {trans_dist_gt}/{rot_dist_gt}")
                 return False
             else:
                 self.last_kf_info = kf_info_dict
@@ -237,6 +238,9 @@ class BATracker:
             # Get 3D points
             kf_2d3d_ids = kpt2d3d_ids[kpt_idx]
             kf_kpts3d = kpt3d_list[kf_2d3d_ids[np.where(kf_2d3d_ids != -1)]]
+            print(f"pose_pred:{kf_pose_pred}")
+            print(f"kpt3d_shape:{kf_kpts3d.shape} - {kf_kpts3d[:10]}")
+
             kf_kpts_proj = project(kf_kpts3d, K, kf_pose_pred[:3])
 
             # Load image and visualization
@@ -400,7 +404,7 @@ class BATracker:
         # # kpt2d_rep_kf = project(kpt3ds, kf_frame_info['K'], kf_frame_info['pose_gt'][:3])
         # self.vis.add_kpt_corr(self.id, im_query, im_kf, mkpts2d_query, mkpt2ds_kf, kpt2d_proj=kpt2d_rep_q,
         #                       T_0to1=T_0to1, K=frame_info_dict['K'])
-        return pose_init_homo
+        return pose_init_homo, kpt_dist
 
     def apply_ba(self, kpt2ds, kpt2d3d_ids, kpt2d_fids, kpt3d_list, cams):
         from DeepLM.BAProblem.loss import SnavelyReprojectionError
@@ -710,13 +714,23 @@ class BATracker:
         kpt3s_stat_init = dict(zip(unique, counts))
 
         # [Option] keep only points with reprojection error smaller than 20
-        exist_keep_idx_q_rep = np.where(rep_diff_q_exist < 20)[0]
-        # [Option] only remove points from rescently initialized frames
-        rep_source_ids = self.kpt3d_source_id[kf_2d_3d_ids[kpt_idx_w3d]]
-        exist_keep_idx_q_source = np.where(self.id - rep_source_ids > 5)[0]
-        exist_keep_idx_q = np.unique(np.concatenate([exist_keep_idx_q_source, exist_keep_idx_q_rep]))
+        med = np.median(rep_diff_q_exist) * 1.2
+        exist_keep_idx_q_rep = np.where(rep_diff_q_exist < med)[0]
+        from matplotlib import pyplot as plt
+        plt.close()
+        # mean = np.mean(rep_diff_q_exist)
+        # med = np.median(rep_diff_q_exist)
+        label = f'med:{med}'
+        plt.title(label)
+        plt.hist(rep_diff_q_exist, histtype='bar', align='mid')
+        plt.savefig(f'./vis/repdist_stat/{self.frame_id}.png'.zfill(5))
 
-        # exist_keep_idx_q = exist_keep_idx_q_rep
+        # [Option] only remove points from rescently initialized frames
+        # rep_source_ids = self.kpt3d_source_id[kf_2d_3d_ids[kpt_idx_w3d]]
+        # exist_keep_idx_q_source = np.where(self.id - rep_source_ids > 5)[0]
+        # exist_keep_idx_q = np.unique(np.concatenate([exist_keep_idx_q_source, exist_keep_idx_q_rep]))
+
+        exist_keep_idx_q = exist_keep_idx_q_rep
         kpt_idx_w3d_keep = kpt_idx_w3d[exist_keep_idx_q]
         print(f"Known point removed:{len(np.where(rep_diff_q_exist >= 20)[0])}")
 
@@ -829,7 +843,6 @@ class BATracker:
             start_idx = np.min(kpt_idxs)
             kpt_idxs = kpt_idxs[np.where(kpt2d3d_ids_f[kpt_idxs] != -1)[0]]
             if len(kpt_idxs) != 0:
-                # FIXME: might be problem here
                 # print(len(kpt_idxs))
                 # print(kpt_idxs[:10])
                 kpt3d_full = kpt3d_list_f[kpt2d3d_ids_f[kpt_idxs]]
@@ -918,10 +931,10 @@ class BATracker:
         ba_log['opt_err_rot'] = rot_dist
         print(f"Optimized pose error:{ba_log['opt_err_trans']} - {ba_log['opt_err_rot']}")
 
-        trans_improv = np.abs(trans_dist - trans_dist_init)
-        rot_improv = np.abs(rot_dist - rot_dist_init)
-        update_valid = trans_improv < 3 and rot_improv < 3
-
+        # trans_improv = np.abs(trans_dist - trans_dist_init)
+        # rot_improv = np.abs(rot_dist - rot_dist_init)
+        # update_valid = trans_improv < 3 and rot_improv < 3
+        update_valid = True
         if False:
             # Compute and visualize final error
             # Get 2D and 3D points of current frame
@@ -1007,11 +1020,12 @@ class BATracker:
 
     def track(self, frame_info_dict, flow_track_only=False, auto_mode=False):
         if not auto_mode:
-            self.init_cnt = -1
-            pose_ftk = self.flow_track(frame_info_dict, self.last_kf_info)
+            # self.init_cnt = -1
+            pose_ftk, kpt_dist = self.flow_track(frame_info_dict, self.last_kf_info)
             # pose_ftk = frame_info_dict['pose_pred']
 
             trans_dist_fkt, rot_dist_fkt = self.cm_degree_5_metric(self.pose_list[-1], pose_ftk)
+            trans_dist_gt_fkt, rot_dist_gt_fkt = self.cm_degree_5_metric(frame_info_dict['pose_gt'], pose_ftk)
 
             # [Option] Whether or not to use Full Image
             # import os.path as osp
@@ -1025,14 +1039,29 @@ class BATracker:
             else:
                 pose_mo = self.motion_prediction()
 
+            trans_dist_gt_fkt, rot_dist_gt_fkt = self.cm_degree_5_metric(frame_info_dict['pose_gt'], pose_ftk)
+            print(f"Flow dist:{trans_dist_fkt}/{rot_dist_fkt} - {trans_dist_gt_fkt}/{rot_dist_gt_fkt}")
+            trans_dist_gt_mo, rot_dist_gt_mo = self.cm_degree_5_metric(frame_info_dict['pose_gt'], pose_mo)
+            print(f"MP dist:{trans_dist_gt_mo}/{rot_dist_gt_mo}")
+
             # [Option] use motion prediction when keypoint tracking is not valid
-            if (trans_dist_fkt > 10 or rot_dist_fkt > 10) and self.use_motion_cnt < 3:
-                print("+++++++++++ Using motion model")
+            if ((trans_dist_fkt > 10 or rot_dist_fkt > 10) and self.use_motion_cnt < 3) or kpt_dist > 10:
+                print(f"+++++++++++ Using motion model")
                 frame_info_dict['pose_init'] = pose_mo
                 self.use_motion_cnt += 1
-            else:
+            elif (trans_dist_fkt < 20 and rot_dist_fkt < 20):
                 frame_info_dict['pose_init'] = pose_ftk
                 self.use_motion_cnt = 0
+            else:
+                print("+++++++++++ Using motion model F")
+                frame_info_dict['pose_init'] = pose_mo
+                self.use_motion_cnt += 1
+
+            # initialize with gt
+            if self.init_cnt > 0:
+                print("======= INITIALIZING")
+                self.init_cnt -= 1
+                frame_info_dict['pose_init'] = frame_info_dict['pose_gt']
 
         else:
             if self.init_cnt > 0:
@@ -1045,10 +1074,7 @@ class BATracker:
 
         if not flow_track_only:
             pose_opt, ba_log, update_valid = self.track_ba(frame_info_dict, verbose=False)
-            if update_valid:
-                self.pose_list.append(pose_opt)
-            else:
-                self.pose_list.append(frame_info_dict['pose_init'])
+            self.pose_list.append(pose_opt)
         else:
             pose_init = frame_info_dict['pose_init']
             pose_opt = frame_info_dict['pose_init']
