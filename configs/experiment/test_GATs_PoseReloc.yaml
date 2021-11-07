@@ -9,8 +9,10 @@ suffix: ''
 save_demo: False
 save_vis3d: False
 demo_dir: ${data_dir}/demo
+yolo_det_size: 640 
+
 model:
-    detection_model_path: ${data_dir}/models/detection/yolo/best.pt
+    detection_model_path: ${data_dir}/models/detection/yolo/{}/best.pt
     pretrain_model_path: ${data_dir}/models/checkpoints/${task_name}/epoch=19.ckpt
     extractor_model_path: ${data_dir}/models/extractors/SuperPoint/superpoint_v1.pth
 
@@ -35,10 +37,6 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/0406-toycalculator-others
     # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
     # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
-    # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
-    # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
-     data_dir: ${data_dir}/scan_data/0409-aptamil-box/aptamil-3
-     sfm_model_dir: ${data_dir}/sfm_model/0409-aptamil-box
     # data_dir: ${data_dir}/scan_data/0411-doveshampoo-others/doveshampoo-3
     # sfm_model_dir: ${data_dir}/sfm_model/0411-doveshampoo-others
     # data_dir: ${data_dir}/scan_data/010-shampoo-bottle/xfs4
@@ -47,17 +45,31 @@ input:
     # sfm_model_dir: ${data_dir}/sfm_model/0412-pikachubowl-others
     # data_dir: ${data_dir}/scan_data/0447-nabati-box/nabati-5
     # sfm_model_dir: ${data_dir}/sfm_model/0447-nabati-box
+    # data_dir: ${data_dir}/scan_data/0492-tuccookies-box/tuccookies-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0492-tuccookies-box
+    # data_dir: ${data_dir}/scan_data/0493-haochidianeggroll-box/haochidianeggroll-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0493-haochidianeggroll-box
     # data_dir: ${data_dir}/scan_data/0500-chocfranzzi-box/chocfranzzi-4
     # sfm_model_dir: ${data_dir}/sfm_model/0500-chocfranzzi-box
-    # data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-4
+    # data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-demo4
     # sfm_model_dir: ${data_dir}/sfm_model/0511-policecar-others
     # data_dir: ${data_dir}/scan_data/0512-ugreenhub-box/ugreenhub-4
     # sfm_model_dir: ${data_dir}/sfm_model/0512-ugreenhub-box
     # data_dir: ${data_dir}/scan_data/0513-busbox-box/busbox-4
     # sfm_model_dir: ${data_dir}/sfm_model/0513-busbox-box
-    data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-demo1
-    sfm_model_dir: ${data_dir}/sfm_model/0511-policecar-others
+    # data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-demo4
+    # sfm_model_dir: ${data_dir}/sfm_model/0511-policecar-others
+    # data_dir: ${data_dir}/scan_data/0501-matchafranzzi-box/matchafranzzi-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0501-matchafranzzi-box
+    # data_dir: ${data_dir}/scan_data/0447-nabati-box/nabati-5
+    # sfm_model_dir: ${data_dir}/sfm_model/0447-nabati-box
+
+
+    # data_dir: ${data_dir}/scan_data/0408-colorbox-box/colorbox-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0408-colorbox-box
+    # data_dir: ${data_dir}/scan_data/0511-policecar-others/policecar-4
+    # sfm_model_dir: ${data_dir}/sfm_model/0511-policecar-others
 
 
 output:
-    vis_dir: '/nas/users/zhangsiyu/posereloc_vis'
+    vis_dir: '/home/wangzihao/runs/vis3d/PoseReloc_eval'

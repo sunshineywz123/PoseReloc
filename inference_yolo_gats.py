@@ -194,7 +194,7 @@ def vis_reproj(paths, img_path, pose_pred, save_img=False, demo_dir=None):
 
     # Draw pred 3d box
     if pose_pred is not None:
-        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d)
+        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d_trans)
         draw_3d_box(image_full, reproj_box_2d_pred, color='g')
 
     if save_img:
@@ -206,6 +206,7 @@ def vis_reproj(paths, img_path, pose_pred, save_img=False, demo_dir=None):
 
         save_path = osp.join(save_dir, '{:05d}.jpg'.format(img_idx))
         cv2.imwrite(save_path, image_full)
+        # import ipdb; ipdb.set_trace()
 
     return image_full
 
@@ -246,10 +247,11 @@ def inference(cfg):
     from src.utils.yolo_utils import process_img, non_max_suppression, scale_coords
     from src.utils.arkit_utils import get_K
 
-    yolo_model_path = cfg.model.detection_model_path
+    obj_name = cfg.input.sfm_model_dir.split('/')[-1]
+    yolo_model_path = cfg.model.detection_model_path.format(obj_name)
     yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path_or_model=yolo_model_path)
     stride = int(yolo_model.stride.max())
-    yolo_det_size = 640
+    yolo_det_size = cfg.yolo_det_size
 
     trained_model, extractor_model = load_model(cfg)
     img_lists, paths = get_default_paths(cfg)
@@ -259,13 +261,13 @@ def inference(cfg):
     
     avg_data = np.load(paths['avg_anno_3d_path'])
     clt_data = np.load(paths['clt_anno_3d_path'])
-    evaluator = Evaluator()
 
     K, K_homo = get_K(paths['intrin_full_path'])
     for img_file in tqdm.tqdm(img_lists):
         # prepare yolo forward data
         img_full = cv2.imread(img_file)
         inp_yolo = process_img(img_full, yolo_det_size, stride)
+
         pred_yolo = yolo_model(inp_yolo)[0]
 
         pred_yolo = non_max_suppression(pred_yolo)
@@ -289,6 +291,7 @@ def inference(cfg):
 
         inp_spp, img_size = prepare_data(image_crop)
         pred_detection = extractor_model(inp_spp)
+
         pred_detection = {k: v[0].cpu().numpy() for k, v in pred_detection.items()}
 
         inp_data = pack_data(pred_detection, avg_data, clt_data, paths['idxs_path'], num_leaf, img_size)
@@ -304,11 +307,11 @@ def inference(cfg):
         pose_pred, pose_pred_homo, inliers = ransac_PnP(K_crop, mkpts2d, mkpts3d, scale=1000)
         # visualize
         img_full = vis_reproj(paths, img_file, pose_pred, save_img=cfg.save_demo, demo_dir=cfg.demo_dir)
+        idx += 1
         
         if cfg.save_vis3d:
             dump_vis3d(idx, cfg, img_full)
 
-        idx += 1
 
 
 @hydra.main(config_path='configs/', config_name='config.yaml')
