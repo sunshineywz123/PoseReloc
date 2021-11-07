@@ -7,6 +7,7 @@ from pathlib import Path
 from src.utils.colmap.read_write_model import Camera, Image, Point3D
 from src.utils.colmap.read_write_model import rotmat2qvec
 from src.utils.colmap.read_write_model import write_model
+from src.utils.arkit_utils import get_K
 
 
 def get_pose_from_txt(img_index, pose_dir):
@@ -27,7 +28,7 @@ def get_intrin_from_txt(img_index, intrin_dir):
     return intrin
 
 
-def import_data(img_lists):
+def import_data(img_lists, do_ba=False):
     """ Import intrinsics and camera pose info """
     points3D_out = {}
     images_out = {}
@@ -44,24 +45,39 @@ def import_data(img_lists):
 
     # import data
     # suppose the image_path can be formatted as  "/path/.../color/***.png"
+    img_type = img_lists[0].split('/')[-2]
     for img_path in img_lists:
         key += 1
         img_id += 1
         camera_id += 1
         
         img_name = img_path.split('/')[-1]
-        base_dir = osp.dirname(img_path).rstrip('color') # root dir of this sequence
+        # base_dir = osp.dirname(img_path).rstrip('color') # root dir of this sequence
+        base_dir = osp.dirname(osp.dirname(img_path))
         img_index = int(img_name.split('.')[0])
         
         # read pose
-        pose_dir = osp.join(base_dir, 'poses')
+        if do_ba:
+            pose_dir = osp.join(base_dir, 'poses')
+        else:
+            pose_dir = osp.join(base_dir, 'poses_ba')
         _, tvec, qvec = get_pose_from_txt(img_index, pose_dir)
 
         # read intrinsic
-        intrin_dir = osp.join(base_dir, 'intrin')
-        K = get_intrin_from_txt(img_index, intrin_dir)
-        fx, fy, cx, cy = K[0][0], K[1][1], K[0, 2], K[1, 2]
-        
+        if img_type == 'color':
+            if do_ba:
+                intrin_dir = osp.join(base_dir, 'intrin')
+            else:
+                intrin_dir = osp.join(base_dir, 'intrin_ba')
+            K = get_intrin_from_txt(img_index, intrin_dir)
+            fx, fy, cx, cy = K[0][0], K[1][1], K[0, 2], K[1, 2]
+        elif img_type == 'color_full':
+            intrin_file = osp.join(base_dir, 'intrinsics.txt')
+            K, K_homo = get_K(intrin_file)
+            fx, fy, cx, cy = K[0][0], K[1][1], K[0][2], K[1][2]
+        else:
+            raise NotImplementedError
+            
         image = cv2.imread(img_path)
         h, w, _ = image.shape
         
@@ -89,10 +105,10 @@ def import_data(img_lists):
     return cameras_out, images_out, points3D_out
 
 
-def generate_model(img_lists, empty_dir):
+def generate_model(img_lists, empty_dir, do_ba=False):
     """ Write intrinsics and camera poses into COLMAP format model"""
     logging.info('Generate empty model...')
-    model = import_data(img_lists)
+    model = import_data(img_lists, do_ba)
 
     logging.info(f'Writing the COLMAP model to {empty_dir}')
     Path(empty_dir).mkdir(exist_ok=True, parents=True)

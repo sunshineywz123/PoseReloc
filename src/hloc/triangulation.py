@@ -70,11 +70,36 @@ def import_features(image_ids, database_path, feature_path):
     db.close()
 
 
-def import_matches(image_ids, database_path, pairs_path, matches_path,
+def in_box(keypoints, box):
+    """ Check if keypoint in 2d box, return in_box keypoints indexs"""
+    in_box_valid = np.zeros(keypoints.shape[0])
+
+    x0, y0 = box.min(0)
+    x1, y1 = box.max(0)
+    # x0, y0, x1, y1 = box
+    corner0 = np.array([x0, y0])
+    corner1 = np.array([x0, y1])
+    corner2 = np.array([x1, y0])
+    
+    vec_01 = corner1 - corner0 
+    vec_02 = corner2 - corner0
+    vecs = keypoints - corner0
+
+    m1 = np.dot(vecs, vec_01)
+    m2 = np.dot(vecs, vec_02)
+    for i, (m1_, m2_) in enumerate(zip(m1, m2)):
+        if m1_ > 0 and m2_ > 0 and m1_ < np.dot(vec_01, vec_01) and m2_ < np.dot(vec_02, vec_02):
+            # ret_idxs.append(i)
+            in_box_valid[i] = 1
+    return in_box_valid == 1
+
+
+def import_matches(image_ids, database_path, pairs_path, matches_path, feature_path,
                    min_match_score=None, skip_geometric_verification=False):
     """ Import matches info into COLMAP database. """
     logging.info("Importing matches into the database...")
 
+    feature_file = h5py.File(str(feature_path), 'r')
     with open(str(pairs_path), 'r') as f:
         pairs = [p.split(' ') for p in f.read().split('\n')]
     
@@ -100,6 +125,25 @@ def import_matches(image_ids, database_path, pairs_path, matches_path,
         if min_match_score:
             scores = match_file[pair]['matching_scores0'].__array__()
             valid = valid & (scores > min_match_score)
+
+        img_type = name0.split('/')[-2]
+
+        if img_type == 'color_full':
+            name0_seq = name0.split('/')[-3] 
+            name1_seq = name1.split("/")[-3]
+            if name0_seq != name1_seq:
+                keypoints0 = feature_file[name0]['keypoints'].__array__()
+                keypoints1 = feature_file[name1]['keypoints'].__array__()
+
+                reproj_box0_file = name0.replace('/color_full/', '/reproj_box/').replace('.png', '.txt')
+                reproj_box1_file = name1.replace('/color_full/', '/reproj_box/').replace('.png', '.txt')
+
+                reproj_box0 = np.loadtxt(reproj_box0_file)
+                reproj_box1 = np.loadtxt(reproj_box1_file)
+
+                valid = valid & in_box(keypoints0, reproj_box0)
+            
+            
         matches = np.stack([np.where(valid)[0], matches[valid]], -1)
 
         db.add_matches(id0, id1, matches)
@@ -172,7 +216,7 @@ def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, \
 
     image_ids = create_db_from_model(Path(empty_sfm_model), Path(database))
     import_features(image_ids, database, features)
-    import_matches(image_ids, database, pairs, matches,
+    import_matches(image_ids, database, pairs, matches, features,
                    min_match_score, skip_geometric_verification)
     
     if not skip_geometric_verification:

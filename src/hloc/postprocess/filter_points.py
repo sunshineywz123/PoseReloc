@@ -62,9 +62,45 @@ def get_3d_box(bbox_path):
     return corner_in_cano, T
 
 
-def filter_by_3d_box(points, points_idxs, bbox_path):
+def get_trans_box(trans_box_path):
+    with open(trans_box_path, 'r') as f:
+        lines = f.readlines() 
+    
+    data = [float(e) for e in lines[1].split(' ')]
+    scale = np.array(data[0])
+    rot_vec = np.array(data[1:4])
+    trans_vec = np.array(data[4:])
+
+    return scale, rot_vec, trans_vec
+
+
+def trans_corner(orig_corner, trans_box_path):
+    """
+    @orig_corner: [n, 3]
+    @trans_box_path: scale, rvec, tvec 
+
+    return: 
+        trans_corner [n, 3]
+    """
+    scale, rot_vec, trans_vec = get_trans_box(trans_box_path)
+
+    corner_in_cano_homo = np.concatenate([orig_corner, np.ones((orig_corner.shape[0], 1))], axis=-1)
+    corner_in_cano_homo = corner_in_cano_homo.T
+    transformation = np.eye(4)
+    transformation[:3, :3] = cv2.Rodrigues(rot_vec)[0]
+    transformation[:3, 3:] = trans_vec.reshape(3, 1)
+
+    trans_corner_in_cano_homo = transformation @ corner_in_cano_homo
+    trans_corner_in_cano_homo[:3] /= trans_corner_in_cano_homo[3:]
+
+    return trans_corner_in_cano_homo[:3].T
+
+
+def filter_by_3d_box(points, points_idxs, box_path, trans_box_path=None):
     """ Filter 3d points by 3d box."""
-    corner_in_cano, _ = get_3d_box(bbox_path)
+    corner_in_cano, _ = get_3d_box(box_path)
+    if trans_box_path is not None:
+        corner_in_cano = trans_corner(corner_in_cano, trans_box_path)
 
     assert points.shape[1] == 3, "Input pcds must have shape (n, 3)"
     if not isinstance(points, torch.Tensor):
@@ -109,13 +145,13 @@ def filter_by_3d_box(points, points_idxs, bbox_path):
     return filtered_xyzs, passed_inds
 
 
-def filter_3d(bbox_path, model_path, track_length):
+def filter_3d(model_path, track_length, box_path, box_trans_path=None):
     """ Filter 3d points by tracke length and 3d box """
     points_model_path = osp.join(model_path, 'points3D.bin')
     points3D = read_write_model.read_points3d_binary(points_model_path)
    
     xyzs, points_idxs = filter_by_track_length(points3D, track_length)
-    xyzs, points_idxs = filter_by_3d_box(xyzs, points_idxs, bbox_path)
+    xyzs, points_idxs = filter_by_3d_box(xyzs, points_idxs, box_path, box_trans_path)
 
     return xyzs, points_idxs
     

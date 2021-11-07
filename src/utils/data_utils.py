@@ -355,7 +355,9 @@ def get_image_crop_resize(image, box, resize_shape):
     resize_h, resize_w = resize_shape
     trans_crop = get_affine_transform(center, scale, 0, [resize_w, resize_h])
     image_crop = cv2.warpAffine(image, trans_crop, (resize_w, resize_h), flags=cv2.INTER_LINEAR)
-    return image_crop
+
+    trans_crop_homo = np.concatenate([trans_crop, np.array([[0, 0, 1]])], axis=0)
+    return image_crop, trans_crop_homo
 
 
 def get_K_crop_resize(box, K_orig, resize_shape):
