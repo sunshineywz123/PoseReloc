@@ -1,6 +1,50 @@
 import numpy as np
 
 
+class Timer(object):
+    def __init__(self):
+        self.time_dict = dict()
+        self.res_dict = dict()
+        self.stash_dict = dict()
+
+    def set(self, label, value):
+        if label not in self.stash_dict.keys():
+            self.stash_dict[label] = []
+        self.stash_dict[label].append(value)
+
+    def tick(self, tick_name):
+        import time
+        self.time_dict[tick_name] = time.time() * 1000.0
+        return self.time_dict[tick_name]
+
+    def tock(self, tock_name, pop=False):
+        if tock_name not in self.time_dict:
+            return 0.0
+        else:
+            import time
+            t2 = time.time() * 1000.0
+            t1 = self.time_dict[tock_name]
+            self.res_dict[tock_name] = t2 - t1
+            if pop:
+                self.time_dict.pop(tock_name)
+            return self.res_dict[tock_name]
+
+    def stash(self):
+        for k, v in self.res_dict.items():
+            if k not in self.stash_dict.keys():
+                self.stash_dict[k] = []
+            self.stash_dict[k].append(v)
+
+    def report_stash(self):
+        res_dict = dict()
+        for k, v in self.stash_dict.items():
+            res_dict[k] = np.mean(v)
+        return res_dict
+
+    def report(self):
+        return self.res_dict
+
+
 def project(xyz, K, RT, need_depth=False):
     """
     xyz: [N, 3]
