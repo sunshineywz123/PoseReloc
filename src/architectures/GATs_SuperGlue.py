@@ -1,6 +1,7 @@
 from copy import deepcopy
 from os import confstr_names
 from re import U
+import ipdb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -69,16 +70,16 @@ class AttentionalGNN(nn.Module):
                 desc3d_db = torch.einsum('bnd->bdn', desc3d_db_)
             elif name == 'cross':
                 layer.attn.prob = []
-                src0, src1 = desc3d_db, desc2d_query
+                src0, src1 = desc3d_db, desc2d_query # [b, c, l1], [b, c, l2]
                 delta0, delta1 = layer(desc2d_query, src0), layer(desc3d_db, src1)
-                desc0, desc1 = (desc2d_query + delta0), (desc3d_db + delta1)
+                desc2d_query, desc3d_db = (desc2d_query + delta0), (desc3d_db + delta1)
             elif name == 'self':
                 layer.attn.prob = []
                 src0, src1 = desc2d_query, desc3d_db
                 delta0, delta1 = layer(desc2d_query, src0), layer(desc3d_db, src1)
-                desc0, desc1 = (desc2d_query + delta0), (desc3d_db + delta1)
+                desc2d_query, desc3d_db = (desc2d_query + delta0), (desc3d_db + delta1)
         
-        return desc0, desc1
+        return desc2d_query, desc3d_db
     
 
 def dot_attention(query, key, value):
@@ -134,7 +135,7 @@ class AttentionPropagation(nn.Module):
     
     def forward(self, x, source):
         message = self.attn(x, source, source)
-        return self.mlp(torch.cat([x, message], dim=1))
+        return self.mlp(torch.cat([x, message], dim=1)) # [b, 2c, 1000] / [b, 2c, 2000]
 
 
 def MLP(channels: list, do_bn=True):
@@ -148,6 +149,8 @@ def MLP(channels: list, do_bn=True):
         if i < n -1:
             if do_bn: 
                 layers.append(nn.BatchNorm1d(channels[i]))
+                # layers.append(nn.LayerNorm(channels[i]))
+                # layers.append(nn.GroupNorm(channels[i], channels[i])) # group norm 
             layers.append(nn.ReLU())
     return nn.Sequential(*layers)
 
@@ -259,7 +262,7 @@ class GATsSuperGlue(nn.Module):
             zero = conf_matrix.new_tensor(0)
             mscores0 = torch.where(mutual0, max0.values, zero)
             mscores1 = torch.where(mutual1, mscores0.gather(1, indices1), zero)
-            self.hparams['match_threshold'] = 0.1
+            self.hparams['match_threshold'] = 0.01
             valid0 = mutual0 & (mscores0 > self.hparams['match_threshold'])
             valid1 = mutual1 & valid0.gather(1, indices1)
             indices0 = torch.where(valid0, indices0, indices0.new_tensor(-1))
