@@ -17,7 +17,7 @@ def align(cfg):
     else:
         img_type = "color"
 
-    for data_dir in data_dirs        - ${work_dir}/data/scan_data/:
+    for data_dir in data_dirs:
         logger.info(f'Processing {data_dir}.')
         root_dir, sub_dirs = data_dir.split(' ')[0], data_dir.split(' ')[1:]
 

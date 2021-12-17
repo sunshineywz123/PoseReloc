@@ -109,14 +109,10 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +experiment=train_PoseReloc.yaml
-    - task_name=sort_023_posereloc
-    - exp_name=sort_023_posereloc
-    - datamodule.batch_size=1
-    - datamodule.num_workers=4
+    - +preprocess=sfm_loftr_coarse_fine
   job:
-    name: train
-    override_dirname: +experiment=train_PoseReloc.yaml,datamodule.batch_size=1,datamodule.num_workers=4,exp_name=sort_023_posereloc,task_name=sort_023_posereloc
+    name: run
+    override_dirname: +preprocess=sfm_loftr_coarse_fine
     id: ???
     num: ???
     config_name: config.yaml
@@ -128,25 +124,25 @@ hydra:
         item_sep: ','
         exclude_keys: []
   runtime:
-    version: 1.1.0
-    cwd: /data/wangzihao/code/sort_PoseReloc
+    version: 1.1.1
+    cwd: /home/hexingyi/code/PoseReloc
     config_sources:
     - path: hydra.conf
       schema: pkg
       provider: hydra
-    - path: /data/wangzihao/code/sort_PoseReloc/configs
+    - path: /home/hexingyi/code/PoseReloc/configs
       schema: file
       provider: main
     - path: ''
       schema: structured
       provider: schema
     choices:
-      experiment: train_PoseReloc.yaml
+      preprocess: sfm_loftr_coarse_fine
       logger: null
-      callbacks: null
-      datamodule: null
-      model: null
-      trainer: null
+      callbacks: default_callbacks.yaml
+      datamodule: mnist_datamodule.yaml
+      model: mnist_model.yaml
+      trainer: default_trainer.yaml
       hydra/env: default
       hydra/callbacks: null
       hydra/job_logging: default

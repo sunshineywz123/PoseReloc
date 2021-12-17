@@ -1,5 +1,1 @@
-- +experiment=train_PoseReloc.yaml
-- task_name=sort_023_posereloc
-- exp_name=sort_023_posereloc
-- datamodule.batch_size=1
-- datamodule.num_workers=4
+- +preprocess=sfm_loftr_coarse_fine

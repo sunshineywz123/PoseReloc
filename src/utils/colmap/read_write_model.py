@@ -362,7 +362,6 @@ def read_points3d_binary(path_to_model_file):
                 point2D_idxs=point2D_idxs)
     return points3D
 
-
 def write_points3D_text(points3D, path):
     """
     see: src/base/reconstruction.cc

@@ -1,69 +1,73 @@
-work_dir: ${hydra:runtime.cwd}
-data_dir: ${work_dir}/data
-print_config: true
-seed: 12345
-task_name: sort_023_posereloc
-exp_name: sort_023_posereloc
 trainer:
   _target_: pytorch_lightning.Trainer
-  gpus:
-  - 0
+  gpus: 0
   min_epochs: 1
-  max_epochs: 20
+  max_epochs: 10
   gradient_clip_val: 0.5
-  accumulate_grad_batches: 2
+  num_sanity_val_steps: 3
+  progress_bar_refresh_rate: 20
   weights_summary: null
-  num_sanity_val_steps: 2
+  default_root_dir: lightning_logs/
 model:
-  _target_: src.models.spg_model.LitModelSPG
+  _target_: src.models.mnist_model.LitModelMNIST
   optimizer: adam
-  lr: 0.0001
-  weight_decay: 0.0
-  architecture: SuperGlue
-  milestones:
-  - 2
-  - 5
-  - 7
-  - 10
-  gamma: 0.5
-  descriptor_dim: 256
-  keypoints_encoder:
-  - 32
-  - 64
-  - 128
-  sinkhorn_iterations: 100
-  match_threshold: 0.5
-  match_type: softmax
-  pos_weights: 0.5
-  neg_weights: 0.5
+  lr: 0.001
+  weight_decay: 5.0e-05
+  architecture: SimpleDenseNet
+  input_size: 784
+  lin1_size: 256
+  dropout1: 0.3
+  lin2_size: 256
+  dropout2: 0.25
+  lin3_size: 128
+  dropout3: 0.2
+  output_size: 10
 datamodule:
-  _target_: src.datamodules.spg_datamodule.SPGDataModule
-  data_dirs: ${data_dir}/sfm_model
-  anno_dirs: outputs_${model.match_type}/anno
-  anno_file: ${work_dir}/data/cache/${task_name}/train.json
-  batch_size: 1
-  num_workers: 4
-  pin_memory: true
+  _target_: src.datamodules.mnist_datamodule.MNISTDataModule
+  data_dir: ${data_dir}
+  batch_size: 64
+  train_val_test_split:
+  - 55000
+  - 5000
+  - 10000
+  num_workers: 0
+  pin_memory: false
 callbacks:
   model_checkpoint:
     _target_: pytorch_lightning.callbacks.ModelCheckpoint
-    monitor: val/loss
-    save_top_k: -1
+    monitor: val/acc
+    save_top_k: 2
     save_last: true
-    mode: min
-    dirpath: ${data_dir}/models/checkpoints/${exp_name}
-    filename: '{epoch}'
-  lr_monitor:
-    _target_: pytorch_lightning.callbacks.LearningRateMonitor
-    logging_interval: step
-logger:
-  tensorboard:
-    _target_: pytorch_lightning.loggers.TensorBoardLogger
-    save_dir: ${data_dir}/logs
-    name: ${exp_name}
-    default_hp_metric: false
-  neptune:
-    tags:
-    - best_model
-  csv_logger:
-    save_dir: .
+    mode: max
+    dirpath: checkpoints/
+    filename: '{epoch:02d}'
+  early_stopping:
+    _target_: pytorch_lightning.callbacks.EarlyStopping
+    monitor: val/acc
+    patience: 100
+    mode: max
+    min_delta: 0.0
+work_dir: ${hydra:runtime.cwd}
+data_dir: ${work_dir}/data
+print_config: true
+type: sfm
+data_base_dir: /nas/users/hexingyi/onepose_data
+output_base_dir: /nas/users/hexingyi/onepose_sfm
+match_type: softmax
+redo: true
+dataset:
+  max_num_kp3d: 2000
+  max_num_kp2d: 1000
+  data_dir:
+  - ${data_base_dir}/0548-duck-others duck-1 duck-2
+  outputs_dir: ${output_base_dir}
+network:
+  detection: loftr
+  detection_model_path: ${work_dir}/data/models/extractors/SuperPoint/superpoint_v1.pth
+  matching: loftr
+  matching_model_path: ${work_dir}/data/models/matchers/SuperGlue/superglue_outdoor.pth
+sfm:
+  gap: 3
+  covis_num: 8
+  track_length: 8
+disable_lightning_logs: true

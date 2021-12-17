@@ -106,6 +106,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     """ Sparse reconstruction: extract features, match features, triangulation"""
     from src.hloc import extract_features, pairs_from_covisibility, match_features, \
                          generate_empty, triangulation
+    from src.NeuralSfM import coarse_matcher
 
     outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
 
@@ -120,11 +121,19 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
         os.system(f'rm -rf {outputs_dir}') 
         Path(outputs_dir).mkdir(exist_ok=True, parents=True)
 
-        extract_features.main(img_lists, feature_out, cfg)
-        pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
-        match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
-        generate_empty.generate_model(img_lists, empty_dir)
-        triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
+        if cfg.network.matching != 'loftr':
+            extract_features.main(img_lists, feature_out, cfg)
+            pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
+            match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
+            generate_empty.generate_model(img_lists, empty_dir)
+            triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
+        else:
+            logger.info('LoFTR mapping begin!')
+            pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
+            coarse_matcher.loftr_coarse_matching_ray(img_lists, covis_pairs_out, feature_out, matches_out)
+            generate_empty.generate_model(img_lists, empty_dir)
+            triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
+            # TODO: add post optimization
     
     
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root):
