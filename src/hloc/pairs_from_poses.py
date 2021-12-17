@@ -44,7 +44,8 @@ def covis_from_pose(img_lists, covis_pairs_out, num_matched, max_rotation, do_ba
         pose_lists = [img_file.replace(f'/{img_type}/', '/poses/').replace('.png', '.txt') for img_file in img_lists]
     dist, dR, seqs_ids = get_pairswise_distances(pose_lists)
 
-    valid = dR < max_rotation
+    min_rotation = 10
+    valid = dR > min_rotation
     np.fill_diagonal(valid, False)
     dist = np.where(valid, dist, np.inf)
 
@@ -54,7 +55,7 @@ def covis_from_pose(img_lists, covis_pairs_out, num_matched, max_rotation, do_ba
         dist_i = dist[i]
         for seq_id in seqs_ids:
             ids = np.array(seqs_ids[seq_id])
-            idx = np.argpartition(dist_i[ids], num_matched_per_seq)[: num_matched_per_seq] 
+            idx = np.argpartition(dist_i[ids], num_matched_per_seq * 2)[: num_matched_per_seq:2] 
             idx = ids[idx]
             idx = idx[np.argsort(dist_i[idx])]
             idx = idx[valid[i][idx]]
@@ -64,6 +65,6 @@ def covis_from_pose(img_lists, covis_pairs_out, num_matched, max_rotation, do_ba
                 name1 = img_lists[j]
 
                 pairs.append((name0, name1))
-        
+
     with open(covis_pairs_out, 'w') as f:
         f.write('\n'.join(' '.join([i, j]) for i, j in pairs))
