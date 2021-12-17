@@ -2,10 +2,15 @@ import json
 import os
 import glob
 import hydra
+import torch
+import time
+
+import open3d as o3d
 import os.path as osp
 
 from loguru import logger
 from pathlib import Path
+from matplotlib.pyplot import box
 from omegaconf import DictConfig
 
 
@@ -13,6 +18,7 @@ def parseScanData(cfg):
     """ Parse arkit scanning data"""
     #TODO: add arkit data processing
     pass
+
 
 def merge_(anno_2d_file, avg_anno_3d_file, collect_anno_3d_file,
            idxs_file, img_id, ann_id, images, annotations):
@@ -58,8 +64,8 @@ def merge_anno(cfg):
     for anno_dir in anno_dirs:
         logger.info(f'Merging anno dir: {anno_dir}')
         anno_2d_file = osp.join(anno_dir, 'anno_2d.json')
-        avg_anno_3d_file = osp.join(anno_dir, 'anno_3d_average.json')
-        collect_anno_3d_file = osp.join(anno_dir, 'anno_3d_collect.json')
+        avg_anno_3d_file = osp.join(anno_dir, 'anno_3d_average.npz')
+        collect_anno_3d_file = osp.join(anno_dir, 'anno_3d_collect.npz')
         idxs_file = osp.join(anno_dir, 'idxs.npy')
 
         if not osp.isfile(anno_2d_file) or not osp.isfile(avg_anno_3d_file) or not osp.isfile(collect_anno_3d_file):
@@ -91,6 +97,16 @@ def sfm(cfg):
             seq_dir = osp.join(root_dir, sub_dir)
             img_lists += glob.glob(str(Path(seq_dir)) + '/color/*.png', recursive=True)
 
+        # ------------------ downsample ------------------
+        down_img_lists = []
+        down_ratio = 5
+        for img_file in img_lists:
+            index = int(img_file.split('/')[-1].split('.')[0])
+            if index % down_ratio == 0:
+                down_img_lists.append(img_file)  
+        img_lists = down_img_lists
+        # -------------------------------------------------
+
         if len(img_lists) == 0:
             logger.info(f"No png image in {root_dir}")
             continue
@@ -105,13 +121,13 @@ def sfm(cfg):
 def sfm_core(cfg, img_lists, outputs_dir_root):
     """ Sparse reconstruction: extract features, match features, triangulation"""
     from src.hloc import extract_features, pairs_from_covisibility, match_features, \
-                         generate_empty, triangulation
+                         generate_empty, triangulation, pairs_from_poses
 
     outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
 
     feature_out = osp.join(outputs_dir, f'feats-{cfg.network.detection}.h5')
-    covis = cfg.sfm.covis_num
-    covis_pairs_out = osp.join(outputs_dir, f'pairs-covis{covis}.txt')
+    covis_num = cfg.sfm.covis_num
+    covis_pairs_out = osp.join(outputs_dir, f'pairs-covis{covis_num}.txt')
     matches_out = osp.join(outputs_dir, f'matches-{cfg.network.matching}.h5')
     empty_dir = osp.join(outputs_dir, 'sfm_empty')
     deep_sfm_dir = osp.join(outputs_dir, 'sfm_ws')
@@ -119,12 +135,16 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     if cfg.redo:
         os.system(f'rm -rf {outputs_dir}') 
         Path(outputs_dir).mkdir(exist_ok=True, parents=True)
+        # os.system(f'rm -rf {empty_dir}')
+        # os.system(f'rm -rf {deep_sfm_dir}')
 
         extract_features.main(img_lists, feature_out, cfg)
-        pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
+        # pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
+        pairs_from_poses.covis_from_pose(img_lists, covis_pairs_out, covis_num, max_rotation=cfg.sfm.rotation_thresh)
         match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
         generate_empty.generate_model(img_lists, empty_dir)
         triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, image_dir=None)
+        torch.cuda.synchronize()
     
     
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root):
@@ -133,29 +153,28 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root):
     from src.hloc.postprocess import filter_points, feature_process, filter_tkl
 
     data_dir0 = osp.join(root_dir, sub_dirs[0])
-    bbox_path = osp.join(data_dir0, 'RefinedBox.txt')
-    bbox_path = bbox_path if osp.isfile(bbox_path) else osp.join(data_dir0, 'Box.txt')
+    # bbox_path = osp.join(data_dir0, 'RefinedBox.txt')
+    # bbox_path = bbox_path if osp.isfile(bbox_path) else osp.join(data_dir0, 'Box.txt')
+    bbox_path = osp.join(data_dir0, 'Box.txt')
+    trans_box_path = osp.join(data_dir0, 'Box_trans.txt')
 
     match_type = cfg.match_type
     outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
-    # orig_feature_out = osp.join(outputs_dir, 'feats-svcnn.h5')
     feature_out = osp.join(outputs_dir, f'feats-{cfg.network.detection}.h5')
-    # deep_sfm_dir_orig = osp.join(outputs_dir, 'sfm_svcnn')
     deep_sfm_dir = osp.join(outputs_dir, 'sfm_ws')
-
-    # if osp.isfile(orig_feature_out) and not osp.isfile(feature_out):
-    #     os.system(f'mv {orig_feature_out} {feature_out}')
-    # if osp.isdir(deep_sfm_dir_orig) and not osp.isdir(deep_sfm_dir):
-    #     os.system(f'mv {deep_sfm_dir_orig} {deep_sfm_dir}')
-    
     model_path = osp.join(deep_sfm_dir, 'model')
 
     # select track length to limit the number of 3d points below thres.
-    track_length, points_count_list = filter_tkl.get_tkl(model_path, thres=2000, show=False) 
+    track_length, points_count_list = filter_tkl.get_tkl(model_path, thres=cfg.dataset.max_num_kp3d, show=False) 
     tkl_file_path = filter_tkl.vis_tkl_filtered_pcds(model_path, points_count_list, track_length, outputs_dir) # visualization only
-   
-    xyzs, points_idxs = filter_points.filter_3d(bbox_path, model_path, track_length=track_length) # crop 3d points by 3d box and track length
+
+    xyzs, points_idxs = filter_points.filter_3d(model_path, track_length, bbox_path, box_trans_path=trans_box_path) # crop 3d points by 3d box and track length
     merge_xyzs, merge_idxs = filter_points.merge(xyzs, points_idxs, dist_threshold=1e-3) # merge 3d points by distance between points
+    if cfg.debug:
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(merge_xyzs)
+        out_file = osp.join(outputs_dir, 'box_filter.ply') 
+        o3d.io.write_point_cloud(out_file, pcd)
 
     # FIXME: no param detector and debug
     feature_process.get_kpt_ann(cfg, img_lists, feature_out, outputs_dir, merge_idxs, merge_xyzs)
