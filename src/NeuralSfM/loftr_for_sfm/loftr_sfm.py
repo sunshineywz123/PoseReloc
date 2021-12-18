@@ -61,13 +61,6 @@ class LoFTR_SfM(nn.Module):
         )
 
         # # TODO: remove! not useful
-        # self.fine_preprocess_unfold_none_grid = FinePreprocessUnfoldNoneGrid(
-        #     config["loftr_fine"],
-        #     config["loftr_coarse"]["d_model"],
-        #     cf_res=config["loftr_backbone"]["resolution"],
-        #     feat_ids=config["loftr_backbone"]["resnetfpn"]["output_layers"],
-        #     feat_dims=_get_feat_dims(config["loftr_backbone"]),
-        # ) if config['loftr_sfm']['refinement']['recenter_fine_feature'] else None
         self.loftr_fine = LocalFeatureTransformer(config["loftr_fine"])
         self.fine_matching = FineMatching(
             config["loftr_match_fine"], _full_cfg=upper_config(config)

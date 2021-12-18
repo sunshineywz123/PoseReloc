@@ -16,7 +16,7 @@ from ..utils.geometry_utils import *
 
 
 class Optimizer(nn.Module):
-    def __init__(self, optimization_dataset, configs=None):
+    def __init__(self, optimization_dataset, cfgs):
         """
         Parameters:
         ----------------
@@ -29,26 +29,25 @@ class Optimizer(nn.Module):
         self.colmap_frame_dict = optimization_dataset.colmap_frame_dict
 
         # DataLoading related
-        self.num_workers = 12
-        self.batch_size = 2000
+        self.num_workers = cfgs['num_workers']
+        self.batch_size = cfgs['batch_size']
 
         # self.solver_type = "SecondOrder"
-        self.solver_type = "FirstOrder"
+        self.solver_type = cfgs['solver_type']
         self.residual_mode = (
-            "feature_metric_error"  # ["feature_metric_error", "geometry_error"]
-            # "geometry_error"  # ["feature_metric_error", "geometry_error"]
+            cfgs['residual_mode']
         )
-        # self.residual_mode = "geometry_error" #["feature_metric_error", "geometry_error"]
-        self.distance_loss_scale = 10
+        self.distance_loss_scale = cfgs['distance_loss_scale']
         # self.optimize_lr = {"depth": 1e-4, "pose": 1e-4, "BA": 5e-5}  # Baseline
-        self.optimize_lr = {'depth': 1e-2, 'pose': 1e-2, 'BA': 1e-3} # Only useful for first order: current best solution
-        self.image_i_f_scale = 2
-        self.verbose = False
+        self.optimize_lr = cfgs['optimize_lr']
+        self.optim_procedure = cfgs['optim_procedure']
+
+        self.image_i_f_scale = cfgs['image_i_f_scale']
+        self.verbose = cfgs['verbose']
 
     @torch.enable_grad()
-    def forward(self, optimization_procedures="BA"):
-        """
-        """
+    def forward(self):
+        optimization_procedures = self.optim_procedure
         # Data structure build from matched kpts
         aggregated_dict = {}
 

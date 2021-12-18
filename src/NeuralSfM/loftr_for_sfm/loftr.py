@@ -8,7 +8,7 @@ from src.utils.profiler import PassThroughProfiler
 
 from .backbone import build_backbone, _extract_backbone_feats, _split_backbone_feats, _get_feat_dims
 from .loftr_module import LocalFeatureTransformer, FinePreprocess, build_rejector, build_coarse_prior
-from .utils.position_encoding import PositionEncodingSine
+from .utils.position_encoding_persistent import PositionEncodingSine # for trained model reason
 from .utils.coarse_matching import CoarseMatching
 from .utils.fine_matching import FineMatching
 from .utils.selective_kernel import build_ssk_merge

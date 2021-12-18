@@ -7,7 +7,7 @@ from ray.actor import ActorHandle
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 from loguru import logger
 import ray
-from src.utils.data_utils import load_obj, save_obj
+from src.utils.data_io import load_obj, save_obj
 
 from src.datasets.neuralsfm_coarse_colmap_dataset import CoarseColmapDataset
 from .data_construct import (
@@ -17,17 +17,62 @@ from .data_construct import (
 from .matcher_model import *
 from .optimizer.optimizer import Optimizer
 
+cfgs = {
+    "coarse_colmap_data": {
+        "img_resize": 512,
+        "df": 8,
+        "feature_track_assignment_strategy": "greedy",
+        # "feature_track_assignment_strategy": "balance",
+        "verbose": True,
+    },
+    "fine_match_debug": True,
+    "fine_matcher": {
+        "model": {
+            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
+            "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
+            "seed": 666,
+        },
+        "visualize": False,  # Visualize fine feature map and corresponds
+    },
+    "optimizer": {
+        # Dataloading related:
+        "num_workers": 12,
+        "batch_size": 2000,
+        "solver_type": "FirstOrder",
+        "residual_mode": "feature_metric_error",  # ["feature_metric_error", "geometry_error"]
+        # "residual_mode": "geometry_error",  # ["feature_metric_error", "geometry_error"]
+        "distance_loss_scale": 10,  # only available for featuremetric error mode
+        "optimize_lr": {
+            "depth": 1e-2,
+            "pose": 1e-5,
+            "BA": 1e-5,
+        },  # Only available for first order solver
+        # "optim_procedure": ["depth", 'pose'] * 3 + ['BA'],
+        "optim_procedure": ["depth"] * 3,
+        "image_i_f_scale": 2,  # For Loftr is 2, don't change!
+        "verbose": True,
+    },
+    "visualize": True, # vis3d visualize
+    "evaluation": False,
+}
 
-def post_optimization(args):
+
+def post_optimization(
+    image_lists,
+    covis_pairs_pth,
+    colmap_coarse_dir,
+    refined_model_save_dir,
+    visualize_dir=None,
+    vis3d_pth=None
+):
     # Construct scene data
     colmap_image_dataset = CoarseColmapDataset(
-        args.data_root,
-        args.colmap_results_load_dir,
-        args.raw_match_results_dir,
-        args.results_save_dir,
-        args.img_resize_max,
-        args.n_imgs,
-        subset_name=args.subset_name,
+        cfgs["coarse_colmap_data"],
+        image_lists,
+        covis_pairs_pth,
+        colmap_coarse_dir,
+        refined_model_save_dir,
+        vis_path = vis3d_pth if vis3d_pth is not None else None
     )
     logger.info("Scene data construct finish!")
 
@@ -42,13 +87,20 @@ def post_optimization(args):
     matching_pairs = MatchingPairData(colmap_image_dataset)
 
     # Fine level match
-    save_path = osp.join(args.scene_results_base_dir, "raw_matches/fine_matches.pkl")
-    if not osp.exists(save_path) or args.fine_match_debug:
+    save_path = osp.join(covis_pairs_pth.rsplit("/", 1)[0], "fine_matches.pkl")
+    if not osp.exists(save_path) or cfgs["fine_match_debug"]:
         logger.info(f"Fine matching begin!")
-        detector, matcher = build_model(args)
+        detector, matcher = build_model(
+            cfgs["fine_matcher"]["model"]
+        )  # TODO: add Ray implementation
         subset_ids = range(len(matching_pairs))
         fine_match_results = matchWorker(
-            matching_pairs, subset_ids, detector, matcher, debug=False, args={},
+            matching_pairs,
+            subset_ids,
+            detector,
+            matcher,
+            visualize=cfgs["fine_matcher"]["visualize"],
+            visualize_dir=visualize_dir,
         )
         save_obj(fine_match_results, save_path)
     else:
@@ -61,25 +113,21 @@ def post_optimization(args):
     )
 
     # Post optimization
-    # TODO: move to global configs
-    optimizer = Optimizer(optimization_data)
-    optimization_procedure = ["depth", "pose"] * 3
-    optimization_procedure += ["BA"]
-    # optimization_procedure = ['BA']
-    results_dict = optimizer(optimization_procedure)
+    optimizer = Optimizer(optimization_data, cfgs["optimizer"])
+    results_dict = optimizer()
 
     # Update results
     (
         pose_error_before_refine,
         pose_error_after_refine,
     ) = colmap_image_dataset.update_optimize_results_to_colmap(
-        results_dict, visualize=args.visualize, evaluation=args.evaluation
+        results_dict, visualize=cfgs["visualize"], evaluation=cfgs["evaluation"]
     )
 
     return state, pose_error_before_refine, pose_error_after_refine
 
 
-@ray.remote(num_cpus=1, num_gpus=1, max_calls=1)  # release gpu after finishingI
+@ray.remote(num_cpus=1, num_gpus=1, max_calls=1)  # release gpu after finishing
 def post_optimization_ray_warp(subset_bag, args, pba: ActorHandle):
     error_before_refine = {}
     error_after_refine = {}
@@ -123,7 +171,9 @@ def post_optimization_ray_warp(subset_bag, args, pba: ActorHandle):
         args.results_save_dir = osp.join(*base_dir_part)
 
         logger.info("Post optimization begin!")
-        state, pose_error_before_refine, pose_error_after_refine = post_optimization(args)
+        state, pose_error_before_refine, pose_error_after_refine = post_optimization(
+            args
+        )
 
         if state == False:
             # Fail to construct colmap coarse data scenario

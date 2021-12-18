@@ -1,16 +1,12 @@
 import os
-import random
 import os.path as osp
-from itertools import combinations
 from loguru import logger
 import numpy as np
-import torch
 from tqdm import tqdm
 
 from torch.utils.data import Dataset
 from src.datasets.utils import (
     read_grayscale,
-    load_intrinsics_from_h5,
 )
 from src.NeuralSfM.post_optimization.utils.eval_metric_utils import eval_colmap_results
 from src.NeuralSfM.post_optimization.utils.geometry_utils import get_pose_from_colmap_image
@@ -23,7 +19,6 @@ from src.utils.colmap.read_write_model import (
     rotmat2qvec,
     write_model,
 )
-from src.utils.data_io import load_h5
 from src.NeuralSfM.post_optimization.visualization.vis3d import vis_cameras_point_clouds
 from src.NeuralSfM.post_optimization.utils.geometry_utils import *
 
@@ -33,16 +28,12 @@ class CoarseColmapDataset(Dataset):
 
     def __init__(
         self,
-        scene_dir,
+        args,
+        image_lists,
+        covis_pairs_pth,
         colmap_results_dir,  # before refine results
-        raw_match_results_dir,
         save_dir,
-        img_resize=1024,
-        n_imgs=None,  # only use first n_imgs (debug)
-        subset_name=None,
-        df=8,
-        max_area=None,
-        shuffle=False,
+        vis_path=None,
     ):
         """
         Parameters:
@@ -51,71 +42,29 @@ class CoarseColmapDataset(Dataset):
         subset_path: /path/to/imc/sub_set/image/name/sub_set.txt
         """
         super().__init__()
-        self.img_dir = osp.join(scene_dir, "images")
-        calib_dir = osp.join(scene_dir, "calibration")
-        self.calib_dir = calib_dir if osp.exists(calib_dir) else None
+        self.img_list = image_lists
 
-        self.img_resize = img_resize
-        self.df = df
-        self.max_area = max_area
-        self.subset_name = (
-            osp.splitext(subset_name)[0] if subset_name is not None else None
-        )
         self.colmap_results_dir = colmap_results_dir
         self.colmap_refined_save_dir = save_dir
+        self.vis_path = vis_path
+
+        self.img_resize = args['img_resize'] # 512
+        self.df = args['df'] # 8
+        self.feature_track_assignment_strategy = args['feature_track_assignment_strategy'] #"greedy"
+        self.verbose = args['verbose'] # True
         self.state = True
-        self.feature_track_assignment_strategy = "greedy"
-        # self.colmap_refined_save_dir = colmap_results_dir.replace(
-        #     "loftr_coarse", "loftr_coarse_refined"
-        # )
 
-        # Get subset images
-        all_img_names = sorted(os.listdir(self.img_dir))
-        if subset_name is not None:
-            subset_path = osp.join(scene_dir, "sub_set", subset_name)
-            assert osp.exists(subset_path)
+        # Load pairs: 
+        with open(covis_pairs_pth, 'r') as f:
+            self.pair_list = f.read().rstrip('\n').split('\n')
 
-            with open(subset_path, "r") as f:
-                sub_dirs = f.read().splitlines()
-            img_names = []
-            # No sort!
-            for sub_dir in sub_dirs:
-                img_name = sub_dir.rsplit("/", 1)[1]
-                assert img_name in all_img_names, f"image name {img_name} not exists!"
-                img_names.append(img_name)
-        else:
-            img_names = sorted(os.listdir(self.img_dir))[:n_imgs]
+        self.frame_ids = list(range(len(self.img_list)))
 
-        self.img_names = sorted(img_names, reverse=True)  # sorted
-        self.img_paths = [
-            osp.join(self.img_dir, img_name) for img_name in self.img_names
-        ]
-
-        self.f_names = [osp.splitext(n)[0] for n in self.img_names]
-
-        self.calib_paths = (
-            [
-                osp.join(self.calib_dir, "calibration_" + f_name + ".h5")
-                for f_name in self.f_names
-            ]
-            if self.calib_dir is not None
-            else None
-        )
-
-        self.pair_ids = list(combinations(range(len(self.f_names)), 2))
-        self.frame_ids = list(range(len(self.f_names)))
-        if shuffle:
-            random.shuffle(self.pair_ids)
-
-        # Load colmap and coarse match results.
+        # Load colmap coarse results:
         is_colmap_valid = osp.exists(osp.join(colmap_results_dir))
-        is_raw_match_valid = osp.exists(raw_match_results_dir)
         assert (
             is_colmap_valid
         ), f"COLMAP is not valid, current COLMAP path: {osp.join(colmap_results_dir)}"
-        assert (
-            is_raw_match_valid
-        ), f"raw match is not valid!, current raw match path: {raw_match_results_dir}"
 
         self.colmap_images = read_images_binary(
             osp.join(colmap_results_dir, "images.bin")
@@ -142,12 +91,11 @@ class CoarseColmapDataset(Dataset):
         self.colmap_cameras = read_cameras_binary(
             osp.join(colmap_results_dir, "cameras.bin")
         )
-        self.coarse_matches = load_h5(raw_match_results_dir)
 
         (
             self.frameId2colmapID_dict,
             self.colmapID2frameID_dict,
-        ) = self.get_frameID2colmapID(self.frame_ids, self.f_names, self.colmap_images)
+        ) = self.get_frameID2colmapID(self.frame_ids, self.img_list, self.colmap_images)
 
         # Verification:
         if (
@@ -161,13 +109,13 @@ class CoarseColmapDataset(Dataset):
         logger.info("Building keyframes begin....")
         if self.feature_track_assignment_strategy == "greedy":
             self.keyframe_dict, self.point_cloud_assigned_imgID_kptID = self.get_keyframes_greedy(
-                self.colmap_images, self.colmap_3ds
+                self.colmap_images, self.colmap_3ds, verbose=self.verbose
             )
         elif self.feature_track_assignment_strategy == "balance":
             (
                 self.keyframe_dict,
                 self.point_cloud_assigned_imgID_kptID,
-            ) = self.get_keyframes_balance(self.colmap_images, self.colmap_3ds)
+            ) = self.get_keyframes_balance(self.colmap_images, self.colmap_3ds, verbose=self.verbose)
         else:
             raise NotImplementedError
 
@@ -222,21 +170,8 @@ class CoarseColmapDataset(Dataset):
         """
         for colmap_frameID, colmap_image in self.colmap_images.items():
             initial_pose = get_pose_from_colmap_image(colmap_image)
-            # TODO: convert camera class to intrinsic matrix
             intrinisic = get_intrinsic_from_colmap_camera(
                 self.colmap_cameras[colmap_image.camera_id]
-            )
-            intrinsic_gt = (
-                load_intrinsics_from_h5(
-                    osp.join(
-                        self.calib_dir,
-                        "calibration_"
-                        + self.f_names[self.colmapID2frameID_dict[colmap_frameID]]
-                        + ".h5",
-                    )
-                )
-                if self.calib_dir is not None
-                else None
             )
             keypoints = self.colmap_images[colmap_frameID].xys  # N_all*2
 
@@ -244,7 +179,6 @@ class CoarseColmapDataset(Dataset):
                 is_keyframe = True
                 all_kpt_status = self.keyframe_dict[colmap_frameID]["state"]  # N_all
 
-                # TODO: add initial depth
                 occupied_mask = all_kpt_status >= 0
                 point_cloud_idxs = all_kpt_status[
                     occupied_mask
@@ -290,7 +224,7 @@ class CoarseColmapDataset(Dataset):
         for frame_ID in frame_IDs:
             frame_name = frame_names[frame_ID]
             for colmap_image in colmap_images.values():
-                if frame_name == osp.splitext(colmap_image.name)[0]:
+                if frame_name == colmap_image.name:
                     # Registrated scenario
                     frameID2colmapID_dict[frame_ID] = colmap_image.id
                     colmapID2frameID_dict[colmap_image.id] = frame_ID
@@ -575,7 +509,8 @@ class CoarseColmapDataset(Dataset):
             ext=".txt",
         )
 
-        if evaluation and self.calib_paths is not None:
+        if evaluation:
+            raise NotImplementedError
             pose_err_before_refine, aucs_before_refine = eval_colmap_results(
                 self,
                 self.colmap_results_dir.rsplit("/", 1)[0],
@@ -602,7 +537,7 @@ class CoarseColmapDataset(Dataset):
             name_label = None
 
         # visualize
-        if visualize:
+        if visualize and self.vis_path is not None:
             T_all = np.stack(T_all)  # N*4*4
             point_cloud = np.stack(point_cloud)  # N*3
             point_cloud_color = np.stack(point_cloud_color)  # N*3
@@ -611,20 +546,8 @@ class CoarseColmapDataset(Dataset):
             old_point_cloud_color = np.stack(old_point_cloud_color)  # N*3
             old_pose = np.stack(old_pose)  # N*4*4
 
-            # FIXME: file name is not a good implementation
-            colmap_vis3d_dump_dir, name = self.colmap_results_dir.replace(
-                "NeuralSfM_results",
-                "NeuralSfM_vis3d_results"
-                # "NeuralSfM_mmw",
-                # "NeuralSfM_mmw_vis3d",
-            ).rsplit("loftr_coarse", 1)
-            name = name.rsplit("/", 2)[0].replace("/", "_")
+            colmap_vis3d_dump_dir, name = self.vis_path.rsplit('/', 1)
 
-            colmap_vis3d_dump_dir = (
-                osp.join(colmap_vis3d_dump_dir, name_label)
-                if name_label is not None
-                else colmap_vis3d_dump_dir
-            )
             vis_cameras_point_clouds(
                 T_all,
                 point_cloud,
@@ -667,32 +590,15 @@ class CoarseColmapDataset(Dataset):
         return colmap_images_state
 
     def __len__(self):
-        return len(self.frame_ids)
+        return len(self.img_list)
 
     def __getitem__(self, idx):
-        # if isinstance(idx, int):
-        #     return self._get_single_item(idx)
-        # elif isinstance(idx, slice):
-        #     return IMCValColmapDataset._get_sliced_instance(self, idx)
-        # else:
-        #     raise TypeError(f"{type(self).__name__} indices must be integers")
         return self._get_single_item(idx)
 
-    @classmethod
-    def _get_sliced_instance(cls, other, _slice):
-        obj = cls.__new__(cls)
-        super(IMCValColmapDataset, obj).__init__()
-        # TODO: It's better to update f_names, img_scales and pair_ids
-        obj.f_names = other.f_names
-        obj.img_scales = other.img_scales
-        obj.pair_ids = other.pair_ids[_slice]
-        return obj
-
     def _get_single_item(self, idx):
-        img_name = self.img_names[idx]
-        f_name = self.f_names[idx]
+        img_name = self.img_list[idx]
         img_scale = read_grayscale(
-            osp.join(self.img_dir, img_name),
+            img_name,
             (self.img_resize,),
             df=self.df,
             ret_scales=True,
@@ -701,17 +607,10 @@ class CoarseColmapDataset(Dataset):
         data = {
             "image": img,  # 1*1*H*W because no dataloader operation, if batch: 1*H*W
             "scale": scale,  # 1*2
-            "f_name": f_name,
+            "f_name": img_name,
             "img_name": img_name,
             "frameID": idx,
-            "img_path": [osp.join(self.img_dir, img_name)],
+            "img_path": [img_name],
         }
-
-        if self.calib_dir is not None:
-            intrinsic = load_intrinsics_from_h5(
-                osp.join(self.calib_dir, "calibration_" + f_name + ".h5")
-            )
-            intrinsic = torch.tensor(intrinsic, dtype=torch.float32).reshape(1, 3, 3)
-            data.update({"K": intrinsic})  # 1*3*3, if dataloader operation 3*3
         return data
 

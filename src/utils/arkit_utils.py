@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, '/home/wangzihao/code/sort_PoseReloc')
+# sys.path.insert(0, '/home/wangzihao/code/sort_PoseReloc')
 
 import os
 import cv2

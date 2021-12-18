@@ -235,5 +235,6 @@ outputs/
 temp/
 src/third_party/sensemap
 visual/
-.hydra/
+.hydra
 *.yaml
+weight

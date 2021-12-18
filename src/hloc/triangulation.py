@@ -94,7 +94,7 @@ def in_box(keypoints, box):
     return in_box_valid == 1
 
 
-def import_matches(image_ids, database_path, pairs_path, matches_path, feature_path,
+def import_matches(image_ids, database_path, pairs_path, matches_path, feature_path, match_model, \
                    min_match_score=None, skip_geometric_verification=False):
     """ Import matches info into COLMAP database. """
     logging.info("Importing matches into the database...")
@@ -120,8 +120,13 @@ def import_matches(image_ids, database_path, pairs_path, matches_path, feature_p
                 f'Reverse in file: {names_to_pair(name0, name1) in match_file}.'
             )
         
-        matches = match_file[pair]['matches0'].__array__()
-        valid = matches > -1
+        if match_model != 'loftr':
+            matches = match_file[pair]['matches0'].__array__()
+            valid = matches > -1
+        else:
+            matches = match_file[pair]['matches'].__array__()
+            valid = np.ones((matches.shape[0],), dtype=np.bool) # all True
+
         if min_match_score:
             scores = match_file[pair]['matching_scores0'].__array__()
             valid = valid & (scores > min_match_score)
@@ -144,7 +149,10 @@ def import_matches(image_ids, database_path, pairs_path, matches_path, feature_p
                 valid = valid & in_box(keypoints0, reproj_box0)
             
             
-        matches = np.stack([np.where(valid)[0], matches[valid]], -1)
+        if match_model != 'loftr':
+            matches = np.stack([np.where(valid)[0], matches[valid]], -1)
+        else:
+            matches = matches[valid]
 
         db.add_matches(id0, id1, matches)
         matched |= {(id0, id1), (id1, id0)}
@@ -198,7 +206,7 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_m
     return stats
 
 
-def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, \
+def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_model, \
          colmap_path='colmap', skip_geometric_verification=False, min_match_score=None, image_dir=None):
     """ 
         Import keypoints, matches.
@@ -216,8 +224,8 @@ def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, \
 
     image_ids = create_db_from_model(Path(empty_sfm_model), Path(database))
     import_features(image_ids, database, features)
-    import_matches(image_ids, database, pairs, matches, features,
-                   min_match_score, skip_geometric_verification)
+    import_matches(image_ids, database, pairs, matches, features, match_model,
+                min_match_score, skip_geometric_verification)
     
     if not skip_geometric_verification:
         geometric_verification(colmap_path, database, pairs)

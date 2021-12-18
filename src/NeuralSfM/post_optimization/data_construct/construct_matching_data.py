@@ -97,7 +97,7 @@ class MatchingPairData(Dataset):
                 "mkpts0_idx": torch.from_numpy(left_kpts_idx),
                 "frame0_colmap_id": left_img_id,
                 "frame1_colmap_id": right_img_id,
-                "image_base_dir": self.colmap_image_dataset.img_dir
+                # "image_base_dir": self.colmap_image_dataset.img_dir
             }
         )
 

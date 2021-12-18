@@ -61,11 +61,13 @@ class ConstructOptimizationData(Dataset):
             None
         ]  # 1*3*3 intrinsics from colmap
         intrinsic1 = []  # N*3*3
-        T_f0_w = convert_pose2T(
-            self.colmap_frame_dict[assigned_colmap_frameID]["initial_pose"]
-        )
-        T_w_f0 = np.linalg.inv(T_f0_w)
-        angle_axis_relative = []  # N*6
+
+        # T_f0_w = convert_pose2T(
+        #     self.colmap_frame_dict[assigned_colmap_frameID]["initial_pose"]
+        # )
+        # T_w_f0 = np.linalg.inv(T_f0_w)
+        # angle_axis_relative = []  # N*6
+
         left_colmap_ids = []  # N
         right_colmap_ids = []  # N
         mkpts0_c = []  # N*2

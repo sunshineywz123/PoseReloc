@@ -55,11 +55,16 @@ data_base_dir: /nas/users/hexingyi/onepose_data
 output_base_dir: /nas/users/hexingyi/onepose_sfm
 match_type: softmax
 redo: true
+overwrite_all: true
+overwrite_coarse: false
+overwrite_fine: true
+use_local_ray: true
+debug: true
 dataset:
-  max_num_kp3d: 2000
-  max_num_kp2d: 1000
+  max_num_kp3d: 20000
+  max_num_kp2d: 10000
   data_dir:
-  - ${data_base_dir}/0548-duck-others duck-1 duck-2
+  - ${data_base_dir}/0548-duck-others duck-1
   outputs_dir: ${output_base_dir}
 network:
   detection: loftr

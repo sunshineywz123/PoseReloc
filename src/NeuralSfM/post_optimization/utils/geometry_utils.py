@@ -42,10 +42,20 @@ def get_pose_from_colmap_image(image):
 
 def get_intrinsic_from_colmap_camera(camera):
     model = camera.model
-    focal = camera.params[0]
-    x0 = camera.params[1]
-    y0 = camera.params[2]
-    intrinsic = np.array([[focal, 0, x0], [0, focal, y0], [0, 0, 1]])
+    if model == 'SIMPLE_RADIAL':
+        focal = camera.params[0]
+        x0 = camera.params[1]
+        y0 = camera.params[2]
+        intrinsic = np.array([[focal, 0, x0], [0, focal, y0], [0, 0, 1]])
+    elif model == 'PINHOLE':
+        focal0 = camera.params[0]
+        focal1 = camera.params[1]
+        x0 = camera.params[2]
+        y0 = camera.params[3]
+        intrinsic = np.array([[focal0, 0, x0], [0, focal1, y0], [0, 0, 1]])
+    else:
+        raise NotImplementedError
+
     return intrinsic
 
 

@@ -8,7 +8,7 @@ import matplotlib.cm as cm
 import cv2
 from einops import repeat
 from kornia.utils.grid import create_meshgrid
-from src.utils.utils import plot_image_pair, plot_keypoints, plot_matches
+from src.utils.plot_utils import plot_image_pair, plot_matches
 
 jet = cm.get_cmap("jet")  # "Reds"
 jet_colors = jet(np.arange(256))[:, :3]  # color list: normalized to [0,1]
@@ -27,8 +27,8 @@ def blend_img_heatmap(img, heatmap, alpha=0.5):  # (H, W, *)  # (H, W, 3)
 
 def draw_matches(data_dict, match_dict, save_path=None):
     # Load images
-    image_path0 = osp.join(data_dict['image_base_dir'], data_dict["img_name0"])
-    image_path1 = osp.join(data_dict['image_base_dir'], data_dict["img_name1"])
+    image_path0 = data_dict["img_name0"]
+    image_path1 = data_dict["img_name1"]
     image0 = np.asarray(Image.open(image_path0))
     image1 = np.asarray(Image.open(image_path1))
 
@@ -47,7 +47,7 @@ def draw_local_heatmaps(data_dict, distance_map, center_location, save_path=None
     """
     distance_map: N*ww*1
     """
-    image_path1 = osp.join(data_dict['image_base_dir'], data_dict["img_name1"])
+    image_path1 = data_dict["img_name1"]
     image1 = np.asarray(Image.open(image_path1))
     h, w = image1.shape[:2]
 
@@ -71,6 +71,7 @@ def draw_local_heatmaps(data_dict, distance_map, center_location, save_path=None
     if save_path is not None:
         os.makedirs(save_path.rsplit('/', 1)[0], exist_ok=True)
         Image.fromarray(img_blend_with_heatmap).save(save_path)
+
 
 def visualize_colmap_3D(images, cameras, point3Ds, image_path, save_path):
     assert osp.exists(image_path)

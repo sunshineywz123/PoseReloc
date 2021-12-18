@@ -17,8 +17,8 @@ from ..visualization.draw_plots import draw_matches, draw_local_heatmaps
 
 def build_model(args):
     cfg = get_cfg_defaults()
-    cfg.merge_from_file(args.cfg_path)
-    pl.seed_everything(args.seed)
+    cfg.merge_from_file(args['cfg_path'])
+    pl.seed_everything(args['seed'])
 
     detector = build_extractor(lower_config(cfg.LOFTR_MATCH_FINE))
     detector = (
@@ -44,9 +44,8 @@ def build_model(args):
         "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
     }
     matcher = LoFTR_SfM(config=match_cfg).eval()
-    # pose_depth_refiner = PoseDepthRefinement(lower_config(cfg.LOFTR_SFM))
     # load checkpoints
-    state_dict = torch.load(args.weight_path, map_location="cpu")["state_dict"]
+    state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
     for k in list(state_dict.keys()):
         state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
     try:
@@ -93,7 +92,6 @@ def extract_results(
     refiner=None,
     refine_args={},
     extract_preds_args={},
-    inlier_only=True,
 ):
     # 1. inference
     detector(data)
@@ -109,10 +107,8 @@ def extract_results(
 
 
 # Used for two view match and pose & depth refinement
-# num_cpus=args.n_cpus_per_worker, num_gpus = args.n_gpus_per_worker
-# @ray.remote(num_cpus=1, num_gpus=1, max_calls=1)  # release gpu after finishing
 @torch.no_grad()
-def matchWorker(dataset, subset_ids, detector, matcher, args, debug=False, pba: ActorHandle = None):
+def matchWorker(dataset, subset_ids, detector, matcher, visualize=False, visualize_dir=None, pba: ActorHandle = None):
     """extract matches from part of the possible image pair permutations"""
     # detector, matcher = build_model(args)
     detector.cuda()
@@ -131,8 +127,7 @@ def matchWorker(dataset, subset_ids, detector, matcher, args, debug=False, pba: 
         )
 
         # 3. extract results
-        # matches['-'.join([frameID0, FrameID1])] = np.concatenate([mkpts0, mkpts1, mconfs[:, None], detector_kpts_mask[:,None], multiscale_mask[:,None]], -1)  # (N, 7)
-        pair_name = "-".join([str(frameID0), str(frameID1)])
+        pair_name = '-'.join([str(frameID0), str(frameID1)])
         results_dict[pair_name] = { # colmap frame id
             "mkpts0_c": mkpts0_c, # N*2
             "mkpts1_c": mkpts1_c,
@@ -146,9 +141,10 @@ def matchWorker(dataset, subset_ids, detector, matcher, args, debug=False, pba: 
         if pba is not None:
             pba.update.remote(1)
 
-        if debug:
+        if visualize:
             # Output match and distance patch
-            draw_matches(data, results_dict[pair_name], save_path=osp.join("./test_match_pair", pair_name+'.png'))
-            draw_local_heatmaps(data, distance_map, mkpts1_c, save_path=osp.join("./test_local_heatmaps", pair_name+'.png'))
+            assert visualize_dir is not None
+            draw_matches(data, results_dict[pair_name], save_path=osp.join(visualize_dir,"test_match_pair", pair_name+'.png'))
+            draw_local_heatmaps(data, distance_map, mkpts1_c, save_path=osp.join(visualize_dir, "test_local_heatmaps", pair_name+'.png'))
 
     return results_dict
