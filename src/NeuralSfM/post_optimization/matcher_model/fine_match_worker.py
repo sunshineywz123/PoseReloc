@@ -1,6 +1,7 @@
 import torch
 import pytorch_lightning as pl
 import numpy as np
+import ray
 from ray.actor import ActorHandle
 from tqdm import tqdm
 import os.path as osp
@@ -114,8 +115,10 @@ def matchWorker(dataset, subset_ids, detector, matcher, visualize=False, visuali
     detector.cuda()
     matcher.cuda()
     results_dict = {}
+
+    subset_ids = tqdm(subset_ids) if pba is None else subset_ids
     # match all permutations
-    for subset_id in tqdm(subset_ids):
+    for subset_id in subset_ids:
         data = dataset[subset_id]
         frameID0, frameID1 = data["frame0_colmap_id"], data["frame1_colmap_id"]
         data_c = {
@@ -143,8 +146,12 @@ def matchWorker(dataset, subset_ids, detector, matcher, visualize=False, visuali
 
         if visualize:
             # Output match and distance patch
-            assert visualize_dir is not None
+            assert visualize_dir is not None, f'Please provide visualize saving directory!'
             draw_matches(data, results_dict[pair_name], save_path=osp.join(visualize_dir,"test_match_pair", pair_name+'.png'))
             draw_local_heatmaps(data, distance_map, mkpts1_c, save_path=osp.join(visualize_dir, "test_local_heatmaps", pair_name+'.png'))
 
     return results_dict
+
+@ray.remote(num_cpus=1, num_gpus=0.25, max_calls=1)  # release gpu after finishing
+def matchWorker_ray_wrapper(dataset, subset_ids, detector, matcher, visualize=False, visualize_dir=None, pba: ActorHandle = None):
+    return matchWorker(dataset, subset_ids, detector, matcher, visualize, visualize_dir, pba)

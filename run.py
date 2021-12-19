@@ -124,7 +124,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
     """ Sparse reconstruction: extract features, match features, triangulation"""
     from src.hloc import extract_features, pairs_from_covisibility, match_features, \
                          generate_empty, triangulation, pairs_from_poses
-    from src.NeuralSfM import coarse_matcher, post_optimization
+    from src.NeuralSfM import coarse_match, post_optimization
     outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
     vis3d_pth = osp.join(outputs_dir_root, 'vis3d', 'outputs_' + cfg.match_type + '_' + cfg.network.detection + '_' + cfg.network.matching)
 
@@ -160,24 +160,23 @@ def sfm_core(cfg, img_lists, outputs_dir_root):
                 os.system(f'rm -rf {deep_sfm_dir}')
 
                 pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis_num, gap=cfg.sfm.gap)
-                if cfg.use_local_ray:
-                    coarse_matcher.loftr_coarse_matching_ray(img_lists, covis_pairs_out, feature_out, matches_out)
-                else:
-                    coarse_matcher.loftr_coarse_matching(img_lists, covis_pairs_out, feature_out, matches_out)
+                coarse_match.loftr_coarse_matching(img_lists, covis_pairs_out, feature_out, matches_out, use_ray=cfg.use_local_ray)
                 generate_empty.generate_model(img_lists, empty_dir)
                 triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out, matches_out, match_model=cfg.network.matching, image_dir=None)
 
-                assert osp.exists(osp.join(deep_sfm_dir, 'model'))
-                os.system(f"mv {osp.join(deep_sfm_dir, 'model')} {osp.join(deep_sfm_dir, 'model_coarse')}")
+                if cfg.enable_loftr_post_refine:
+                    assert osp.exists(osp.join(deep_sfm_dir, 'model'))
+                    os.system(f"mv {osp.join(deep_sfm_dir, 'model')} {osp.join(deep_sfm_dir, 'model_coarse')}")
+                    
+            if cfg.enable_loftr_post_refine:
+                if not osp.exists(osp.join(deep_sfm_dir, 'model')) or cfg.overwrite_fine:
+                    assert osp.exists(osp.join(deep_sfm_dir, 'model_coarse')), f'model_coarse not exist under: {deep_sfm_dir}, please set \'cfg.overwrite_coarse = True\''
+                    os.system(f"rm -rf {osp.join(deep_sfm_dir, 'model')}")
 
-            if not osp.exists(osp.join(deep_sfm_dir, 'model')) or cfg.overwrite_fine:
-                assert osp.exists(osp.join(deep_sfm_dir, 'model_coarse')), f'model_coarse not exist under: {deep_sfm_dir}, please set \'cfg.overwrite_coarse = True\''
-                os.system(f"rm -rf {osp.join(deep_sfm_dir, 'model')}")
-
-                logger.info('LoFTR mapping post refinement begin...')
-                state, _, _ = post_optimization.post_optimization(img_lists, covis_pairs_out, colmap_coarse_dir=osp.join(deep_sfm_dir, 'model_coarse'), refined_model_save_dir= osp.join(deep_sfm_dir, 'model'), visualize_dir=visualize_dir, vis3d_pth=vis3d_pth)
-                if state == False:
-                    logger.error('colmap coarse is empty!')
+                    logger.info('LoFTR mapping post refinement begin...')
+                    state, _, _ = post_optimization.post_optimization(img_lists, covis_pairs_out, colmap_coarse_dir=osp.join(deep_sfm_dir, 'model_coarse'), refined_model_save_dir= osp.join(deep_sfm_dir, 'model'), fine_match_use_ray=cfg.use_local_ray, visualize_dir=visualize_dir, vis3d_pth=vis3d_pth)
+                    if state == False:
+                        logger.error('colmap coarse is empty!')
     
     
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root):

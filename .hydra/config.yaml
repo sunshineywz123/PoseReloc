@@ -55,6 +55,7 @@ data_base_dir: /nas/users/hexingyi/onepose_data
 output_base_dir: /nas/users/hexingyi/onepose_sfm
 match_type: softmax
 redo: true
+enable_loftr_post_refine: true
 overwrite_all: true
 overwrite_coarse: false
 overwrite_fine: true

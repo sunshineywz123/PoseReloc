@@ -33,6 +33,13 @@ cfgs = {
             "seed": 666,
         },
         "visualize": False,  # Visualize fine feature map and corresponds
+        "ray": {
+            "slurm": False,
+            "n_workers": 4,
+            "n_cpus_per_worker": 1,
+            "n_gpus_per_worker": 0.25,
+            "local_mode": False,
+        },
     },
     "optimizer": {
         # Dataloading related:
@@ -52,7 +59,7 @@ cfgs = {
         "image_i_f_scale": 2,  # For Loftr is 2, don't change!
         "verbose": True,
     },
-    "visualize": True, # vis3d visualize
+    "visualize": True,  # vis3d visualize
     "evaluation": False,
 }
 
@@ -62,8 +69,9 @@ def post_optimization(
     covis_pairs_pth,
     colmap_coarse_dir,
     refined_model_save_dir,
+    fine_match_use_ray=False,  # Use ray for fine match
     visualize_dir=None,
-    vis3d_pth=None
+    vis3d_pth=None,
 ):
     # Construct scene data
     colmap_image_dataset = CoarseColmapDataset(
@@ -72,7 +80,7 @@ def post_optimization(
         covis_pairs_pth,
         colmap_coarse_dir,
         refined_model_save_dir,
-        vis_path = vis3d_pth if vis3d_pth is not None else None
+        vis_path=vis3d_pth if vis3d_pth is not None else None,
     )
     logger.info("Scene data construct finish!")
 
@@ -84,23 +92,17 @@ def post_optimization(
         return state, None, None
 
     # Construct matching data
-    matching_pairs = MatchingPairData(colmap_image_dataset)
+    matching_pairs_dataset = MatchingPairData(colmap_image_dataset)
 
     # Fine level match
     save_path = osp.join(covis_pairs_pth.rsplit("/", 1)[0], "fine_matches.pkl")
     if not osp.exists(save_path) or cfgs["fine_match_debug"]:
         logger.info(f"Fine matching begin!")
-        detector, matcher = build_model(
-            cfgs["fine_matcher"]["model"]
-        )  # TODO: add Ray implementation
-        subset_ids = range(len(matching_pairs))
-        fine_match_results = matchWorker(
-            matching_pairs,
-            subset_ids,
-            detector,
-            matcher,
-            visualize=cfgs["fine_matcher"]["visualize"],
-            visualize_dir=visualize_dir,
+        fine_match_results = fine_matcher(
+            cfgs["fine_matcher"],
+            matching_pairs_dataset,
+            visualize_dir,
+            use_ray=fine_match_use_ray,
         )
         save_obj(fine_match_results, save_path)
     else:

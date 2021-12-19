@@ -1,2 +1,2 @@
-from .matcher_model import build_model, matchWorker
+from .fine_match import fine_matcher
 from .utils import *
