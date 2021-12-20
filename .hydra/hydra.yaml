@@ -111,9 +111,10 @@ hydra:
     task:
     - +preprocess=sfm_loftr_coarse_fine
     - use_local_ray=True
+    - use_global_ray=True
   job:
     name: run
-    override_dirname: +preprocess=sfm_loftr_coarse_fine,use_local_ray=True
+    override_dirname: +preprocess=sfm_loftr_coarse_fine,use_global_ray=True,use_local_ray=True
     id: ???
     num: ???
     config_name: config.yaml

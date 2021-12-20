@@ -7,6 +7,7 @@ from loguru import logger
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 import time
+import ray
 
 from submodules.DeepLM import Solve as SecondOrderSolve
 from .first_order_solver import FirstOrderSolve
@@ -46,7 +47,7 @@ class Optimizer(nn.Module):
         self.verbose = cfgs['verbose']
 
     @torch.enable_grad()
-    def forward(self):
+    def start_optimize(self):
         optimization_procedures = self.optim_procedure
         # Data structure build from matched kpts
         aggregated_dict = {}
@@ -312,3 +313,8 @@ class Optimizer(nn.Module):
             "depth": aggregated_dict["depth"].cpu().numpy(),  # [n_point_clouds]
             "point_cloud_ids": point_cloud_ids.cpu().numpy(),  # [n_point_clouds]
         }
+
+
+    @ray.remote(num_cpus=4, num_gpus=1, max_calls=1)  # release gpu after finishing
+    def start_optimize_ray_wrapper(self):
+        return self.start_optimize()

@@ -25,7 +25,7 @@ cfgs = {
         # "feature_track_assignment_strategy": "balance",
         "verbose": True,
     },
-    "fine_match_debug": True,
+    "fine_match_debug": False,
     "fine_matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
@@ -57,7 +57,7 @@ cfgs = {
         # "optim_procedure": ["depth", 'pose'] * 3 + ['BA'],
         "optim_procedure": ["depth"] * 3,
         "image_i_f_scale": 2,  # For Loftr is 2, don't change!
-        "verbose": True,
+        "verbose": False,
     },
     "visualize": True,  # vis3d visualize
     "evaluation": False,
@@ -69,6 +69,7 @@ def post_optimization(
     covis_pairs_pth,
     colmap_coarse_dir,
     refined_model_save_dir,
+    use_global_ray=False,
     fine_match_use_ray=False,  # Use ray for fine match
     visualize_dir=None,
     vis3d_pth=None,
@@ -116,7 +117,12 @@ def post_optimization(
 
     # Post optimization
     optimizer = Optimizer(optimization_data, cfgs["optimizer"])
-    results_dict = optimizer()
+    if use_global_ray:
+        # Need to ask for gpus
+        optimize_results = optimizer.start_optimize_ray_wrapper.remote(optimizer)
+        results_dict = ray.get(optimize_results)
+    else:
+        results_dict = optimizer.start_optimize()
 
     # Update results
     (

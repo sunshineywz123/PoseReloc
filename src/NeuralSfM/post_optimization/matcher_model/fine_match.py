@@ -28,7 +28,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
             ray.init(
                 num_cpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_cpus_per_worker"]),
                 num_gpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_gpus_per_worker"]),
-                local_mode=cfg_ray["local_mode"],
+                local_mode=cfg_ray["local_mode"], ignore_reinit_error=True
             )
 
         pb = ProgressBar(len(matching_pairs_dataset), "Matching image pairs...")

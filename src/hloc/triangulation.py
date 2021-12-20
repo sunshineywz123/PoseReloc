@@ -5,6 +5,7 @@ import tqdm
 import subprocess
 import os.path as osp
 import numpy as np
+import ray
 
 from pathlib import Path
 from src.utils.colmap.read_write_model import CAMERA_MODEL_NAMES, Image, read_cameras_binary, read_images_binary
@@ -234,3 +235,7 @@ def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_
         image_dir = '/'
     stats = run_triangulation(colmap_path, model, database, image_dir, empty_sfm_model)
     os.system(f'colmap model_converter --input_path {model} --output_path {outputs_dir}/model.ply --output_type PLY')
+
+@ray.remote(num_cpus=4, num_gpus=1, max_calls=1)  # release gpu after finishing
+def main_ray_wrapper(*args, **kwargs):
+    return main(*args, **kwargs)

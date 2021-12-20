@@ -56,16 +56,24 @@ output_base_dir: /nas/users/hexingyi/onepose_sfm
 match_type: softmax
 redo: true
 enable_loftr_post_refine: true
-overwrite_all: true
+overwrite_all: false
 overwrite_coarse: false
 overwrite_fine: true
+use_global_ray: true
 use_local_ray: true
 debug: true
+ray:
+  slurm: false
+  n_workers: 2
+  n_cpus_per_worker: 4
+  n_gpus_per_worker: 1
+  local_mode: false
 dataset:
   max_num_kp3d: 20000
   max_num_kp2d: 10000
   data_dir:
   - ${data_base_dir}/0548-duck-others duck-1
+  - ${data_base_dir}/0477-cutlet-bottle cutlet-1
   outputs_dir: ${output_base_dir}
 network:
   detection: loftr

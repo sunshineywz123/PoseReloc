@@ -30,7 +30,7 @@ cfgs = {
             "conf_thr": 0.99999,
         },
     },
-    "use_cache": False,
+    "use_cache": True,
     "ray": {
         "slurm": False,
         "n_workers": 4,
@@ -62,7 +62,7 @@ def loftr_coarse_matching(
             ray.init(
                 num_cpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_cpus_per_worker"]),
                 num_gpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_gpus_per_worker"]),
-                local_mode=cfg_ray["local_mode"],
+                local_mode=cfg_ray["local_mode"], ignore_reinit_error=True
             )
 
         # Matcher runner
