@@ -66,25 +66,25 @@ def id_mapping(points_idxs):
     return kp3d_id_mapping
 
 
-def gather_3d_anno(keypoints_2d, descriptors_2d, scores_2d, kp3d_idxs,
+def gather_3d_anno(keypoints_2d, descriptors_2d, scores_2d, kp3d_ids,
                    feature_idxs, kp3d_id_feature, kp3d_id_score):
     """ For each 3d point, gather all corresponding 2d information """
-    kp3d_idx_to_kp2d_idx = {}
-    for kp3d_idx, feature_idx in zip(kp3d_idxs, feature_idxs):
-        kp3d_idx_to_kp2d_idx[kp3d_idx] = feature_idx
+    kp3d_id_to_kp2d_idx = {}
+    for kp3d_id, feature_idx in zip(kp3d_ids, feature_idxs):
+        kp3d_id_to_kp2d_idx[kp3d_id] = feature_idx
         
-        if kp3d_idx not in kp3d_id_feature:
-            kp3d_id_feature[kp3d_idx] = descriptors_2d[:, feature_idx][None]
-            kp3d_id_score[kp3d_idx] = scores_2d[feature_idx][None]
+        if kp3d_id not in kp3d_id_feature:
+            kp3d_id_feature[kp3d_id] = descriptors_2d[:, feature_idx][None]
+            kp3d_id_score[kp3d_id] = scores_2d[feature_idx][None]
         else:
-            kp3d_id_feature[kp3d_idx] = np.append(kp3d_id_feature[kp3d_idx],
+            kp3d_id_feature[kp3d_id] = np.append(kp3d_id_feature[kp3d_id],
                                                   descriptors_2d[:, feature_idx][None],
                                                   axis=0)
-            kp3d_id_score[kp3d_idx] = np.append(kp3d_id_score[kp3d_idx],
+            kp3d_id_score[kp3d_id] = np.append(kp3d_id_score[kp3d_id],
                                                 scores_2d[feature_idx][None],
                                                 axis=0)
 
-    return kp3d_id_feature, kp3d_id_score, kp3d_idx_to_kp2d_idx
+    return kp3d_id_feature, kp3d_id_score, kp3d_id_to_kp2d_idx
 
 
 def read_features(feature):
@@ -114,21 +114,21 @@ def count_features(img_lists, features, images, kp3d_id_mapping):
         point3D_ids = image_info.point3D_ids
 
         filter_feature_idxs = [] # record valid 2d point idxs. Each of these 2d points have a correspondence with a 3d point.
-        filter_kp3d_idxs = [] # record valid 3d point idxs. Each of these 3d points have a correspondence with a 2d point in this image.
+        filter_kp3d_ids = [] # record valid 3d point idxs. Each of these 3d points have a correspondence with a 2d point in this image.
         feature_idxs = np.where(point3D_ids != -1)[0] if np.any(point3D_ids != -1) else None
         if feature_idxs is None:
             kp3d_idx_to_img_kp2d_idx[img_name] = {}
         else:
             for feature_idx in feature_idxs:
-                kp3d_idx = point3D_ids[feature_idx]
-                if kp3d_idx in kp3d_id_mapping.keys(): # select 3d points which are kept after filter
-                    filter_kp3d_idxs.append(kp3d_idx)
+                kp3d_id = point3D_ids[feature_idx]
+                if kp3d_id in kp3d_id_mapping.keys(): # select 3d points which are kept after filter
+                    filter_kp3d_ids.append(kp3d_id)
                     filter_feature_idxs.append(feature_idx)
             
             kp3d_idx_feature, kp3d_idx_score, kp3d_idx_to_kp2d_idx = \
                 gather_3d_anno(
                     keypoints_2d, descriptors_2d, scores_2d,
-                    filter_kp3d_idxs, filter_feature_idxs,
+                    filter_kp3d_ids, filter_feature_idxs,
                     kp3d_idx_feature, kp3d_idx_score
                 )
             
@@ -430,7 +430,7 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
     """ Generate 3d point feature.
     @param xyzs: 3d points after filter(track length, 3d box and merge operation)
     @param points_idxs: {new_point_id: [old_point1_id, old_point2_id, ...]}.
-                        new_point_id: [0, xyzs.shape[0])
+                        new_point_id: [0, xyzs.shape[0]]
                         old_point_id*: point idx in Points3D.bin
                         This param is used to record the relationship of points after filter and before filter.
 
@@ -453,8 +453,11 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
 
     # step 1
     kp3d_id_mapping = id_mapping(points_idxs)
+    kp3d_id_mapping = kp3d_id_mapping
     feature_dim, kp3d_id_feature, kp3d_id_score, kp3d_idx_to_img_kp2d_idx \
         = count_features(img_lists, features, images, kp3d_id_mapping)
+
+    # NOTE: kp3d_id is original 3D id
 
     # step 2
     filter_xyzs, filter_descriptors, filter_scores, idxs = gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs,

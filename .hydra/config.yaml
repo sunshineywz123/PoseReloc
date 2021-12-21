@@ -51,14 +51,14 @@ work_dir: ${hydra:runtime.cwd}
 data_dir: ${work_dir}/data
 print_config: true
 type: sfm
-data_base_dir: /nas/users/hexingyi/onepose_data
+data_base_dir: /nas/users/hexingyi/onepose_hard_data
 output_base_dir: /nas/users/hexingyi/onepose_sfm
 match_type: softmax
 redo: true
 enable_loftr_post_refine: true
 overwrite_all: false
 overwrite_coarse: false
-overwrite_fine: true
+overwrite_fine: false
 use_global_ray: true
 use_local_ray: true
 debug: true
@@ -72,14 +72,17 @@ dataset:
   max_num_kp3d: 20000
   max_num_kp2d: 10000
   data_dir:
-  - ${data_base_dir}/0548-duck-others duck-1
-  - ${data_base_dir}/0477-cutlet-bottle cutlet-1
+  - ${data_base_dir}/0600-toyrobot-others toyrobot-1
+  - ${data_base_dir}/0601-oldtea-box oldtea-1
+  - ${data_base_dir}/0602-sensesheep-others sensesheep-1
+  - ${data_base_dir}/0603-fakebanana-others fakebanana-1
+  - ${data_base_dir}/0604-catmodel-others catmodel-1
   outputs_dir: ${output_base_dir}
 network:
   detection: loftr
-  detection_model_path: ${work_dir}/data/models/extractors/SuperPoint/superpoint_v1.pth
+  detection_model_path: weight/superpoint_v1.pth
   matching: loftr
-  matching_model_path: ${work_dir}/data/models/matchers/SuperGlue/superglue_outdoor.pth
+  matching_model_path: weight/superglue_outdoor.pth
 sfm:
   gap: 3
   covis_num: 8

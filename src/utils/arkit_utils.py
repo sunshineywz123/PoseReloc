@@ -1,5 +1,5 @@
 import sys
-# sys.path.insert(0, '/home/wangzihao/code/sort_PoseReloc')
+sys.path.insert(0, '/home/hexingyi/code/PoseReloc')
 
 import os
 import cv2
@@ -271,7 +271,8 @@ def ln_data():
 
 if __name__ == "__main__":
     # ln_data()
-    data_root = './data/scan_data'
+    # data_root = './data/scan_data'
+    data_root = '/nas/users/hexingyi/onepose_hard_data'
     seq_dirs = [
         # '0408-colorbox-box', '0409-aptamil-box', '0410-huiyuan-box',
         # '0411-doveshampoo-others', '0412-pikachubowl-others', '0413-juliecookies-box',
@@ -306,9 +307,9 @@ if __name__ == "__main__":
         # "0494-qvduoduocookies-box", "0495-fulingstapler-box", '0496-delistapler-box',
         # "0497-delistaplerlarger-box", "0498-yousuanru-box", "0499-tiramisufranzzi-box", 
 
-        "0500-chocfranzzi-box", "0501-matchafranzzi-box", "0502-shufujia-box", "0503-shufujiawhite-box",
-        "0504-lux-box", "0505-ksfbeefnoodles-others", "0506-sauerkrautnoodles-others",
-        "0507-hotsournoodles-others", "0508-yqsl-others", "0509-bscola-others", "0510-yqslmilk-others"
+        # "0500-chocfranzzi-box", "0501-matchafranzzi-box", "0502-shufujia-box", "0503-shufujiawhite-box",
+        # "0504-lux-box", "0505-ksfbeefnoodles-others", "0506-sauerkrautnoodles-others",
+        # "0507-hotsournoodles-others", "0508-yqsl-others", "0509-bscola-others", "0510-yqslmilk-others"
         # "0541-apromilk-others", '0542-bueno-box', '0543-brownhouse-others',
         # '0544-banana-others', '0545-book-others', '0546-can-bottle',
         # '0547-cubebox-box', '0548-duck-others', '0549-footballcan-bottle',
@@ -368,6 +369,8 @@ if __name__ == "__main__":
         # '0575-saltbottle-bottle', '0576-saltbox-box', '0577-schoko-box', '0578-tee-others',
         # '0579-tomatocan-bottle', '0580-xmaxbox-others', '0581-yogurt-bottle', '0582-yogurtlarge-others',
         # '0583-yogurtmedium-others', '0584-yogurtsmall-others'
+        # '0600-toyrobot-others'
+        '0601-oldtea-box', '0602-sensesheep-others', '0603-fakebanana-others', '0604-catmodel-others'
     ]
     deal_first = True
     deal_last = True

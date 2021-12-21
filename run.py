@@ -393,11 +393,11 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_names)
         model_path, points_count_list, track_length, outputs_dir
     )  # visualization only
 
-    xyzs, points_idxs = filter_points.filter_3d(
+    xyzs, points_ids = filter_points.filter_3d(
         model_path, track_length, bbox_path, box_trans_path=trans_box_path
     )  # crop 3d points by 3d box and track length
     merge_xyzs, merge_idxs = filter_points.merge(
-        xyzs, points_idxs, dist_threshold=1e-3
+        xyzs, points_ids, dist_threshold=1e-3
     )  # merge 3d points by distance between points
     if cfg.debug:
         pcd = o3d.geometry.PointCloud()

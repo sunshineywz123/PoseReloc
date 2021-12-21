@@ -183,8 +183,16 @@ def loftr_coarse_matching(
         for image_name, keypoints in tqdm(final_keypoints.items()):
             grp = feature_file.create_group(image_name)
             grp.create_dataset("keypoints", data=keypoints)
-            # TODO: add feature
-            # grp.create_dataset("features", data=features)
+
+            # FIXME: change to real features in fine
+            # Fake features:
+            dim = 128
+            descriptors = np.zeros((dim, keypoints.shape[0]))
+            grp.create_dataset("descriptors", data=descriptors)
+
+            # Fake scores:
+            scores = np.ones((keypoints.shape[0],))
+            grp.create_dataset("scores", data=scores)
 
     # Save matches:
     with h5py.File(matches_out, "w") as match_file:

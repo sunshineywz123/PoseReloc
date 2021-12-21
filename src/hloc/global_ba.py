@@ -14,7 +14,7 @@ def run_bundle_adjuster(deep_sfm_dir, ba_dir, colmap_path):
         str(colmap_path), 'bundle_adjuster',
         '--input_path', str(deep_sfm_model_dir),
         '--output_path', str(ba_dir),
-        '--BundleAdjustment.max_num_iterations', '150',
+        '--BundleAdjustment.max_num_iterations', '50',
         '--BundleAdjustment.max_linear_solver_iterations', '500',
         '--BundleAdjustment.function_tolerance', '0',
         '--BundleAdjustment.gradient_tolerance', '0',

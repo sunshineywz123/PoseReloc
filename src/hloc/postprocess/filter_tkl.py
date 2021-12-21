@@ -77,6 +77,6 @@ def vis_tkl_filtered_pcds(model_path, points_count_list, track_length, output_pa
     if not osp.exists(output_path):
         os.makedirs(output_path)
     
-    write_model(cameras, images, points3D, output_path, '.bin')
+    write_model(cameras, images, points3D, output_path, '.bin') # Cameras and images have not been update yet
     os.system(f'colmap model_converter --input_path {output_path} --output_path {output_file_path} --output_type PLY')
     return output_file_path

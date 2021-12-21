@@ -95,7 +95,7 @@ def in_box(keypoints, box):
     return in_box_valid == 1
 
 
-def import_matches(image_ids, database_path, pairs_path, matches_path, feature_path, match_model, \
+def import_matches(image_ids, database_path, pairs_path, matches_path, feature_path, match_model='superpoint', \
                    min_match_score=None, skip_geometric_verification=False):
     """ Import matches info into COLMAP database. """
     logging.info("Importing matches into the database...")
@@ -207,7 +207,7 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_m
     return stats
 
 
-def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_model, \
+def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_model='superpoint', \
          colmap_path='colmap', skip_geometric_verification=False, min_match_score=None, image_dir=None):
     """ 
         Import keypoints, matches.
