@@ -1,5 +1,6 @@
 import json
 import os
+import os.path as osp
 
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 import glob
@@ -134,7 +135,7 @@ def sfm(cfg):
         pb = ProgressBar(len(data_dirs), "SfM Mapping begin...")
         all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
         sfm_worker_results = [
-            sfm_worker_ray_wrapper.remote(subset_data_dirs, cfg)
+            sfm_worker_ray_wrapper.remote(subset_data_dirs, cfg, pba=pb.actor)
             for subset_data_dirs in all_subsets
         ]
         pb.print_until_done()
@@ -292,6 +293,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 logger.info("LoFTR coarse mapping begin...")
                 os.system(f"rm -rf {empty_dir}")
                 os.system(f"rm -rf {deep_sfm_dir}")
+                os.system(f'rm -rf {osp.join(covis_pairs_out.rsplit("/", 1)[0], "fine_matches.pkl")}') # Force refinement to recompute fine match
 
                 pairs_from_covisibility.covis_from_index(
                     img_lists, covis_pairs_out, num_matched=covis_num, gap=cfg.sfm.gap
@@ -334,6 +336,9 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     os.system(
                         f"mv {osp.join(deep_sfm_dir, 'model')} {osp.join(deep_sfm_dir, 'model_coarse')}"
                     )
+                    os.system(
+                        f"mv {feature_out} {osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]}"
+                    )
 
             if cfg.enable_loftr_post_refine:
                 if (
@@ -351,6 +356,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         covis_pairs_out,
                         colmap_coarse_dir=osp.join(deep_sfm_dir, "model_coarse"),
                         refined_model_save_dir=osp.join(deep_sfm_dir, "model"),
+                        feature_out_pth=feature_out,
                         use_global_ray=cfg.use_global_ray,
                         fine_match_use_ray=cfg.use_local_ray,
                         visualize_dir=visualize_dir,

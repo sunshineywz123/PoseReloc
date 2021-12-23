@@ -58,7 +58,7 @@ redo: true
 enable_loftr_post_refine: true
 overwrite_all: false
 overwrite_coarse: false
-overwrite_fine: false
+overwrite_fine: true
 use_global_ray: true
 use_local_ray: true
 debug: true
@@ -72,11 +72,7 @@ dataset:
   max_num_kp3d: 20000
   max_num_kp2d: 10000
   data_dir:
-  - ${data_base_dir}/0600-toyrobot-others toyrobot-1
-  - ${data_base_dir}/0601-oldtea-box oldtea-1
-  - ${data_base_dir}/0602-sensesheep-others sensesheep-1
-  - ${data_base_dir}/0603-fakebanana-others fakebanana-1
-  - ${data_base_dir}/0604-catmodel-others catmodel-1
+  - ${data_base_dir}/0610-lecreusetcup-others lecreusetcup-1
   outputs_dir: ${output_base_dir}
 network:
   detection: loftr

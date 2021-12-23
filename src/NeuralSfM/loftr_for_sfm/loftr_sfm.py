@@ -24,6 +24,7 @@ from .utils.coarse_matching import CoarseMatching
 from .utils.fine_matching import FineMatching
 from .utils.selective_kernel import build_ssk_merge
 from .utils.guided_matching_fine import build_guided_matching
+from .utils.sample_feature_from_featuremap import sample_feature_from_featuremap
 from src.utils.misc import upper_config  # TODO: Remove the out of package import
 from src.utils.torch_utils import torch_speed_test
 
@@ -104,7 +105,7 @@ class LoFTR_SfM(nn.Module):
             ):
                 param.requires_grad = False
 
-    def forward(self, data):
+    def forward(self, data, **kwargs):
         """ 
         Update:
             data (dict): {
@@ -149,6 +150,8 @@ class LoFTR_SfM(nn.Module):
                     "hw1_f": feat_f1.shape[2:],
                 }
             )
+            feat_f0_backbone = feat_f0.clone()
+            feat_f1_backbone = feat_f1.clone()
 
         if "mkpts0_c" not in data:
             # 2. coarse-level loftr module
@@ -266,3 +269,10 @@ class LoFTR_SfM(nn.Module):
             # data.update({'feat_f0' : feat_f0, 'feat_f1' : feat_f1}) # fine feature backbone
             data.update({"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold})
             # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)
+        
+        # Extract fine_feature (optional):
+        if 'extract_fine_feature' in kwargs:
+            if kwargs['extract_fine_feature']:
+                feat_ext0 = sample_feature_from_featuremap(feat_f0_backbone, data['mkpts0_f'], imghw=data['scale0'].squeeze(0) * torch.tensor(data['hw0_i']).to(data['scale0']))
+                feat_ext1 = sample_feature_from_featuremap(feat_f1_backbone, data['mkpts1_f'], imghw=data['scale1'].squeeze(0) * torch.tensor(data['hw1_i']).to(data['scale1']))
+                data.update({'feat_ext0': feat_ext0, 'feat_ext1': feat_ext1})

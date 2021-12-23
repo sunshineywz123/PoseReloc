@@ -16,6 +16,7 @@ from .data_construct import (
 )
 from .matcher_model import *
 from .optimizer.optimizer import Optimizer
+from .feature_aggregation import feature_aggregation_and_update
 
 cfgs = {
     "coarse_colmap_data": {
@@ -25,7 +26,7 @@ cfgs = {
         # "feature_track_assignment_strategy": "balance",
         "verbose": True,
     },
-    "fine_match_debug": True,
+    "fine_match_debug": False,
     "fine_matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
@@ -33,6 +34,9 @@ cfgs = {
             "seed": 666,
         },
         "visualize": False,  # Visualize fine feature map and corresponds
+        # [None, 'fine_match_backbone', 'fine_match_attention'] Save for later 2D-3D match use, None means don't extract feature
+        "extract_feature_method": "fine_match_backbone",
+        # "extract_feature_method": 'fine_match_attention',
         "ray": {
             "slurm": False,
             "n_workers": 4,
@@ -59,6 +63,7 @@ cfgs = {
         "image_i_f_scale": 2,  # For Loftr is 2, don't change!
         "verbose": False,
     },
+    "feature_aggregation_method": "avg",
     "visualize": True,  # vis3d visualize
     "evaluation": False,
 }
@@ -69,6 +74,7 @@ def post_optimization(
     covis_pairs_pth,
     colmap_coarse_dir,
     refined_model_save_dir,
+    feature_out_pth,  # Used to update feature
     use_global_ray=False,
     fine_match_use_ray=False,  # Use ray for fine match
     visualize_dir=None,
@@ -99,20 +105,21 @@ def post_optimization(
     save_path = osp.join(covis_pairs_pth.rsplit("/", 1)[0], "fine_matches.pkl")
     if not osp.exists(save_path) or cfgs["fine_match_debug"]:
         logger.info(f"Fine matching begin!")
-        fine_match_results = fine_matcher(
+        fine_match_results_dict = fine_matcher(
             cfgs["fine_matcher"],
             matching_pairs_dataset,
             visualize_dir,
             use_ray=fine_match_use_ray,
         )
-        save_obj(fine_match_results, save_path)
+        save_obj(fine_match_results_dict, save_path)
     else:
         logger.info(f"Fine matches exists! Load from {save_path}")
-        fine_match_results = load_obj(save_path)
+        fine_match_results_dict = load_obj(save_path)
+
 
     # Construct depth optimization data
     optimization_data = ConstructOptimizationData(
-        colmap_image_dataset, fine_match_results
+        colmap_image_dataset, fine_match_results_dict
     )
 
     # Post optimization
@@ -124,7 +131,17 @@ def post_optimization(
     else:
         results_dict = optimizer.start_optimize()
 
-    # Update results
+    # Update feature
+    feature_aggregation_and_update(
+        colmap_image_dataset,
+        fine_match_results_dict,
+        feature_out_pth=feature_out_pth,
+        image_lists=image_lists,
+        aggregation_method=cfgs["feature_aggregation_method"],
+    )
+
+    # TODO: refactor this 
+    # Update colmap pose and pointcloud results
     (
         pose_error_before_refine,
         pose_error_after_refine,

@@ -11,7 +11,7 @@ from loguru import logger
 def sample_feature_from_unfold_featuremap(
     unfold_feature,
     offset=None,
-    scale=None,
+    scale=2,
     mode="OnGrid",
     norm_feature=False,
     return_outof_grid_mask=False,
@@ -81,7 +81,7 @@ def sample_feature_from_unfold_featuremap(
         )
 
         feat_picked = F.grid_sample(
-            unfold_feature, grid, padding_mode="border", align_corners=True
+            unfold_feature, grid.float(), padding_mode="border", align_corners=True
         )
         feat_picked = (
             rearrange(feat_picked, "l c h w -> l h w c").squeeze(-2).squeeze(-2)

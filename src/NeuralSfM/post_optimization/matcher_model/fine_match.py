@@ -16,6 +16,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
             subset_ids,
             detector,
             matcher,
+            extract_feature_method=cfgs['extract_feature_method'],
             visualize=cfgs["visualize"],
             visualize_dir=visualize_dir,
         )
@@ -42,6 +43,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
                 subset_ids,
                 detector,
                 matcher,
+                extract_feature_method=cfgs['extract_feature_method'],
                 visualize=cfgs["visualize"],
                 visualize_dir=visualize_dir,
                 pba=pb.actor,

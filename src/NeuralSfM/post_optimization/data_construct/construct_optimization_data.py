@@ -40,7 +40,6 @@ class ConstructOptimizationData(Dataset):
         ]
         assigned_colmap_frameID, assigned_keypoint_index = assigned_state
 
-        # TODO: not an efficient implementation
         image_ids = self.colmap_3ds[point_cloudID].image_ids.tolist()
         point2D_idxs = self.colmap_3ds[point_cloudID].point2D_idxs.tolist()
 

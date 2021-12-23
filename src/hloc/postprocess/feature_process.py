@@ -1,7 +1,7 @@
 from unicodedata import decomposition
 import h5py
 from numpy.core.fromnumeric import cumsum
-import tqdm
+from tqdm import tqdm
 import json
 import os.path as osp
 import numpy as np
@@ -305,6 +305,7 @@ def get_assign_matrix(xys, xyzs, kp3d_idx_to_kp2d_idx, kp3d_id_mapping):
     print("=> match pairs num: ", num_matches)
     print('=> total 2d points: ', xys.shape[0])
     print("=> total 3d points: ", xyzs.shape[0])
+    print('--------------------')
     return num_matches, assign_matrix
 
 
@@ -343,14 +344,14 @@ def save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, sco
 
 
 def save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs,
-                      kp3d_idx_to_img_kp2d_idx, anno2d_out_path):
+                      img_kp3d_idx_to_kp2d_idx, anno2d_out_path):
     annotations = []
     anno_id = 0
     
     kp3d_id_mapping = id_mapping(points_idxs)
-    for img_path in img_lists:
+    for img_path in tqdm(img_lists, total=len(img_lists)):
         feature = features[img_path]
-        kp3d_idx_to_kp2d_idx = kp3d_idx_to_img_kp2d_idx[img_path]
+        kp3d_idx_to_kp2d_idx = img_kp3d_idx_to_kp2d_idx[img_path]
 
         keypoints_2d, descriptors_2d, scores_2d = read_features(feature)
         num_matches, assign_matrix = get_assign_matrix(
@@ -374,16 +375,16 @@ def save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs,
 
 
 def save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, 
-                 kp3d_idx_to_img_kp2d_idx, anno2d_out_path):
+                 img_kp3d_idx_to_kp2d_idx, anno2d_out_path):
     """ Save 2d annotations for each image and gather all 2d annotations """
     annotations = []
     anno_id = 0
     
     kp3d_id_mapping = id_mapping(points_idxs)
 
-    for img_path in img_lists:
+    for img_path in tqdm(img_lists, total=len(img_lists)):
         feature = features[img_path]
-        kp3d_idx_to_kp2d_idx = kp3d_idx_to_img_kp2d_idx[img_path]
+        kp3d_idx_to_kp2d_idx = img_kp3d_idx_to_kp2d_idx[img_path]
         
         keypoints_2d, descriptors_2d, scores_2d = read_features(feature) 
         num_matches, assign_matrix = get_assign_matrix(

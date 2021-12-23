@@ -370,7 +370,9 @@ if __name__ == "__main__":
         # '0579-tomatocan-bottle', '0580-xmaxbox-others', '0581-yogurt-bottle', '0582-yogurtlarge-others',
         # '0583-yogurtmedium-others', '0584-yogurtsmall-others'
         # '0600-toyrobot-others'
-        '0601-oldtea-box', '0602-sensesheep-others', '0603-fakebanana-others', '0604-catmodel-others'
+        # '0601-oldtea-box', '0602-sensesheep-others', '0603-fakebanana-others', '0604-catmodel-others'
+        # '0605-pingpangball-ball', '0606-yellowduck-others', '0607-oringe-others'
+        '0608-greenteapot-others', '0609-blackteapot-others', '0610-lecreusetcup-others', '0611-bosecolumnaudio-others'
     ]
     deal_first = True
     deal_last = True

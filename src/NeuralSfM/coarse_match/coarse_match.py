@@ -30,7 +30,7 @@ cfgs = {
             "conf_thr": 0.99999,
         },
     },
-    "use_cache": True,
+    'coarse_match_debug': False,
     "ray": {
         "slurm": False,
         "n_workers": 4,
@@ -66,7 +66,7 @@ def loftr_coarse_matching(
             )
 
         # Matcher runner
-        if cfgs["use_cache"] and osp.exists(cache_dir):
+        if not cfgs["coarse_match_debug"] and osp.exists(cache_dir):
             matches = load_h5(cache_dir, transform_slash=True)
             logger.info("Caches raw matches loaded!")
         else:
@@ -137,8 +137,7 @@ def loftr_coarse_matching(
 
     else:
         # Matcher runner
-        cache_dir = osp.join(feature_out.rsplit("/", 1)[0], "raw_matches.h5")
-        if cfgs["use_cache"] and osp.exists(cache_dir):
+        if not cfgs["coarse_match_debug"] and osp.exists(cache_dir):
             matches = load_h5(cache_dir, transform_slash=True)
             logger.info("Caches raw matches loaded!")
         else:
