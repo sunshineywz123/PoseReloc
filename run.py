@@ -10,6 +10,7 @@ import ray
 
 import open3d as o3d
 import os.path as osp
+from tqdm import tqdm
 
 from loguru import logger
 from pathlib import Path
@@ -64,12 +65,31 @@ def merge_(
 def merge_anno(cfg):
     """ Merge different objects' anno file into one anno file """
     anno_dirs = []
+    names = cfg.names
 
-    for name in cfg.names:
+    if not isinstance(names, list):
+        # Parse object directory
+        assert isinstance(names, str)
+        exception_obj_name_list  = cfg.exception_obj_names
+        top_k_obj = cfg.top_k_obj
+        logger.info(f'Process all objects in directory:{names}')
+
+        object_names = []
+        object_names_list = os.listdir(names)[:top_k_obj]
+        for object_name in object_names_list:
+            if '-' not in object_name:
+                continue
+            if object_name in exception_obj_name_list:
+                continue
+            object_names.append(object_name)
+        
+        names = object_names
+
+    for name in names:
         anno_dir = osp.join(
             cfg.datamodule.data_dir,
-            name,
             f"outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}",
+            name,
             "anno",
         )
         anno_dirs.append(anno_dir)
@@ -79,7 +99,7 @@ def merge_anno(cfg):
     images = []
     annotations = []
 
-    for anno_dir in anno_dirs:
+    for anno_dir in tqdm(anno_dirs):
         logger.info(f"Merging anno dir: {anno_dir}")
         anno_2d_file = osp.join(anno_dir, "anno_2d.json")
         avg_anno_3d_file = osp.join(anno_dir, "anno_3d_average.npz")
@@ -118,6 +138,29 @@ def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
     data_dirs = cfg.dataset.data_dir
 
+    if not isinstance(data_dirs, list):
+        # Parse object directory
+        assert isinstance(data_dirs, str)
+        num_seq = cfg.dataset.num_seq
+        exception_obj_name_list  = cfg.dataset.exception_obj_names
+        top_k_obj = cfg.dataset.top_k_obj
+        assert num_seq > 0
+        logger.info(f'Process all objects in directory:{data_dirs}, process: {num_seq} sequences')
+
+        object_names = os.listdir(data_dirs)[:top_k_obj]
+        data_dirs_list = []
+        for object_name in object_names:
+            if '-' not in object_name:
+                continue
+
+            if object_name in exception_obj_name_list:
+                continue
+            sequence_names = sorted(os.listdir(osp.join(data_dirs, object_name)))
+            sequence_names = [sequence_name for sequence_name in sequence_names if '-' in sequence_name][:num_seq]
+            data_dirs_list.append(' '.join([osp.join(data_dirs, object_name)] + sequence_names))
+        
+        data_dirs = data_dirs_list
+
     if not cfg.use_global_ray:
         sfm_worker(data_dirs, cfg)
     else:
@@ -131,6 +174,7 @@ def sfm(cfg):
                 local_mode=cfg.ray.local_mode,
                 ignore_reinit_error=True,
             )
+        logger.info(f"Use ray for SfM mapping, total: {cfg.ray.n_workers} workers")
 
         pb = ProgressBar(len(data_dirs), "SfM Mapping begin...")
         all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
@@ -143,6 +187,7 @@ def sfm(cfg):
 
 
 def sfm_worker(data_dirs, cfg, pba=None):
+    data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")
         root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
@@ -165,6 +210,8 @@ def sfm_worker(data_dirs, cfg, pba=None):
 
         if len(img_lists) == 0:
             logger.info(f"No png image in {root_dir}")
+            if pba is not None:
+                pba.update.remote(1)
             continue
 
         obj_name = root_dir.split("/")[-1]
@@ -177,7 +224,7 @@ def sfm_worker(data_dirs, cfg, pba=None):
     return None
 
 
-@ray.remote(num_cpus=4)  # release gpu after finishing
+@ray.remote(num_cpus=1, max_calls=1)  # release gpu after finishing
 def sfm_worker_ray_wrapper(data_dirs, cfg, pba=None):
     return sfm_worker(data_dirs, cfg, pba)
 

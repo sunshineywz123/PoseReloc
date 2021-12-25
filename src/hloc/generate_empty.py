@@ -69,6 +69,9 @@ def import_data(img_lists, do_ba=False):
                 intrin_dir = osp.join(base_dir, 'intrin')
             else:
                 intrin_dir = osp.join(base_dir, 'intrin_ba')
+                if not osp.exists(intrin_dir):
+                    intrin_dir = osp.join(base_dir, 'intrin')
+
             K = get_intrin_from_txt(img_index, intrin_dir)
             fx, fy, cx, cy = K[0][0], K[1][1], K[0, 2], K[1, 2]
         elif img_type == 'color_full':

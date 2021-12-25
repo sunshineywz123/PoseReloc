@@ -122,6 +122,8 @@ def pad_keypoints3d_random(keypoints, n_target_kpts):
     
     if n_pad < 0:
         keypoints = keypoints[:n_target_kpts] # [n_target_kpts: 3] 
+
+        #TODO: add random sample keypoints
     else :
         while n_pad > 0:
             rand_kpts_x = torch.rand(n_pad, 1) - 0.5 # zero mean

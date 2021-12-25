@@ -315,6 +315,6 @@ class Optimizer(nn.Module):
         }
 
 
-    @ray.remote(num_cpus=4, num_gpus=1, max_calls=1)  # release gpu after finishing
+    @ray.remote(num_cpus=1, num_gpus=1, max_calls=1)  # release gpu after finishing
     def start_optimize_ray_wrapper(self):
         return self.start_optimize()

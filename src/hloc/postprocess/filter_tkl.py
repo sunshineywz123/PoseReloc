@@ -74,6 +74,7 @@ def vis_tkl_filtered_pcds(model_path, points_count_list, track_length, output_pa
     
     output_path = osp.join(output_path, 'tkl_model')
     output_file_path = osp.join(output_path, 'tl-{}.ply'.format(track_length))
+    # TODO: add filtered point cloud to vis3d
     if not osp.exists(output_path):
         os.makedirs(output_path)
     

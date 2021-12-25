@@ -21,6 +21,16 @@ def train(config: DictConfig):
     if "seed" in config:
         seed_everything(config['seed'])
 
+    # scale lr and warmup-step automatically
+    # _n_gpus = int(args.gpus) if ',' not in str(args.gpus) else len([num for num in args.gpus.split(',') if num != ''])
+    # _n_gpus = _n_gpus if _n_gpus != -1 else torch.cuda.device_count()
+    # config.TRAINER.WORLD_SIZE = _n_gpus * args.num_nodes
+    # config.TRAINER.TRUE_BATCH_SIZE = config.TRAINER.WORLD_SIZE * args.batch_size
+    # _scaling = config.TRAINER.TRUE_BATCH_SIZE / config.TRAINER.CANONICAL_BS
+    # config.TRAINER.SCALING = _scaling
+    # config.TRAINER.TRUE_LR = config.TRAINER.CANONICAL_LR * _scaling
+    # config.TRAINER.WARMUP_STEP = math.floor(config.TRAINER.WARMUP_STEP / _scaling)
+
     # Init PyTorch Lightning model ⚡
     model: LightningModule = hydra.utils.instantiate(config['model'])
     

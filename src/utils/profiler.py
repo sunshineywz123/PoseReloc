@@ -46,7 +46,7 @@ class PassThroughProfiler(BaseProfiler):
     """
 
     def __init__(self):
-        super().__init__(output_streams=None)
+        super().__init__()
     
     @contextmanager
     def record_function(self, action_name: str) -> None:

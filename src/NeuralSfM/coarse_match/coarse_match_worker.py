@@ -185,7 +185,7 @@ def keypoint_worker(name_kpts, pba=None):
         pba.update.remote(1)
     return keypoints
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=0.5,max_calls=1)
 def keypoints_worker_ray_wrapper(name_kpts, pba: ActorHandle):
     return keypoint_worker(name_kpts, pba)
 
@@ -224,7 +224,7 @@ def update_matches(matches, keypoints, pba=None, **kwargs):
 
     return ret_matches
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=0.5, max_calls=1)
 def update_matches_ray_wrapper(matches, keypoints, pba: ActorHandle, **kwargs):
     return update_matches(matches, keypoints, pba, **kwargs)
 
@@ -246,6 +246,6 @@ def transform_keypoints(keypoints, pba=None):
             pba.update.remote(1)
     return ret_kpts, ret_scores
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=1, max_calls=1)
 def transform_keypoints_ray_wrapper(keypoints, pba: ActorHandle):
     return transform_keypoints(keypoints, pba)
