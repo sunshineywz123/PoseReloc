@@ -224,7 +224,7 @@ def sfm_worker(data_dirs, cfg, pba=None):
     return None
 
 
-@ray.remote(num_cpus=1, max_calls=1)  # release gpu after finishing
+@ray.remote(num_cpus=1)  # release gpu after finishing
 def sfm_worker_ray_wrapper(data_dirs, cfg, pba=None):
     return sfm_worker(data_dirs, cfg, pba)
 

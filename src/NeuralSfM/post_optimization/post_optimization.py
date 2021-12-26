@@ -20,14 +20,14 @@ from .feature_aggregation import feature_aggregation_and_update
 
 cfgs = {
     "coarse_colmap_data": {
-        # "img_resize": 512, # For OnePose
-        "img_resize": 1200,
+        "img_resize": 512, # For OnePose
+        # "img_resize": 1200,
         "df": 8,
         "feature_track_assignment_strategy": "greedy",
         # "feature_track_assignment_strategy": "balance",
         "verbose": True,
     },
-    "fine_match_debug": False,
+    "fine_match_debug": True,
     "fine_matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
@@ -54,13 +54,23 @@ cfgs = {
         "residual_mode": "feature_metric_error",  # ["feature_metric_error", "geometry_error"]
         # "residual_mode": "geometry_error",  # ["feature_metric_error", "geometry_error"]
         "distance_loss_scale": 10,  # only available for featuremetric error mode
+
+        # For OnePose
         "optimize_lr": {
             "depth": 1e-2,
             "pose": 1e-5,
             "BA": 1e-5,
         },  # Only available for first order solver
-        # "optim_procedure": ["depth", 'pose'] * 3 + ['BA'],
         "optim_procedure": ["depth"] * 3,
+
+        # For total sfm
+        # "optimize_lr": {
+        #     "depth": 1e-2,
+        #     "pose": 1e-2,
+        #     "BA": 1e-3,
+        # },  # Only available for first order solver
+        # "optim_procedure": ["depth", 'pose'] * 3 + ['BA'],
+
         "image_i_f_scale": 2,  # For Loftr is 2, don't change!
         "verbose": False,
     },

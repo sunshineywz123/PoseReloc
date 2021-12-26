@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 import time
 import ray
 
-from submodules.DeepLM import Solve as SecondOrderSolve
+# from submodules.DeepLM import Solve as SecondOrderSolve
 from .first_order_solver import FirstOrderSolve
 
 from .residual import pose_ba_residual, depth_residual
@@ -315,6 +315,6 @@ class Optimizer(nn.Module):
         }
 
 
-    @ray.remote(num_cpus=1, num_gpus=1, max_calls=1)  # release gpu after finishing
+    @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
     def start_optimize_ray_wrapper(self):
         return self.start_optimize()

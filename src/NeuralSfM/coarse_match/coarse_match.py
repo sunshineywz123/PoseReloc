@@ -13,8 +13,8 @@ from .coarse_match_worker import *
 from ..dataset.loftr_coarse_dataset import LoftrCoarseDataset
 
 cfgs = {
-    # "data": {"img_resize": 512, "df": 8, "shuffle": True}, # For OnePose
-    "data": {"img_resize": 1200, "df": 8, "shuffle": True},
+    "data": {"img_resize": 512, "df": 8, "shuffle": True}, # For OnePose
+    # "data": {"img_resize": 1200, "df": 8, "shuffle": True},
     "matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
