@@ -9,7 +9,7 @@ from loguru import logger
 import ray
 from src.utils.data_io import load_obj, save_obj
 
-from src.datasets.neuralsfm_coarse_colmap_dataset import CoarseColmapDataset
+from ..dataset.neuralsfm_coarse_colmap_dataset import CoarseColmapDataset
 from .data_construct import (
     MatchingPairData,
     ConstructOptimizationData,
@@ -20,7 +20,8 @@ from .feature_aggregation import feature_aggregation_and_update
 
 cfgs = {
     "coarse_colmap_data": {
-        "img_resize": 512,
+        # "img_resize": 512, # For OnePose
+        "img_resize": 1200,
         "df": 8,
         "feature_track_assignment_strategy": "greedy",
         # "feature_track_assignment_strategy": "balance",
@@ -74,9 +75,11 @@ def post_optimization(
     covis_pairs_pth,
     colmap_coarse_dir,
     refined_model_save_dir,
-    feature_out_pth,  # Used to update feature
+    match_out_pth,
+    feature_out_pth=None,  # Used to update feature
     use_global_ray=False,
     fine_match_use_ray=False,  # Use ray for fine match
+    pre_sfm=False,
     visualize_dir=None,
     vis3d_pth=None,
 ):
@@ -87,6 +90,7 @@ def post_optimization(
         covis_pairs_pth,
         colmap_coarse_dir,
         refined_model_save_dir,
+        pre_sfm=pre_sfm,
         vis_path=vis3d_pth if vis3d_pth is not None else None,
     )
     logger.info("Scene data construct finish!")
@@ -102,7 +106,7 @@ def post_optimization(
     matching_pairs_dataset = MatchingPairData(colmap_image_dataset)
 
     # Fine level match
-    save_path = osp.join(covis_pairs_pth.rsplit("/", 1)[0], "fine_matches.pkl")
+    save_path = osp.join(match_out_pth.rsplit("/", 2)[0], "fine_matches.pkl")
     if not osp.exists(save_path) or cfgs["fine_match_debug"]:
         logger.info(f"Fine matching begin!")
         fine_match_results_dict = fine_matcher(
@@ -115,7 +119,6 @@ def post_optimization(
     else:
         logger.info(f"Fine matches exists! Load from {save_path}")
         fine_match_results_dict = load_obj(save_path)
-
 
     # Construct depth optimization data
     optimization_data = ConstructOptimizationData(
@@ -132,15 +135,16 @@ def post_optimization(
         results_dict = optimizer.start_optimize()
 
     # Update feature
-    feature_aggregation_and_update(
-        colmap_image_dataset,
-        fine_match_results_dict,
-        feature_out_pth=feature_out_pth,
-        image_lists=image_lists,
-        aggregation_method=cfgs["feature_aggregation_method"],
-    )
+    if feature_out_pth is not None:
+        feature_aggregation_and_update(
+            colmap_image_dataset,
+            fine_match_results_dict,
+            feature_out_pth=feature_out_pth,
+            image_lists=image_lists,
+            aggregation_method=cfgs["feature_aggregation_method"],
+        )
 
-    # TODO: refactor this 
+    # TODO: refactor here
     # Update colmap pose and pointcloud results
     (
         pose_error_before_refine,

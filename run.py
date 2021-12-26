@@ -403,6 +403,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         covis_pairs_out,
                         colmap_coarse_dir=osp.join(deep_sfm_dir, "model_coarse"),
                         refined_model_save_dir=osp.join(deep_sfm_dir, "model"),
+                        match_out_pth=matches_out,
                         feature_out_pth=feature_out,
                         use_global_ray=cfg.use_global_ray,
                         fine_match_use_ray=cfg.use_local_ray,

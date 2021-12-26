@@ -182,7 +182,8 @@ def keypoint_worker(name_kpts, pba=None):
         }
         keypoints[name] = kpt2id_score
 
-        pba.update.remote(1)
+        if pba is not None:
+            pba.update.remote(1)
     return keypoints
 
 @ray.remote(num_cpus=0.5,max_calls=1)

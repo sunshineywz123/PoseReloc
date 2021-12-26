@@ -6,14 +6,15 @@ import os.path as osp
 from loguru import logger
 from typing import ChainMap
 
-from src.datasets.loftr_coarse_dataset import loftr_coarse_dataset
 from src.utils.ray_utils import ProgressBar, chunks, chunk_index, split_dict
 from src.utils.data_io import save_h5, load_h5
 from .coarse_matcher_utils import Match2Kpts
 from .coarse_match_worker import *
+from ..dataset.loftr_coarse_dataset import LoftrCoarseDataset
 
 cfgs = {
-    "data": {"img_resize": 512, "df": 8, "shuffle": True},
+    # "data": {"img_resize": 512, "df": 8, "shuffle": True}, # For OnePose
+    "data": {"img_resize": 1200, "df": 8, "shuffle": True},
     "matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
@@ -30,7 +31,7 @@ cfgs = {
             "conf_thr": 0.99999,
         },
     },
-    'coarse_match_debug': False,
+    "coarse_match_debug": True,
     "ray": {
         "slurm": False,
         "n_workers": 4,
@@ -42,11 +43,23 @@ cfgs = {
 
 
 def loftr_coarse_matching(
-    image_lists, covis_pairs_out, feature_out, matches_out, use_ray=False
+    image_lists,
+    covis_pairs_out,
+    feature_out,
+    match_out,
+    use_ray=False,
+    run_sfm_later=False,
 ):
+    """
+    Parameters:
+    --------------
+    run_sfm_later:
+        if True: save keypoints and matches as later sfm wanted format
+        else: save keypoints and matches for you repo wanted format
+    """
 
     # Build dataset:
-    dataset = loftr_coarse_dataset(cfgs["data"], image_lists, covis_pairs_out)
+    dataset = LoftrCoarseDataset(cfgs["data"], image_lists, covis_pairs_out)
 
     # Construct directory
     base_dir = feature_out.rsplit("/", 1)[0]
@@ -62,7 +75,8 @@ def loftr_coarse_matching(
             ray.init(
                 num_cpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_cpus_per_worker"]),
                 num_gpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_gpus_per_worker"]),
-                local_mode=cfg_ray["local_mode"], ignore_reinit_error=True
+                local_mode=cfg_ray["local_mode"],
+                ignore_reinit_error=True,
             )
 
         # Matcher runner
@@ -152,7 +166,9 @@ def loftr_coarse_matching(
         # Combine keypoints
         n_imgs = len(dataset.img_dir)
         logger.info("Combine keypoints!")
-        all_kpts = Match2Kpts(matches, dataset.img_dir)
+        all_kpts = Match2Kpts(
+            matches, dataset.img_dir, name_split=cfgs["matcher"]["pair_name_split"]
+        )
         sub_kpts = chunks(all_kpts, math.ceil(n_imgs / 1))  # equal to only 1 worker
         obj_refs = [keypoint_worker(sub_kpt) for sub_kpt in sub_kpts]
         keypoints = dict(ChainMap(*obj_refs))
@@ -160,7 +176,11 @@ def loftr_coarse_matching(
         # Convert keypoints match to keypoints indexs
         logger.info("Update matches")
         obj_refs = [
-            update_matches(sub_matches, keypoints)
+            update_matches(
+                sub_matches,
+                keypoints,
+                pair_name_split=cfgs["matcher"]["pair_name_split"],
+            )
             for sub_matches in split_dict(matches, math.ceil(len(matches) / 1))
         ]
         updated_matches = dict(ChainMap(*obj_refs))
@@ -168,7 +188,7 @@ def loftr_coarse_matching(
         # Post process keypoints:
         keypoints = {
             k: v for k, v in keypoints.items() if isinstance(v, dict)
-        }  # assume filename in f'{xxx}_{yyy}' format
+        }
         logger.info("Post-processing keypoints...")
         kpts_scores = [
             transform_keypoints(sub_kpts)
@@ -177,29 +197,48 @@ def loftr_coarse_matching(
         final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
         final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
 
-    # Save keypoints:
-    with h5py.File(feature_out, "w") as feature_file:
-        for image_name, keypoints in tqdm(final_keypoints.items()):
-            grp = feature_file.create_group(image_name)
-            grp.create_dataset("keypoints", data=keypoints)
+    if not run_sfm_later:
+        # OnePose friendly format
+        # Save keypoints:
+        with h5py.File(feature_out, "w") as feature_file:
+            for image_name, keypoints in tqdm(final_keypoints.items()):
+                grp = feature_file.create_group(image_name)
+                grp.create_dataset("keypoints", data=keypoints)
 
-            # FIXME: change to real features in fine
-            # Fake features:
-            dim = 128
-            descriptors = np.zeros((dim, keypoints.shape[0]))
-            grp.create_dataset("descriptors", data=descriptors)
+                # FIXME: change to real features in fine
+                # Fake features:
+                dim = 128
+                descriptors = np.zeros((dim, keypoints.shape[0]))
+                grp.create_dataset("descriptors", data=descriptors)
 
-            # Fake scores:
-            scores = np.ones((keypoints.shape[0],))
-            grp.create_dataset("scores", data=scores)
+                # Fake scores:
+                scores = np.ones((keypoints.shape[0],))
+                grp.create_dataset("scores", data=scores)
 
-    # Save matches:
-    with h5py.File(matches_out, "w") as match_file:
-        for pair_name, matches in tqdm(updated_matches.items()):
-            name0, name1 = pair_name.split(cfgs["matcher"]["pair_name_split"])
-            pair = names_to_pair(name0, name1)
+        # Save matches:
+        with h5py.File(match_out, "w") as match_file:
+            for pair_name, matches in tqdm(updated_matches.items()):
+                name0, name1 = pair_name.split(cfgs["matcher"]["pair_name_split"])
+                pair = names_to_pair(name0, name1)
 
-            grp = match_file.create_group(pair)
-            grp.create_dataset("matches", data=matches)
+                grp = match_file.create_group(pair)
+                grp.create_dataset("matches", data=matches)
+    else:
+        # Reformat keypoints_dict and matches_dict
+        # from (abs_img_path0 abs_img_path1) -> (img_name0, img_name1)
+        keypoints_renamed = {}
+        for key, value in final_keypoints.items():
+            keypoints_renamed[osp.basename(key)] = value
+
+        matches_renamed = {}
+        for key, value in updated_matches.items():
+            name0, name1 = key.split(cfgs["matcher"]["pair_name_split"])
+            new_pair_name = cfgs["matcher"]["pair_name_split"].join(
+                [osp.basename(name0), osp.basename(name1)]
+            )
+            matches_renamed[new_pair_name] = value.T # 2*NI
+
+        save_h5(keypoints_renamed, feature_out)
+        save_h5(matches_renamed, match_out)
 
     return final_keypoints, updated_matches

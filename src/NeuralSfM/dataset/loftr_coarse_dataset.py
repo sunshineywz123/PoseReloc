@@ -4,12 +4,12 @@ import os.path as osp
 import torch
 
 from torch.utils.data import Dataset
-from src.datasets.utils import (
+from .utils import (
     read_grayscale,
 )
 
 
-class loftr_coarse_dataset(Dataset):
+class LoftrCoarseDataset(Dataset):
     """Build image Matching Challenge Dataset image pair (val & test)"""
 
     def __init__(
@@ -28,10 +28,13 @@ class loftr_coarse_dataset(Dataset):
         self.df = args['df']
         shuffle = args['shuffle']
 
-        # Load pairs: 
-        assert osp.exists(covis_pairs)
-        with open(covis_pairs, 'r') as f:
-            self.pair_list = f.read().rstrip('\n').split('\n')
+        if isinstance(covis_pairs, list):
+            self.pair_list = covis_pairs
+        else:
+            assert osp.exists(covis_pairs)
+            # Load pairs: 
+            with open(covis_pairs, 'r') as f:
+                self.pair_list = f.read().rstrip('\n').split('\n')
 
         if shuffle:
             random.shuffle(self.pair_list)

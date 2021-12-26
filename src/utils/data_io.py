@@ -10,7 +10,7 @@ def load_obj(name):
     with open(name, 'rb') as f:
         return pickle.load(f)
 
-def load_h5(file_path, transform_slash=False, parallel=False):
+def load_h5(file_path, transform_slash=True, parallel=False):
     """load the whole h5 file into memory (not memmaped)
     TODO: Loading data in parallel
     """
@@ -27,6 +27,7 @@ def save_h5(dict_to_save, filename, transform_slash=True):
         for key in dict_to_save:  # h5py doesn't allow '/' in object name (will leads to sub-group)
             f.create_dataset(key.replace('/', '+') if transform_slash else key,
                              data=dict_to_save[key])
+
 
 def load_calib(calib_fullpath_list, subset_index=None):
     """Load all IMC calibration files and create a dictionary."""

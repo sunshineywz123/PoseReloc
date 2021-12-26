@@ -5,13 +5,11 @@ import numpy as np
 from tqdm import tqdm
 
 from torch.utils.data import Dataset
-from src.datasets.utils import (
+from .utils import (
     read_grayscale,
 )
-from src.NeuralSfM.post_optimization.utils.eval_metric_utils import eval_colmap_results
-from src.NeuralSfM.post_optimization.utils.geometry_utils import get_pose_from_colmap_image
 
-from src.utils.colmap.read_write_model import (
+from ..colmap.read_write_model import (
     read_images_binary,
     read_cameras_binary,
     read_points3d_binary,
@@ -19,8 +17,10 @@ from src.utils.colmap.read_write_model import (
     rotmat2qvec,
     write_model,
 )
-from src.NeuralSfM.post_optimization.visualization.vis3d import vis_cameras_point_clouds
-from src.NeuralSfM.post_optimization.utils.geometry_utils import *
+from ..post_optimization.visualization.vis3d import vis_cameras_point_clouds
+from ..post_optimization.utils.geometry_utils import *
+from ..post_optimization.utils.eval_metric_utils import eval_colmap_results
+from ..post_optimization.utils.geometry_utils import get_pose_from_colmap_image
 
 
 class CoarseColmapDataset(Dataset):
@@ -30,16 +30,18 @@ class CoarseColmapDataset(Dataset):
         self,
         args,
         image_lists,
-        covis_pairs_pth,
+        covis_pairs,
         colmap_results_dir,  # before refine results
         save_dir,
+        pre_sfm=False,
         vis_path=None,
     ):
         """
         Parameters:
         ---------------
-        scene_dir: /path/to/imc/scene/set_100
-        subset_path: /path/to/imc/sub_set/image/name/sub_set.txt
+        image_lists: ['path/to/image/0.png', 'path/to/image/1.png]
+        covis_pairs: List or path
+        colmap_results_dir: The directory contains images.bin(.txt) point3D.bin(.txt)...
         """
         super().__init__()
         self.img_list = image_lists
@@ -54,9 +56,12 @@ class CoarseColmapDataset(Dataset):
         self.verbose = args['verbose'] # True
         self.state = True
 
-        # Load pairs: 
-        with open(covis_pairs_pth, 'r') as f:
-            self.pair_list = f.read().rstrip('\n').split('\n')
+        if isinstance(covis_pairs, list):
+            self.pair_list = covis_pairs
+        else:
+            # Load pairs: 
+            with open(covis_pairs, 'r') as f:
+                self.pair_list = f.read().rstrip('\n').split('\n')
 
         self.frame_ids = list(range(len(self.img_list)))
 
@@ -95,7 +100,7 @@ class CoarseColmapDataset(Dataset):
         (
             self.frameId2colmapID_dict,
             self.colmapID2frameID_dict,
-        ) = self.get_frameID2colmapID(self.frame_ids, self.img_list, self.colmap_images)
+        ) = self.get_frameID2colmapID(self.frame_ids, self.img_list, self.colmap_images, pre_sfm=pre_sfm)
 
         # Verification:
         if (
@@ -217,12 +222,14 @@ class CoarseColmapDataset(Dataset):
                 }
             )
 
-    def get_frameID2colmapID(self, frame_IDs, frame_names, colmap_images):
+    def get_frameID2colmapID(self, frame_IDs, frame_names, colmap_images, pre_sfm=False):
         # frame_id equal to frame_idx
         frameID2colmapID_dict = {}
         colmapID2frameID_dict = {}
         for frame_ID in frame_IDs:
             frame_name = frame_names[frame_ID]
+            frame_name = osp.basename(frame_name) if pre_sfm else frame_name
+
             for colmap_image in colmap_images.values():
                 if frame_name == colmap_image.name:
                     # Registrated scenario
