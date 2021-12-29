@@ -138,9 +138,9 @@ def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
     data_dirs = cfg.dataset.data_dir
 
-    if not isinstance(data_dirs, list):
+    if isinstance(data_dirs, str):
         # Parse object directory
-        assert isinstance(data_dirs, str)
+        # assert isinstance(data_dirs, str)
         num_seq = cfg.dataset.num_seq
         exception_obj_name_list  = cfg.dataset.exception_obj_names
         top_k_obj = cfg.dataset.top_k_obj

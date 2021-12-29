@@ -87,6 +87,10 @@ def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
         image = augmentor(image)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
+    if image is None:
+        logger.error(f"Problem exists when loading image: {path}")
+    
+    # import ipdb; ipdb.set_trace()
     w, h = image.shape[1], image.shape[0]
     w_new, h_new = process_resize(w, h, resize, df) if resize is not None else (w, h)
     scales = torch.tensor([float(h) / float(h_new), float(w) / float(w_new)]) # [2]

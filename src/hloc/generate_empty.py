@@ -61,6 +61,9 @@ def import_data(img_lists, do_ba=False):
             pose_dir = osp.join(base_dir, 'poses')
         else:
             pose_dir = osp.join(base_dir, 'poses_ba')
+            if not osp.exists(pose_dir):
+                pose_dir = osp.join(base_dir, 'poses')
+
         _, tvec, qvec = get_pose_from_txt(img_index, pose_dir)
 
         # read intrinsic

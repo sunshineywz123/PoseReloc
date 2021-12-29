@@ -31,12 +31,13 @@ cfgs = {
             "conf_thr": 0.99999,
         },
     },
-    "coarse_match_debug": True,
+    "coarse_match_debug": False,
     "ray": {
         "slurm": False,
         "n_workers": 4,
-        "n_cpus_per_worker": 1,
+        # "n_cpus_per_worker": 1,
         "n_gpus_per_worker": 0.25,
+        "n_gpus_per_worker": 1,
         "local_mode": False,
     },
 }

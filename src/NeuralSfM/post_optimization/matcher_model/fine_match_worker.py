@@ -171,5 +171,6 @@ def matchWorker(dataset, subset_ids, detector, matcher, extract_feature_method=N
     return results_dict
 
 @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+# @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
 def matchWorker_ray_wrapper(*args, **kwargs):
     return matchWorker(*args, **kwargs)

@@ -162,6 +162,7 @@ def match_worker(dataset, subset_ids, args, pba=None):
     return matches
 
 @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+# @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
 def match_worker_ray_wrapper(dataset, subset_ids, args, pba: ActorHandle):
     return match_worker(dataset, subset_ids, args, pba)
 

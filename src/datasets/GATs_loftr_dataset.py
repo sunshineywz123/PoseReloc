@@ -1,4 +1,5 @@
 import cv2
+from loguru import logger
 
 try:
     import ujson as json
@@ -21,7 +22,7 @@ class GATsLoFTRDataset(Dataset):
         num_leaf,
         pad=True,
         img_pad=False,
-        img_resize=640,
+        img_resize=512,
         coarse_scale=1 / 8,
         df=8,
         shape2d=2000,
@@ -44,7 +45,7 @@ class GATsLoFTRDataset(Dataset):
         self.df = df
         self.coarse_scale = coarse_scale
 
-    def read_anno2d(self, anno2d_file, height, width, pad=True):
+    def read_anno2d(self, anno2d_file):
         """ Read (and pad) 2d info"""
         with open(anno2d_file, "r") as f:
             data = json.load(f)
@@ -56,10 +57,10 @@ class GATsLoFTRDataset(Dataset):
 
         num_2d_orig = keypoints2d.shape[0]
 
-        if pad:
-            keypoints2d, descriptors2d, scores2d = data_utils.pad_keypoints2d_random(
-                keypoints2d, descriptors2d, scores2d, height, width, self.shape2d
-            )
+        # if pad:
+        #     keypoints2d, descriptors2d, scores2d = data_utils.pad_keypoints2d_random(
+        #         keypoints2d, descriptors2d, scores2d, height, width, self.shape2d
+        #     )
         return keypoints2d, descriptors2d, scores2d, assign_matrix, num_2d_orig
 
     def read_anno3d(self, avg_anno3d_file, clt_anno3d_file, idxs_file, pad=True):
@@ -97,6 +98,39 @@ class GATsLoFTRDataset(Dataset):
             clt_scores,
             num_3d_orig,
         )
+    
+    def reshape_assignmatrix(self, keypoints2D, assign_matrix, pad=True):
+        """ Reshape assign matrix (from 2xk to nxm)"""
+        assign_matrix = assign_matrix.long()
+        
+        if pad:
+            conf_matrix = torch.zeros(self.shape3d, self.n_query_coarse_grid, dtype=torch.int16) 
+            
+            # Padding
+            valid = (assign_matrix[1] < self.shape3d)
+            assign_matrix = assign_matrix[:, valid] # [n_pointcloud, n_coarse_grid]
+
+            # Get grid coordinate for query image
+            keypoints_idx = assign_matrix[0]
+            keypoints2D_selected = keypoints2D[keypoints_idx]
+            keypoints2D_selected_rescaled = keypoints2D_selected / self.query_img_scale[[1, 0]] * self.coarse_scale
+            keypoints2D_selected_rescaled = keypoints2D_selected_rescaled.round()
+            unique, counts = np.unique(keypoints2D_selected_rescaled, return_counts=True, axis=0)
+            if unique.shape[0] != keypoints2D_selected_rescaled.shape[0]:
+                logger.warning('Keypoints duplicate! Problem exists')
+            # FIXME: duplicate coarse query keypoints here!
+            # TODO: save coarse grid keypoints instead of fine
+
+            j_ids = keypoints2D_selected_rescaled[:,0] * self.w_c + keypoints2D_selected_rescaled[:, 1]
+            j_ids = j_ids.long()
+
+            conf_matrix[assign_matrix[1], j_ids] = 1
+            # conf_matrix[orig_shape2d:] = -1
+            # conf_matrix[:, orig_shape3d:] = -1
+        else:
+            raise NotImplementedError
+        
+        return conf_matrix
 
     def read_anno(self, img_id):
         """
@@ -116,8 +150,15 @@ class GATsLoFTRDataset(Dataset):
             df=self.df,
         )
 
-        height = query_img.shape[1] * query_img_scale[0]
-        width = query_img.shape[2] * query_img_scale[1]
+        self.h_origin = query_img.shape[1] * query_img_scale[0]
+        self.w_origin = query_img.shape[2] * query_img_scale[1]
+        self.query_img_scale = query_img_scale
+        self.h_i = query_img.shape[1]
+        self.w_i = query_img.shape[2]
+        self.h_c = int(self.h_i * self.coarse_scale)
+        self.w_c = int(self.w_i * self.coarse_scale)
+        
+        self.n_query_coarse_grid = int(self.h_c * self.w_c)
 
         idxs_file = anno["idxs_file"]
         avg_anno3d_file = anno["avg_anno3d_file"]
@@ -139,24 +180,16 @@ class GATsLoFTRDataset(Dataset):
             scores2d,
             assign_matrix,
             num_2d_orig,
-        ) = self.read_anno2d(anno2d_file, height, width, pad=self.pad)
+        ) = self.read_anno2d(anno2d_file)
 
-        conf_matrix = data_utils.reshape_assign_matrix(
-            assign_matrix,
-            num_2d_orig,
-            num_3d_orig,
-            self.shape2d,
-            self.shape3d,
-            pad=True,
-        )
-        conf_matrix = conf_matrix
+        conf_matrix = self.reshape_assignmatrix(keypoints2d, assign_matrix, pad=self.pad)
 
         data = {
             "keypoints3d": keypoints3d,  # [n2, 3]
             "descriptors3d_db": avg_descriptors3d,  # [dim, n2]
             "descriptors2d_db": clt_descriptors2d,  # [dim, n2 * num_leaf]
-            "scores3d_db": avg_scores3d, # [n2, 1]
-            "scores2d_db": clt_descriptors2d, # [n2 * num_leaf, 1]
+            "scores3d_db": avg_scores3d.squeeze(1), # [n2]
+            "scores2d_db": clt_descriptors2d.squeeze(1), # [n2 * num_leaf]
 
             # TODO: remove
             # "keypoints2d_query": keypoints2d,  # [n1, 2] query image
@@ -167,7 +200,7 @@ class GATsLoFTRDataset(Dataset):
             "query_image_scale": query_img_scale, # [2]
 
             # GT
-            "conf_matrix": conf_matrix
+            "conf_matrix_gt": conf_matrix # [n_point_cloud, n_query_coarse_grid]
         }
         if query_img_mask is not None:
             data.update({"query_image_mask": query_img_mask}) # [h*w]

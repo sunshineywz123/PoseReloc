@@ -1,6 +1,7 @@
 import copy
 import torch
 import torch.nn as nn
+from torch.nn.modules import module
 
 from .GATs import GraphAttentionLayer
 from .linear_attention import LinearAttention, FullAttention
@@ -87,8 +88,20 @@ class LocalFeatureTransformer(nn.Module):
             assert config['redraw_interval'] % 2 == 0, 'redraw_interval must be divisible by 2 since each attetnion layer is repeatedly called twice.'
 
         encoder_layer = build_encoder_layer(config)
-        graphAttention_layer = GraphAttentionLayer(config['d_model'], config['d_model'], config['GATs_dropout'], config['GATs_alpha'])
+        graphAttention_layer = GraphAttentionLayer(config['d_db_feat'], config['d_db_feat'], config['GATs_dropout'], config['GATs_alpha'])
         self.layers = nn.ModuleList([copy.deepcopy(graphAttention_layer if i % 3 == 0 else encoder_layer) for i in range(len(self.layer_names))])
+
+        # module_list = []
+        # for i in range(len(self.layer_names)):
+        #     if i % 3 == 0:
+        #         if i == 0:
+        #             # Need to map input db feature dim to model feature dim
+        #             module_list.append(GraphAttentionLayer(config['d_db_feat'], config['d_model'], config['GATs_dropout'], config['GATs_alpha'], final_proj=True))
+        #         else:
+        #             module_list.append(GraphAttentionLayer(config['d_model'], config['d_model'], config['GATs_dropout'], config['GATs_alpha'], final_proj=False))
+        #     else:
+        #         module_list.append(encoder_layer)
+        # self.layers = nn.ModuleList(module_list)
 
         if config['final_proj']:
             self.final_proj = nn.Linear(config['d_model'], config['d_model'], bias=True)
@@ -113,20 +126,23 @@ class LocalFeatureTransformer(nn.Module):
         num_2d_query = desc2d_db.shape[-1] # [b, dim, n1]
         adj_matrix = self.buildAdjMatrix(num_2d_query, num_3d_db)
 
-        for layer, name in zip(self.layers, self.names):
+        desc3d_db = torch.einsum('bdn->bnd', desc3d_db) # [N, L, C]
+        desc2d_db = torch.einsum('bdn->bnd', desc2d_db) # [N, M, C]
+
+        for i, (layer, name) in enumerate(zip(self.layers, self.layer_names)):
             if name == 'GATs':
-                desc2d_db_ = torch.einsum('bdn->bnd', desc2d_db)
-                desc3d_db_ = torch.einsum('bdn->bnd', desc3d_db)
-                desc3d_db_ = layer(desc2d_db_, desc3d_db_, adj_matrix)
+                desc3d_db_ = layer(desc2d_db, desc3d_db, adj_matrix)
                 # desc3d_db = torch.einsum('bnd->bdn', desc3d_db_) # [N, C, L]
                 desc3d_db = desc3d_db_ # [N, L, C]
+            elif name == 'self':
+                src0, src1 = desc2d_query, desc3d_db
+                desc2d_query, desc3d_db = layer(desc2d_query, src0, query_mask, query_mask), layer(desc3d_db, src1)
             elif name == 'cross':
                 # FIXME: Check problem here!
                 src0, src1 = desc3d_db, desc2d_query # [N, L, C], [N, P, C]
                 desc2d_query, desc3d_db = layer(desc2d_query, src0, x_mask=query_mask), layer(desc3d_db, src1, source_mask=query_mask)
-            elif name == 'self':
-                src0, src1 = desc2d_query, desc3d_db
-                desc2d_query, desc3d_db = layer(desc2d_query, src0, query_mask, query_mask), layer(desc3d_db, src1)
+            else:
+                raise NotImplementedError
         
         return desc3d_db, desc2d_query
 

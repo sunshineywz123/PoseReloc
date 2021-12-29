@@ -27,7 +27,7 @@ cfgs = {
         # "feature_track_assignment_strategy": "balance",
         "verbose": True,
     },
-    "fine_match_debug": True,
+    "fine_match_debug": False,
     "fine_matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
@@ -43,6 +43,7 @@ cfgs = {
             "n_workers": 4,
             "n_cpus_per_worker": 1,
             "n_gpus_per_worker": 0.25,
+            # "n_gpus_per_worker": 1,
             "local_mode": False,
         },
     },

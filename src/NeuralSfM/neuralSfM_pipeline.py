@@ -8,7 +8,7 @@ from .post_optimization.post_optimization import post_optimization
 
 
 def neuralSfM(
-    img_lists, img_pairs, work_dir, enable_post_optimization=True, use_ray=False
+    img_lists, img_pairs, work_dir, colmap_configs=None, enable_post_optimization=True, use_ray=False
 ):
     """
                                     work_dir
@@ -43,6 +43,7 @@ def neuralSfM(
         feature_out=feature_out,
         match_out=matche_out,
         colmap_coarse_dir=colmap_coarse_dir,
+        colmap_configs=colmap_configs
     )
 
     # Post Optimization

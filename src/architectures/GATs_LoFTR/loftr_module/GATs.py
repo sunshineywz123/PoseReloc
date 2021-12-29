@@ -19,6 +19,11 @@ class GraphAttentionLayer(nn.Module):
         nn.init.xavier_normal_(self.a.data, gain=1.414)
 
         self.leakyrelu = nn.LeakyReLU(self.alpha)
+
+        # if final_proj:
+        #     self.final_proj = nn.Linear(in_features, out_features, bias=True)
+        # else:
+        #     self.final_proj = None
     
     def forward(self, h_2d, h_3d, adj):
         b, n1, dim = h_3d.shape
@@ -38,10 +43,11 @@ class GraphAttentionLayer(nn.Module):
         # wh_2d = torch.reshape(wh_2d, (b, n1, num_leaf, dim))
         # h_prime = torch.einsum('bncd,bncq->bnq', attention, wh_2d)
 
-        if self.concat:
-            return F.elu(h_prime)
-        else:
-            return h_prime
+        h_prime = F.elu(h_prime) if self.concat else h_prime # [B,N,C]
+
+        # h_prime = self.final_proj(h_prime) if self.final_proj is not None else h_prime
+
+        return h_prime
     
     def _prepare_attentional_mechanism_input(self, wh_2d, wh_3d, num_leaf):
         b, n1, dim = wh_3d.shape

@@ -19,7 +19,7 @@ from .backbone import (
 from .utils.normalize import normalize_2d_keypoints, normalize_3d_keypoints
 from .loftr_module import LocalFeatureTransformer
 from .utils.position_encoding import PositionEncodingSine, KeypointEncoding
-# from .utils.coarse_matching import CoarseMatching
+from .utils.coarse_matching import CoarseMatching
 # from .utils.fine_matching import FineMatching
 # from .utils.selective_kernel import build_ssk_merge
 # from .utils.guided_matching_fine import build_guided_matching
@@ -54,11 +54,10 @@ class GATs_LoFTR(nn.Module):
 
         self.loftr_coarse = LocalFeatureTransformer(self.config["loftr_coarse"])
 
-        # self.coarse_matching = CoarseMatching(
-        #     self.config["loftr_match_coarse"],
-        #     self.config["loftr_match_fine"]["detector"],
-        #     profiler=self.profiler,
-        # )
+        self.coarse_matching = CoarseMatching(
+            self.config["coarse_matching"],
+            profiler=self.profiler,
+        )
 
         # self.fine_preprocess = FinePreprocess(
         #     self.config["loftr_fine"],
@@ -83,8 +82,7 @@ class GATs_LoFTR(nn.Module):
 
         # self.pose_depth_refinement = PoseDepthRefinement(config['loftr_sfm'])
 
-        # FIXME: Change to backbone
-        # fixed pretrained coarse weights
+        # # fixed pretrained coarse weights
         # self.loftr_coarse_pretrained = self.config["loftr_coarse"]["pretrained"]
         # if self.loftr_coarse_pretrained is not None:
         #     ckpt = torch.load(self.loftr_coarse_pretrained, "cpu")["state_dict"]
@@ -100,6 +98,19 @@ class GATs_LoFTR(nn.Module):
         #     self.loftr_coarse.load_state_dict(ckpt)
         #     for param in self.loftr_coarse.parameters():
         #         param.requires_grad = False
+        
+        self.loftr_backbone_pretrained = self.config['loftr_backbone']['pretrained']
+        if self.loftr_backbone_pretrained is not None:
+            logger.info(f'Load pretrained backbone from {self.loftr_backbone_pretrained}')
+            ckpt = torch.load(self.loftr_backbone_pretrained, "cpu")["state_dict"]
+            for k in list(ckpt.keys()):
+                if 'backbone' in k:
+                    newk = k[k.find("backbone") + len("backbone") + 1 :]
+                    ckpt[newk] = ckpt[k]
+                ckpt.pop(k)
+            self.backbone.load_state_dict(ckpt)
+            for param in self.backbone.parameters():
+                param.requires_grad = False
 
         # # Disable grads when use gt mode (for convenience, inference without backprop, but better to disable)
         # if self.config["loftr_match_coarse"]["_gt"]:
@@ -129,9 +140,8 @@ class GATs_LoFTR(nn.Module):
                 query_image_mask(optional): (N, H, W)
             }
         """
-        # TODO: this should be removed in the future @zehong
-        # if self.loftr_coarse_pretrained:
-        #     self.loftr_coarse.eval()
+        if self.loftr_backbone_pretrained:
+            self.backbone.eval()
 
         # 1. local feature backbone
         with self.profiler.record_function("LoFTR/backbone"):
@@ -159,6 +169,12 @@ class GATs_LoFTR(nn.Module):
                     "q_hw_f": query_feat_f.shape[2:],
                 }
             )
+        
+        if self.config['use_fine_backbone_as_coarse']:
+            # Down sample fine feature
+            query_feat_b_c = F.interpolate(query_feat_f, size=query_feat_b_c.shape[2:], mode=self.config['interpol_type'])
+        else:
+            raise NotImplementedError
 
         kpts3d = normalize_3d_keypoints(data['keypoints3d'])
 
@@ -170,7 +186,7 @@ class GATs_LoFTR(nn.Module):
             )
 
             desc3d_db = self.kpt_3d_pos_encoding(kpts3d, data['scores3d_db'],data['descriptors3d_db'])
-            desc2d_db = data['descriptor2d_db']
+            desc2d_db = data['descriptors2d_db']
 
             # handle padding mask, for MegaDepth dataset
             query_mask = None
@@ -181,34 +197,15 @@ class GATs_LoFTR(nn.Module):
             # logger.info('Profiling LoFTR model...')
             # torch_speed_test(self.loftr_coarse, [feat_c0, feat_c1, mask_c0, mask_c1], model_name='loftr_coarse')
 
-        with self.profiler.record_function("LoFTR/ssk-merge"):
-            pass
-            # TODO: concat along batch-dim if possible
-            # TODO: Remove
-            # feat_c0 = rearrange(feat_c0, 'n (h w) c -> n c h w', h=data['hw0_c'][0], w=data['hw0_c'][1])
-            # feat_c1 = rearrange(feat_c1, 'n (h w) c -> n c h w', h=data['hw1_c'][0], w=data['hw1_c'][1])
-            # feat_c0 = self.coarse_ssk_merge(feat_b_c0, feat_c0)
-            # feat_c1 = self.coarse_ssk_merge(feat_b_c1, feat_c1)
-            # feat_c0, feat_c1 = map(lambda x: rearrange(x, 'n c h w -> n (h w) c'), [feat_c0, feat_c1])
-
-        # with self.profiler.record_function("LoFTR/coarse-prior"):
-        #     # option1: convolution (3x3-3x3-1x1-1x1) with detached loftr feature
-        #     self.coarse_prior(feat_c0, feat_c1, data)
-
-        # TODO: estimate dustin prototypes separately with feat_c0 & feat_c1 (AvgPool + MLP)
-        # with self.profiler.record_function("LoFTR/coarse-prototype"):
-        #     self.coarse_prototype(feat_c0, feat_c1, data)
-
         # 3. match coarse-level
-        # FIXME: not finish yet !
         with self.profiler.record_function("LoFTR/coarse-matching"):
             self.coarse_matching(
-                feat_c0, feat_c1, data, mask_c0=mask_c0, mask_c1=mask_c1
+                desc3d_db, query_feat_c, data, mask_query=query_mask
             )
 
-        if not self.config["loftr_match_fine"]["enable"]:
+        if not self.config["loftr_fine"]["enable"]:
             data.update(
-                {"mkpts0_f": data["mkpts0_c"], "mkpts1_f": data["mkpts1_c"],}
+                {"mkpts_3d_db": data["mkpts_3d_db"], "mkpts_query_f": data["mkpts_query_c"],}
             )
             return
 

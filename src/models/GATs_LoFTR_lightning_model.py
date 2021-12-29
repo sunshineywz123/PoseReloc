@@ -31,20 +31,24 @@ class PL_GATsLoFTR(pl.LightningModule):
         self.matcher(batch)
         
         self.loss(batch)
-        pass
+        
+        return {'loss': batch['loss']}
 
     def validation_step(self, batch, batch_idx):
-        self.val_loss_hist.append(self.trainer.callback_metrics['val/loss'])
-        self.log('val/loss_best', min(self.val_loss_hist), prog_bar=False)
+        # self.val_loss_hist.append(self.trainer.callback_metrics['val/loss'])
+        # self.log('val/loss_best', min(self.val_loss_hist), prog_bar=False)
+        pass
 
     def training_epoch_end(self, outputs):
-        self.save_flag = True
-        self.train_loss_hist.append(self.trainer.callback_metrics['train/loss'])
-        self.log('train/loss_best', min(self.train_loss_hist), prog_bar=False)
+        # self.save_flag = True
+        # self.train_loss_hist.append(self.trainer.callback_metrics['train/loss'])
+        # self.log('train/loss_best', min(self.train_loss_hist), prog_bar=False)
+        pass
 
     def validation_epoch_end(self, outputs):
-        self.val_loss_hist.append(self.trainer.callback_metrics['val/loss'])
-        self.log('val/loss_best', min(self.val_loss_hist), prog_bar=False)
+        pass
+        # self.val_loss_hist.append(self.trainer.callback_metrics['val/loss'])
+        # self.log('val/loss_best', min(self.val_loss_hist), prog_bar=False)
     
     def configure_optimizers(self):
         optimizer = build_optimizer(self, self.hparams)
