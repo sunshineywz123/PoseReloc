@@ -109,11 +109,13 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +experiment=train_GATs_loftr
-    - task_name=loftr_train
+    - +preprocess=sfm_loftr_coarse_fine
+    - use_local_ray=True
+    - use_global_ray=True
+    - ray.n_workers=3
   job:
-    name: train
-    override_dirname: +experiment=train_GATs_loftr,task_name=loftr_train
+    name: run
+    override_dirname: +preprocess=sfm_loftr_coarse_fine,ray.n_workers=3,use_global_ray=True,use_local_ray=True
     id: ???
     num: ???
     config_name: config.yaml
@@ -138,12 +140,12 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      experiment: train_GATs_loftr
+      preprocess: sfm_loftr_coarse_fine
       logger: null
-      callbacks: null
-      datamodule: null
-      model: null
-      trainer: null
+      callbacks: default_callbacks.yaml
+      datamodule: mnist_datamodule.yaml
+      model: mnist_model.yaml
+      trainer: default_trainer.yaml
       hydra/env: default
       hydra/callbacks: null
       hydra/job_logging: default

@@ -209,45 +209,6 @@ class GATs_LoFTR(nn.Module):
             )
             return
 
-
-        # Only fine with coarse provided
-        # Convert coarse match to b_ids, i_ids, j_ids
-        # NOTE: only allow bs == 1
-        b_ids = torch.zeros(
-            (data["mkpts0_c"].shape[0],), device=data["mkpts0_c"].device
-        ).long()
-
-        scale = data["hw0_i"][0] / data["hw0_c"][0]
-        scale0 = (
-            scale * data["scale0"][b_ids][:, [1, 0]] if "scale0" in data else scale
-        )
-        scale1 = (
-            scale * data["scale1"][b_ids][:, [1, 0]] if "scale1" in data else scale
-        )
-
-        mkpts0_coarse_scaled = torch.round(data["mkpts0_c"] / scale0)
-        mkpts1_coarse_scaled = torch.round(data["mkpts1_c"] / scale1)
-        i_ids = (
-            mkpts0_coarse_scaled[:, 1] * data["hw0_c"][1]
-            + mkpts0_coarse_scaled[:, 0]
-        ).long()
-        j_ids = (
-            mkpts1_coarse_scaled[:, 1] * data["hw1_c"][1]
-            + mkpts1_coarse_scaled[:, 0]
-        ).long()
-
-        # # Debug
-        # mkpts0_c = torch.stack([i_ids % data['hw0_c'][1], i_ids // data['hw0_c'][1]], dim=1) * scale0
-        # mkpts1_c = torch.stack([j_ids % data['hw1_c'][1], j_ids // data['hw1_c'][1]], dim=1) * scale1
-        # print(torch.mean(mkpts0_c - data['mkpts0_c']))
-        # print(torch.mean(mkpts1_c - data['mkpts1_c']))
-
-        feat_c0, feat_c1 = None, None
-
-        data.update(
-            {"m_bids": b_ids, "b_ids": b_ids, "i_ids": i_ids, "j_ids": j_ids}
-        )
-
         # 4. fine-level refinement
         with self.profiler.record_function("LoFTR/fine-refinement"):
             feat_f0_unfold, feat_f1_unfold = self.fine_preprocess(

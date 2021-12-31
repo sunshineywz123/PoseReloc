@@ -1,3 +1,4 @@
+from copy import deepcopy
 import json
 import os
 import os.path as osp
@@ -67,7 +68,7 @@ def merge_anno(cfg):
     anno_dirs = []
     names = cfg.names
 
-    if not isinstance(names, list):
+    if isinstance(names, str):
         # Parse object directory
         assert isinstance(names, str)
         exception_obj_name_list  = cfg.exception_obj_names
@@ -195,7 +196,7 @@ def sfm_worker(data_dirs, cfg, pba=None):
         img_lists = []
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
-            img_lists += glob.glob(str(Path(seq_dir)) + "/color/*.png", recursive=True)
+            img_lists += glob.glob(str(Path(seq_dir)) + "/color_crop/*.png", recursive=True)
 
         # ------------------ downsample ------------------
         down_img_lists = []
@@ -459,11 +460,18 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_names)
         out_file = osp.join(outputs_dir, "box_filter.ply")
         o3d.io.write_point_cloud(out_file, pcd)
 
-    # FIXME: no param detector and debug
+    # Save loftr coarse keypoints:
+    cfg_dup = deepcopy(cfg)
+    cfg_dup.network.detection = 'loftr_coarse'
+    feature_coarse_path = osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]
+    # FIXME: bug here!
     feature_process.get_kpt_ann(
-        cfg, img_lists, feature_out, outputs_dir, merge_idxs, merge_xyzs
+        cfg_dup, img_lists, feature_coarse_path, outputs_dir, merge_idxs, merge_xyzs, save_feature_for_each_image=False
     )
 
+    feature_process.get_kpt_ann(
+        cfg, img_lists, feature_out, outputs_dir, merge_idxs, merge_xyzs, save_feature_for_each_image=False
+    )
 
 @hydra.main(config_path="configs/", config_name="config.yaml")
 def main(cfg: DictConfig):

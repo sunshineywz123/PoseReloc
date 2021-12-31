@@ -1,15 +1,17 @@
 import numpy as np
 import os.path as osp
-from src.NeuralSfM.post_optimization.utils.geometry_utils import *
 from tqdm import tqdm
+from copy import deepcopy
 from loguru import logger
+from src.NeuralSfM.post_optimization.utils.geometry_utils import *
 from .utils.io_utils import feature_load, feature_save
 
 
 def feature_aggregation_and_update(colmap_image_dataset, fine_match_results_dict, feature_out_pth, image_lists, aggregation_method='avg'):
     # Update feature file
     feature_coarse_path = osp.splitext(feature_out_pth)[0] + '_coarse' + osp.splitext(feature_out_pth)[1]
-    feature_dict = feature_load(feature_coarse_path, image_lists)
+    feature_dict_coarse = feature_load(feature_coarse_path, image_lists)
+    feature_dict_fine = deepcopy(feature_dict_coarse) # Store fine keypoints
 
     colmap_image_dataset = colmap_image_dataset
     colmap_3ds = colmap_image_dataset.colmap_3ds
@@ -60,20 +62,31 @@ def feature_aggregation_and_update(colmap_image_dataset, fine_match_results_dict
                 reight_img_name = colmap_images[int(reight_colmap_id)].name
 
                 # Reference feature dim check
-                if feature_dict[reight_img_name]["descriptors"].shape[0] != feat_dim:
-                    num_kpts = feature_dict[reight_img_name]["keypoints"].shape[0]
-                    feature_dict[reight_img_name]["descriptors"] = np.zeros(
+                if feature_dict_coarse[reight_img_name]["descriptors"].shape[0] != feat_dim:
+                    num_kpts = feature_dict_coarse[reight_img_name]["keypoints"].shape[0]
+                    feature_dict_coarse[reight_img_name]["descriptors"] = np.zeros(
+                        (feat_dim, num_kpts)
+                    )
+                if feature_dict_fine[reight_img_name]["descriptors"].shape[0] != feat_dim:
+                    num_kpts = feature_dict_fine[reight_img_name]["keypoints"].shape[0]
+                    feature_dict_fine[reight_img_name]["descriptors"] = np.zeros(
                         (feat_dim, num_kpts)
                     )
 
                 # Update reference feature and keypoints
-                feature_dict[reight_img_name]["descriptors"][:, ref_kpt_idx] = feature1
-                feature_dict[reight_img_name]["keypoints"][ref_kpt_idx, :] = keypoints1
+                # NOTE: save fine fine feature to coarse feature dict temporary
+                feature_dict_coarse[reight_img_name]["descriptors"][:, ref_kpt_idx] = feature1
+
+                feature_dict_fine[reight_img_name]["descriptors"][:, ref_kpt_idx] = feature1
+                feature_dict_fine[reight_img_name]["keypoints"][ref_kpt_idx, :] = keypoints1
 
         # Update query feature (the root of query tree)
-        if feature_dict[left_img_name]["descriptors"].shape[0] != feat_dim:
-            num_kpts = feature_dict[left_img_name]["keypoints"].shape[0]
-            feature_dict[left_img_name]["descriptors"] = np.zeros((feat_dim, num_kpts))
+        if feature_dict_coarse[left_img_name]["descriptors"].shape[0] != feat_dim:
+            num_kpts = feature_dict_coarse[left_img_name]["keypoints"].shape[0]
+            feature_dict_coarse[left_img_name]["descriptors"] = np.zeros((feat_dim, num_kpts))
+        if feature_dict_fine[left_img_name]["descriptors"].shape[0] != feat_dim:
+            num_kpts = feature_dict_fine[left_img_name]["keypoints"].shape[0]
+            feature_dict_fine[left_img_name]["descriptors"] = np.zeros((feat_dim, num_kpts))
         
         query_features = np.stack(query_features, axis=0) # N*dim
         query_keypoints = np.stack(query_keypoints, axis=0) # N*2
@@ -85,10 +98,14 @@ def feature_aggregation_and_update(colmap_image_dataset, fine_match_results_dict
         query_keypoints = np.mean(query_keypoints, axis=0, keepdims=False) # [2]
 
         # Update query feature
-        feature_dict[left_img_name]["descriptors"][:, query_kpt_idx] = query_features_agged
-        feature_dict[left_img_name]["keypoints"][query_kpt_idx, :] = query_keypoints
+        feature_dict_coarse[left_img_name]["descriptors"][:, query_kpt_idx] = query_features_agged
+
+        feature_dict_fine[left_img_name]["descriptors"][:, query_kpt_idx] = query_features_agged
+        feature_dict_fine[left_img_name]["keypoints"][query_kpt_idx, :] = query_keypoints
 
     # Save results (overwrite previous)
     # feature_save_name = '_'.join([osp.splitext(feature_out_pth)[0], aggregation_method, osp.splitext(feature_out_pth)[1]])
-    feature_save_name = feature_out_pth
-    feature_save(feature_dict, feature_save_name)
+    feature_coarse_save_pth = osp.splitext(feature_out_pth)[0] + '_coarse' + osp.splitext(feature_out_pth)[1]
+    feature_fine_save_pth = feature_out_pth
+    feature_save(feature_dict_coarse, feature_coarse_save_pth)
+    feature_save(feature_dict_fine, feature_fine_save_pth)

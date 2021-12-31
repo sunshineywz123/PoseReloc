@@ -1,3 +1,4 @@
+import math
 import cv2
 from loguru import logger
 
@@ -27,12 +28,17 @@ class GATsLoFTRDataset(Dataset):
         df=8,
         shape2d=2000,
         shape3d=10000,
+        percent=1.0,
+        load_pose_gt=False,
     ):
         super(Dataset, self).__init__()
 
         self.coco = COCO(anno_file)
         self.anns = np.array(self.coco.getImgIds())
+        logger.info(f"Use {percent * 100}% data")
+        self.anns = self.anns[: math.floor(len(self.anns) * percent)]
         self.num_leaf = num_leaf
+        self.load_pose_gt = load_pose_gt
 
         # 3D point cloud part
         self.pad = pad
@@ -51,7 +57,6 @@ class GATsLoFTRDataset(Dataset):
             data = json.load(f)
 
         keypoints2d = torch.Tensor(data["keypoints2d"])  # [n, 2]
-        descriptors2d = torch.Tensor(data["descriptors2d"])  # [dim, n]
         scores2d = torch.Tensor(data["scores2d"])  # [n, 1]
         assign_matrix = torch.Tensor(data["assign_matrix"])  # [2, k]
 
@@ -61,7 +66,7 @@ class GATsLoFTRDataset(Dataset):
         #     keypoints2d, descriptors2d, scores2d = data_utils.pad_keypoints2d_random(
         #         keypoints2d, descriptors2d, scores2d, height, width, self.shape2d
         #     )
-        return keypoints2d, descriptors2d, scores2d, assign_matrix, num_2d_orig
+        return keypoints2d, scores2d, assign_matrix, num_2d_orig
 
     def read_anno3d(self, avg_anno3d_file, clt_anno3d_file, idxs_file, pad=True):
         """ Read(and pad) 3d info"""
@@ -98,30 +103,47 @@ class GATsLoFTRDataset(Dataset):
             clt_scores,
             num_3d_orig,
         )
-    
-    def reshape_assignmatrix(self, keypoints2D, assign_matrix, pad=True):
+
+    def reshape_assignmatrix(
+        self, keypoints2D_coarse, keypoints2D_fine, assign_matrix, pad=True
+    ):
         """ Reshape assign matrix (from 2xk to nxm)"""
         assign_matrix = assign_matrix.long()
-        
+
         if pad:
-            conf_matrix = torch.zeros(self.shape3d, self.n_query_coarse_grid, dtype=torch.int16) 
-            
+            conf_matrix = torch.zeros(
+                self.shape3d, self.n_query_coarse_grid, dtype=torch.int16
+            )
+
             # Padding
-            valid = (assign_matrix[1] < self.shape3d)
-            assign_matrix = assign_matrix[:, valid] # [n_pointcloud, n_coarse_grid]
+            valid = assign_matrix[1] < self.shape3d
+            assign_matrix = assign_matrix[:, valid]  # [n_pointcloud, n_coarse_grid]
 
             # Get grid coordinate for query image
             keypoints_idx = assign_matrix[0]
-            keypoints2D_selected = keypoints2D[keypoints_idx]
-            keypoints2D_selected_rescaled = keypoints2D_selected / self.query_img_scale[[1, 0]] * self.coarse_scale
-            keypoints2D_selected_rescaled = keypoints2D_selected_rescaled.round()
-            unique, counts = np.unique(keypoints2D_selected_rescaled, return_counts=True, axis=0)
-            if unique.shape[0] != keypoints2D_selected_rescaled.shape[0]:
-                logger.warning('Keypoints duplicate! Problem exists')
-            # FIXME: duplicate coarse query keypoints here!
-            # TODO: save coarse grid keypoints instead of fine
+            keypoints2D_coarse_selected = keypoints2D_coarse[keypoints_idx]
 
-            j_ids = keypoints2D_selected_rescaled[:,0] * self.w_c + keypoints2D_selected_rescaled[:, 1]
+            keypoints2D_fine_selected = keypoints2D_fine[keypoints_idx]
+
+            # Get j_id of coarse keypoints in grid
+            keypoints2D_coarse_selected_rescaled = (
+                keypoints2D_coarse_selected
+                / self.query_img_scale[[1, 0]]
+                * self.coarse_scale
+            )
+            keypoints2D_coarse_selected_rescaled = (
+                keypoints2D_coarse_selected_rescaled.round()
+            )
+            unique, counts = np.unique(
+                keypoints2D_coarse_selected_rescaled, return_counts=True, axis=0
+            )
+            if unique.shape[0] != keypoints2D_coarse_selected_rescaled.shape[0]:
+                logger.warning("Keypoints duplicate! Problem exists")
+
+            j_ids = (
+                keypoints2D_coarse_selected_rescaled[:, 0] * self.w_c
+                + keypoints2D_coarse_selected_rescaled[:, 1]
+            )
             j_ids = j_ids.long()
 
             conf_matrix[assign_matrix[1], j_ids] = 1
@@ -129,8 +151,22 @@ class GATsLoFTRDataset(Dataset):
             # conf_matrix[:, orig_shape3d:] = -1
         else:
             raise NotImplementedError
-        
-        return conf_matrix
+
+        return j_ids, keypoints2D_fine_selected, assign_matrix[1], conf_matrix
+
+    def get_intrin_by_color_pth(self, img_path):
+        intrin_path = img_path.replace("/color_crop/", "/intrin_crop_ba/").replace(
+            ".png", ".txt"
+        )
+        K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
+        return K_crop
+
+    def get_gt_pose_by_color_pth(self, img_path):
+        gt_pose_path = img_path.replace("/color_crop/", "/poses_ba/").replace(
+            ".png", ".txt"
+        )
+        pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
+        return pose_gt
 
     def read_anno(self, img_id):
         """
@@ -157,7 +193,7 @@ class GATsLoFTRDataset(Dataset):
         self.w_i = query_img.shape[2]
         self.h_c = int(self.h_i * self.coarse_scale)
         self.w_c = int(self.w_i * self.coarse_scale)
-        
+
         self.n_query_coarse_grid = int(self.h_c * self.w_c)
 
         idxs_file = anno["idxs_file"]
@@ -174,36 +210,51 @@ class GATsLoFTRDataset(Dataset):
             avg_anno3d_file, collect_anno3d_file, idxs_file, pad=self.pad
         )
         anno2d_file = anno["anno2d_file"]
+
+        anno2d_coarse_file = anno2d_file.replace("/anno_loftr", "/anno_loftr_coarse")
+        # FIXME: not an efficient solution: Load feature twice however no use! change sfm save keypoints' feature part
         (
-            keypoints2d,
-            descriptors2d,
+            keypoints2d_coarse,
+            scores2d,
+            assign_matrix,
+            num_2d_orig,
+        ) = self.read_anno2d(anno2d_coarse_file)
+
+        (
+            keypoints2d_fine,
             scores2d,
             assign_matrix,
             num_2d_orig,
         ) = self.read_anno2d(anno2d_file)
 
-        conf_matrix = self.reshape_assignmatrix(keypoints2d, assign_matrix, pad=self.pad)
+        (
+            j_ids,
+            keypoints2D_fine_selected,
+            points3D_idx_padded,
+            conf_matrix,
+        ) = self.reshape_assignmatrix(keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad)
 
         data = {
             "keypoints3d": keypoints3d,  # [n2, 3]
             "descriptors3d_db": avg_descriptors3d,  # [dim, n2]
             "descriptors2d_db": clt_descriptors2d,  # [dim, n2 * num_leaf]
-            "scores3d_db": avg_scores3d.squeeze(1), # [n2]
-            "scores2d_db": clt_descriptors2d.squeeze(1), # [n2 * num_leaf]
-
-            # TODO: remove
-            # "keypoints2d_query": keypoints2d,  # [n1, 2] query image
-            # "descriptors2d_query": descriptors2d,  # [dim, n1]
-            # "image_size": torch.Tensor([height, width]),
-
-            "query_image": query_img, # [1*h*w]
-            "query_image_scale": query_img_scale, # [2]
-
+            "scores3d_db": avg_scores3d.squeeze(1),  # [n2]
+            "scores2d_db": clt_descriptors2d.squeeze(1),  # [n2 * num_leaf]
+            "query_image": query_img,  # [1*h*w]
+            "query_image_scale": query_img_scale,  # [2]
             # GT
-            "conf_matrix_gt": conf_matrix # [n_point_cloud, n_query_coarse_grid]
+            "conf_matrix_gt": conf_matrix,  # [n_point_cloud, n_query_coarse_grid] Used for coarse GT
+            "mkpts3D_idx_gt": points3D_idx_padded, # [N, 3]
+            "mkpts2D_gt": keypoints2D_fine_selected # [N,2] # Used for fine GT
         }
         if query_img_mask is not None:
-            data.update({"query_image_mask": query_img_mask}) # [h*w]
+            data.update({"query_image_mask": query_img_mask})  # [h*w]
+
+        if self.load_pose_gt:
+            K_crop = self.get_intrin_by_color_pth(color_path)
+            pose_gt = self.get_gt_pose_by_color_pth(color_path)
+
+            data.update({"query_intrinsic": K_crop, "query_pose_gt": pose_gt})
         return data
 
     def __getitem__(self, index):

@@ -238,3 +238,4 @@ visual/
 .hydra
 *.yaml
 weight
+models

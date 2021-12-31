@@ -1,2 +1,4 @@
-- +experiment=train_GATs_loftr
-- task_name=loftr_train
+- +preprocess=sfm_loftr_coarse_fine
+- use_local_ray=True
+- use_global_ray=True
+- ray.n_workers=3

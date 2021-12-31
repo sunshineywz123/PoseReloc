@@ -332,7 +332,7 @@ class CoarseColmapDataset(Dataset):
             )
             for id, item in keyframe_dict.items():
                 print(
-                    f"id:{id}, total: {sum(item['state'] != -1)} registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
+                    f"id:{id}, total: {sum(item['state'] != -1)} / {self.colmap_images[id].xys.shape[0]} keypoints registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
                 )
         return keyframe_dict, colmap_3d_states
 
@@ -415,7 +415,7 @@ class CoarseColmapDataset(Dataset):
             total_feature_track_num = 0
             for id, item in keyframe_dict.items():
                 print(
-                    f"id:{id}, total: {sum(item['state'] != -1)} registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
+                    f"id:{id}, {sum(item['state'] != -1)} / {self.colmap_images[id].xyz.shape[0]} keypoints registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
                 )
                 total_feature_track_num += sum(item["state"] >= 0)
             assert total_feature_track_num == len(colmap_3ds)

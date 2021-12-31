@@ -1,10 +1,10 @@
-from unicodedata import decomposition
 import h5py
-from numpy.core.fromnumeric import cumsum
 from tqdm import tqdm
 import json
 import os.path as osp
 import numpy as np
+from tqdm import tqdm
+from loguru import logger
 
 from collections import defaultdict
 from pathlib import Path
@@ -104,7 +104,8 @@ def count_features(img_lists, features, images, kp3d_id_mapping):
 
     inverse_dict = inverse_id_name(images) # {image_name: id}
     # traverse each image to find valid 2d-3d correspondence
-    for img_name in img_lists:
+    logger.info('Count features begin...')
+    for img_name in tqdm(img_lists):
         feature = features[img_name]
         keypoints_2d, descriptors_2d, scores_2d = read_features(feature)
         feature_dim = descriptors_2d.shape[0]
@@ -243,7 +244,8 @@ def gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim
     kp3d_position = np.empty(shape=(0, 3))
     idxs = []
 
-    for new_point_idx, old_points_idxs in points_idxs.items():
+    logger.info('Gather 3D ann begin...')
+    for new_point_idx, old_points_idxs in tqdm(points_idxs.items()):
         descriptors = np.empty(shape=(0, feature_dim))
         scores = np.empty(shape=(0, 1))
         for old_point_idx in old_points_idxs:
@@ -301,16 +303,17 @@ def get_assign_matrix(xys, xyzs, kp3d_idx_to_kp2d_idx, kp3d_id_mapping):
 
     num_matches = len(MN1)
     assign_matrix = np.array(MN1).T
+    total_2d_kpts = xys.shape[0]
 
     print("=> match pairs num: ", num_matches)
     print('=> total 2d points: ', xys.shape[0])
     print("=> total 3d points: ", xyzs.shape[0])
     print('--------------------')
-    return num_matches, assign_matrix
+    return num_matches, assign_matrix, total_2d_kpts
 
 
 def save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, scores_2d, 
-                                assign_matrix, num_matches):
+                                assign_matrix, num_matches, save_feature=True):
     """ save annotation for each image
                    data_dir
                       |
@@ -329,12 +332,13 @@ def save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, sco
 
     anno_2d = {
         'keypoints2d': keypoints_2d.tolist(), # [n, 2]
-        'descriptors2d': descriptors_2d.tolist(), # [dim, n]
         'scores2d': scores_2d.reshape(-1, 1).tolist(), # [n, 1]
         'assign_matrix': assign_matrix.tolist(), # [2, k]
         'num_matches': num_matches
     }
-    
+
+    if save_feature:
+        anno_2d.update({'descriptors2d': descriptors_2d.tolist()})
     # np.savez(anno_2d_path, keypoints2d=keypoints_2d, descriptors2d=descriptors_2d, 
             #  scores2d=scores_2d, assign_matrix=assign_matrix, num_matches=num_matches)
     with open(anno_2d_path, 'w') as f:
@@ -375,25 +379,26 @@ def save_2d_anno_dict(cfg, img_lists, features, filter_xyzs, points_idxs,
 
 
 def save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, 
-                 img_kp3d_idx_to_kp2d_idx, anno2d_out_path):
+                 img_kp3d_idx_to_kp2d_idx, anno2d_out_path, save_feature_for_each_img=True, save_threshold=0.05):
     """ Save 2d annotations for each image and gather all 2d annotations """
     annotations = []
     anno_id = 0
     
     kp3d_id_mapping = id_mapping(points_idxs)
 
+    logger.info('Save 2D anno begin...')
     for img_path in tqdm(img_lists, total=len(img_lists)):
         feature = features[img_path]
         kp3d_idx_to_kp2d_idx = img_kp3d_idx_to_kp2d_idx[img_path]
         
         keypoints_2d, descriptors_2d, scores_2d = read_features(feature) 
-        num_matches, assign_matrix = get_assign_matrix(
+        num_matches, assign_matrix, total_2d_kpts = get_assign_matrix(
             keypoints_2d, filter_xyzs,
             kp3d_idx_to_kp2d_idx, kp3d_id_mapping
         )
 
-        if num_matches != 0:
-            anno_2d_path = save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, scores_2d, assign_matrix, num_matches) 
+        if num_matches > save_threshold * total_2d_kpts:
+            anno_2d_path = save_2d_anno_for_each_image(cfg, img_path, keypoints_2d, descriptors_2d, scores_2d, assign_matrix, num_matches, save_feature=save_feature_for_each_img) 
             pose_path = get_pose_path(img_path)
             anno_id += 1
             annotation = {
@@ -427,7 +432,7 @@ def mean_scores(scores, idxs):
 
 
 def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
-                points_idxs, xyzs):
+                points_idxs, xyzs, save_feature_for_each_image=True):
     """ Generate 3d point feature.
     @param xyzs: 3d points after filter(track length, 3d box and merge operation)
     @param points_idxs: {new_point_id: [old_point1_id, old_point2_id, ...]}.
@@ -467,7 +472,7 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
     avg_descriptors, avg_scores = mean_descriptors(filter_descriptors, idxs), mean_scores(filter_scores, idxs)
 
     anno2d_out_path = osp.join(anno_out_dir, 'anno_2d.json')
-    save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path)
+    save_2d_anno(cfg, img_lists, features, filter_xyzs, points_idxs, kp3d_idx_to_img_kp2d_idx, anno2d_out_path, save_feature_for_each_img=save_feature_for_each_image)
     
     avg_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_average.npz')
     collect_anno3d_out_path = osp.join(anno_out_dir, 'anno_3d_collect.npz')

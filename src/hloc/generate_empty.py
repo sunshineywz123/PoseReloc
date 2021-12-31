@@ -1,10 +1,11 @@
 import cv2
 import logging
 import os.path as osp
+from loguru import logger
 import numpy as np
 
 from pathlib import Path
-from src.utils.colmap.read_write_model import Camera, Image, Point3D
+from src.utils.colmap.read_write_model import Camera, Image
 from src.utils.colmap.read_write_model import rotmat2qvec
 from src.utils.colmap.read_write_model import write_model
 from src.utils.arkit_utils import get_K
@@ -62,17 +63,19 @@ def import_data(img_lists, do_ba=False):
         else:
             pose_dir = osp.join(base_dir, 'poses_ba')
             if not osp.exists(pose_dir):
+                logger.warning(f"pose dir :{pose_dir} not exists, use poses instead!")
                 pose_dir = osp.join(base_dir, 'poses')
 
         _, tvec, qvec = get_pose_from_txt(img_index, pose_dir)
 
         # read intrinsic
-        if img_type == 'color':
+        if img_type == 'color' or img_type == 'color_crop':
             if do_ba:
                 intrin_dir = osp.join(base_dir, 'intrin')
             else:
-                intrin_dir = osp.join(base_dir, 'intrin_ba')
+                intrin_dir = osp.join(base_dir, 'intrin_crop_ba')
                 if not osp.exists(intrin_dir):
+                    logger.warning(f"intrin dir :{intrin_dir} not exists, use 'intrin' instead!")
                     intrin_dir = osp.join(base_dir, 'intrin')
 
             K = get_intrin_from_txt(img_index, intrin_dir)

@@ -1,6 +1,7 @@
-from re import M
+from loguru import logger
 from pytorch_lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
+import os.path as osp
 from src.datasets.GATs_loftr_dataset import GATsLoFTRDataset
 
 
@@ -8,12 +9,22 @@ class GATsLoFTRDataModule(LightningDataModule):
     def __init__(self, *args, **kwargs):
         super().__init__()
 
-        self.anno_file = kwargs["anno_file"]
+        self.train_anno_file = kwargs["train_anno_file"]
+        self.val_anno_file = kwargs["val_anno_file"]
+        assert osp.exists(self.train_anno_file)
+        if not osp.exists(self.val_anno_file):
+            logger.warning(
+                f"Val anno path: {self.val_anno_file} not exists! use train anno instead"
+            )
+            self.val_anno_file = self.train_anno_file
+
         self.batch_size = kwargs["batch_size"]
         self.num_workers = kwargs["num_workers"]
         self.pin_memory = kwargs["pin_memory"]
 
         # Data related
+        self.train_percent = kwargs["train_percent"]
+        self.val_percent = kwargs["val_percent"]
         # 3D part
         self.num_leaf = kwargs["num_leaf"]
         self.shape2d = kwargs["shape2d"]
@@ -24,17 +35,32 @@ class GATsLoFTRDataModule(LightningDataModule):
         self.df = kwargs["df"]
         self.coarse_scale = kwargs["coarse_scale"]
 
-        self.data_train = None
-        self.data_val = None
-        self.data_test = None
+        # Loader parameters:
+        self.train_loader_params = {
+            "batch_size": self.batch_size,
+            "num_workers": self.num_workers,
+            "pin_memory": self.pin_memory,
+        }
+        self.val_loader_params = {
+            "batch_size": 1,
+            "shuffle": False,
+            "num_workers": self.num_workers,
+            "pin_memory": self.pin_memory,
+        }
+        self.test_loader_params = {
+            "batch_size": 1,
+            "shuffle": False,
+            "num_workers": self.num_workers,
+            "pin_memory": self.pin_memory,
+        }
 
     def prepare_data(self):
         pass
 
     def setup(self, stage=None):
         """ Load data. Set variable: self.data_train, self.data_val, self.data_test"""
-        trainset = GATsLoFTRDataset(
-            anno_file=self.anno_file,
+        train_set = GATsLoFTRDataset(
+            anno_file=self.train_anno_file,
             num_leaf=self.num_leaf,
             img_pad=self.img_pad,
             img_resize=self.img_resize,
@@ -42,36 +68,32 @@ class GATsLoFTRDataModule(LightningDataModule):
             df=self.df,
             shape2d=self.shape2d,
             shape3d=self.shape3d,
+            percent=self.train_percent,
         )
-        print("=> Read anno file: ", self.anno_file)
+        print("=> Read train anno file: ", self.train_anno_file)
 
-        self.data_train = trainset
-        self.data_val = trainset
-        self.data_test = trainset
+        val_set = GATsLoFTRDataset(
+            anno_file=self.val_anno_file,
+            num_leaf=self.num_leaf,
+            img_pad=self.img_pad,
+            img_resize=self.img_resize,
+            coarse_scale=self.coarse_scale,
+            df=self.df,
+            shape2d=self.shape2d,
+            shape3d=self.shape3d,
+            percent=self.val_percent,
+            load_pose_gt=True,
+        )
+
+        self.data_train = train_set
+        self.data_val = val_set
+        self.data_test = val_set
 
     def train_dataloader(self):
-        return DataLoader(
-            dataset=self.data_train,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            shuffle=True,
-        )
+        return DataLoader(dataset=self.data_train, **self.train_loader_params)
 
     def val_dataloader(self):
-        return DataLoader(
-            dataset=self.data_val,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            shuffle=False,
-        )
+        return DataLoader(dataset=self.data_val, **self.val_loader_params)
 
     def test_dataloader(self):
-        return DataLoader(
-            dataset=self.data_test,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            pin_memory=self.pin_memory,
-            shuffle=False,
-        )
+        return DataLoader(dataset=self.data_test, **self.test_loader_params)
