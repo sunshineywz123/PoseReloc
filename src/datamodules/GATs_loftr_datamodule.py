@@ -38,6 +38,7 @@ class GATsLoFTRDataModule(LightningDataModule):
         # Loader parameters:
         self.train_loader_params = {
             "batch_size": self.batch_size,
+            "shuffle": True,
             "num_workers": self.num_workers,
             "pin_memory": self.pin_memory,
         }
@@ -69,11 +70,13 @@ class GATsLoFTRDataModule(LightningDataModule):
             shape2d=self.shape2d,
             shape3d=self.shape3d,
             percent=self.train_percent,
+            load_pose_gt=True
         )
         print("=> Read train anno file: ", self.train_anno_file)
 
         val_set = GATsLoFTRDataset(
             anno_file=self.val_anno_file,
+            # anno_file=self.train_anno_file,
             num_leaf=self.num_leaf,
             img_pad=self.img_pad,
             img_resize=self.img_resize,

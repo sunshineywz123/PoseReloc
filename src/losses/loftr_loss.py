@@ -37,21 +37,54 @@ class LoFTRLoss(nn.Module):
             alpha = self.config["focal_alpha"]
             gamma = self.config["focal_gamma"]
 
-            loss_pos = (
-                -alpha
-                * torch.pow(1 - conf[conf_gt == 1], gamma)
-                * (conf[conf_gt == 1]).log()
-            )
-            loss_neg = (
-                -alpha
-                * torch.pow(conf[conf_gt == 0], gamma)
-                * (1 - conf[conf_gt == 0]).log()
-            )
-            if weight is not None:
-                loss_pos = loss_pos * weight[conf_gt == 1]
-                loss_neg = loss_neg * weight[conf_gt == 0]
-            return self.c_pos_w * loss_pos.mean() + self.c_neg_w * loss_neg.mean()
-            # each negative element has smaller weight than positive elements. => higher negative loss weight
+            if self.config['spg_spvs']:
+                pos_conf = conf[:, :-1, :-1][conf_gt == 1] if not self.config['dual_softmax'] \
+                            else conf[conf_gt == 1]
+                loss_pos = - alpha * torch.pow(1 - pos_conf, gamma) * pos_conf.log()
+                if not self.config['dual_softmax']:
+                    # These is no dustbin for dual_softmax, so we left unmatchable patches without supervision.
+                    neg0, neg1 = conf_gt.sum(-1) == 0, conf_gt.sum(1) == 0
+                    neg_conf = torch.cat([conf[:, :-1, -1][neg0], conf[:, -1, :-1][neg1]], 0)
+                    loss_neg = - alpha * torch.pow(1 - neg_conf, gamma) * neg_conf.log()
+                if weight is not None:
+                    # Different from dense-spvs, the loss w.r.t. padded regions aren't directly zeroed out, but only through setting regions in sim_matrix to -inf.
+                    loss_pos = loss_pos * weight[conf_gt == 1]
+                    if not self.config['dual_softmax']:
+                        neg_w0 = (weight.sum(-1) != 0)[neg0]
+                        neg_w1 = (weight.sum(1) != 0)[neg1]
+                        neg_mask = torch.cat([neg_w0, neg_w1], 0)
+                        loss_neg = loss_neg[neg_mask]
+                return self.c_pos_w * loss_pos.mean() + self.c_neg_w * loss_neg.mean() if not self.config['dual_softmax'] \
+                        else self.c_pos_w * loss_pos.mean()
+                # positive and negative elements have similar loss weights. => more balanced loss weight
+            else:
+                loss_pos = (
+                    -alpha
+                    * torch.pow(1 - conf[conf_gt == 1], gamma)
+                    * (conf[conf_gt == 1]).log()
+                )
+                loss_neg = (
+                    -(1 - alpha)
+                    * torch.pow(conf[conf_gt == 0], gamma)
+                    * (1 - conf[conf_gt == 0]).log()
+                )
+                if weight is not None:
+                    loss_pos = loss_pos * weight[conf_gt == 1]
+                    loss_neg = loss_neg * weight[conf_gt == 0]
+                
+                if loss_pos.shape[0] == 0:
+                    logger.warning('len of loss pos is zero!')
+                    loss_mean = self.c_neg_w * loss_neg.mean()
+                elif loss_neg.shape[0] == 0:
+                    logger.warning('len of loss neg is zero!')
+                    loss_mean = self.c_pos_w * loss_pos.mean()
+                else:
+                    loss_pos_mean = loss_pos.mean()
+                    loss_neg_mean = loss_neg.mean()
+                    loss_mean = self.c_pos_w * loss_pos_mean + self.c_neg_w * loss_neg_mean
+                
+                return loss_mean
+                # each negative element has smaller weight than positive elements. => higher negative loss weight
         else:
             raise KeyError
 

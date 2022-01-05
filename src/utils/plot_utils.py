@@ -1,3 +1,4 @@
+from loguru import logger
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
@@ -442,17 +443,40 @@ def reproj(K, pose, pts_3d):
     return reproj_points  # [n, 2]
 
 
-def draw_reprojection_pair(data, visual_color_type="conf"):
+def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
     # TODO: add visualzie bbox
-    m_bids = data['m_bids'].cpu().numpy()
-    query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
-    mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
-    mkpts_query = data["mkpts_query_c"].cpu().numpy()
-    query_K = data["query_intrinsic"].cpu().numpy()
-    query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
-    m_conf = data["mconf"].cpu().numpy()
+    figures = {"evaluation": []}
 
-    figures = {'evaluation': []}
+    if visual_gt:
+        # For gt debug
+        # NOTE: only available for batch size = 1
+        query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
+        if query_image.shape[0] != 1:
+            logger.warning('Not implement visual gt for batch size != 0')
+            return
+
+        mkpts_3d = (
+            data["keypoints3d"][0, data["mkpts3D_idx_gt"][0]].cpu().numpy()
+        )  # GT mkpts3D
+        mkpts_query = data["mkpts2D_gt"][0].cpu().numpy()
+        m_bids = np.zeros((mkpts_3d.shape[0],))
+        query_K = data["query_intrinsic"].cpu().numpy()
+        query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
+        m_conf = np.zeros((mkpts_3d.shape[0],))
+
+    else:
+        m_bids = data["m_bids"].cpu().numpy()
+        query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
+        mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
+        mkpts_query = data["mkpts_query_f"].cpu().numpy()
+        query_K = data["query_intrinsic"].cpu().numpy()
+        query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
+        m_conf = data["mconf"].cpu().numpy()
+
+    R_errs = data["R_errs"] if "R_errs" in data else None
+    t_errs = data["t_errs"] if "t_errs" in data else None
+    inliers = data["inliers"] if "inliers" in data else None
+
 
     for bs in range(data["query_image"].size(0)):
         mask = m_bids == bs
@@ -472,6 +496,15 @@ def draw_reprojection_pair(data, visual_color_type="conf"):
             f"Num of matches: {mkpts3d_reprojed.shape[0]}",
         ]
 
+        if R_errs is not None:
+            text += [f"R_err: {R_errs[bs]}"]
+        if t_errs is not None:
+            text += [f"t_err: {t_errs[bs]}"]
+        if inliers is not None:
+            text += [
+                f"Num of inliers: {inliers[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers[bs])}"
+            ]
+
         if visual_color_type == "conf":
             if mkpts3d_reprojed.shape[0] != 0:
                 m_conf_max = np.max(m_conf[mask])
@@ -482,8 +515,8 @@ def draw_reprojection_pair(data, visual_color_type="conf"):
                 color = jet(m_conf_normalized)
 
                 text += [
-                f"Max conf: {m_conf_max}",
-                f"Min conf: {m_conf_min}",
+                    f"Max conf: {m_conf_max}",
+                    f"Min conf: {m_conf_min}",
                 ]
             else:
                 color = np.array([])
@@ -494,7 +527,6 @@ def draw_reprojection_pair(data, visual_color_type="conf"):
         else:
             raise NotImplementedError
 
-
         figure = make_matching_plot(
             query_image[bs][0],
             query_image[bs][0],
@@ -503,10 +535,10 @@ def draw_reprojection_pair(data, visual_color_type="conf"):
             mkpts_query_masked,
             mkpts3d_reprojed,
             color=color,
-            text=text
+            text=text,
         )
 
-        figures['evaluation'].append(figure)
+        figures["evaluation"].append(figure)
 
         return figures
 

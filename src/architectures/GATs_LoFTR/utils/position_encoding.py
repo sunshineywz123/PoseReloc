@@ -39,7 +39,7 @@ class PositionEncodingSine(nn.Module):
 
 
 # Position encoding for 2D & 3D keypoints
-def MLP(channels: list, do_bn=True):
+def MLP(channels: list, norm_method='batchnorm'):
     """ Multi-layer perceptron"""
     n = len(channels)
     layers = []
@@ -48,18 +48,24 @@ def MLP(channels: list, do_bn=True):
             nn.Conv1d(channels[i - 1], channels[i], kernel_size=1, bias=True)
         )
         if i < n -1:
-            if do_bn: 
+            if norm_method == 'batchnorm':
+                # FIXME: check here!
                 layers.append(nn.BatchNorm1d(channels[i]))
-                # layers.append(nn.LayerNorm(channels[i]))
+            elif norm_method == 'layernorm':
+                layers.append(nn.LayerNorm(channels[i]))
+            elif norm_method == 'instancenorm':
+                layers.append(nn.InstanceNorm1d(channels[i]))
+            else:
+                raise NotImplementedError
                 # layers.append(nn.GroupNorm(channels[i], channels[i])) # group norm 
             layers.append(nn.ReLU())
     return nn.Sequential(*layers)
 
 class KeypointEncoding(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs """
-    def __init__(self, inp_dim, feature_dim, layers):
+    def __init__(self, inp_dim, feature_dim, layers, norm_method='batchnorm'):
         super().__init__()
-        self.encoder = MLP([inp_dim] + list(layers) + [feature_dim])
+        self.encoder = MLP([inp_dim] + list(layers) + [feature_dim], norm_method)
         nn.init.constant_(self.encoder[-1].bias, 0.0)
     
     def forward(self, kpts, scores, descriptors):

@@ -71,22 +71,37 @@ def merge_anno(cfg):
     if isinstance(names, str):
         # Parse object directory
         assert isinstance(names, str)
-        exception_obj_name_list  = cfg.exception_obj_names
+        exception_obj_name_list = cfg.exception_obj_names
         top_k_obj = cfg.top_k_obj
-        logger.info(f'Process all objects in directory:{names}')
+        logger.info(f"Process all objects in directory:{names}")
 
         object_names = []
         object_names_list = os.listdir(names)[:top_k_obj]
         for object_name in object_names_list:
-            if '-' not in object_name:
+            if "-" not in object_name:
                 continue
             if object_name in exception_obj_name_list:
                 continue
             object_names.append(object_name)
-        
+
         names = object_names
 
+    all_data_names = os.listdir(
+        osp.join(
+            cfg.datamodule.data_dir,
+            f"outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}",
+        )
+    )
+    id2datafullname = {
+        data_name[:4]: data_name for data_name in all_data_names if "-" in data_name
+    }
     for name in names:
+        if len(name) == 4:
+            # ID only!
+            if name in id2datafullname:
+                name = id2datafullname[name]
+            else:
+                logger.warning(f'id {name} not exist in sfm directory')
         anno_dir = osp.join(
             cfg.datamodule.data_dir,
             f"outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}",
@@ -143,23 +158,38 @@ def sfm(cfg):
         # Parse object directory
         # assert isinstance(data_dirs, str)
         num_seq = cfg.dataset.num_seq
-        exception_obj_name_list  = cfg.dataset.exception_obj_names
+        exception_obj_name_list = cfg.dataset.exception_obj_names
         top_k_obj = cfg.dataset.top_k_obj
-        assert num_seq > 0
-        logger.info(f'Process all objects in directory:{data_dirs}, process: {num_seq} sequences')
+        if num_seq is not None:
+            assert num_seq > 0
+        logger.info(
+            f"Process all objects in directory:{data_dirs}, process: {num_seq if num_seq is not None else 'all'} sequences"
+        )
 
         object_names = os.listdir(data_dirs)[:top_k_obj]
         data_dirs_list = []
+
+        if cfg.dataset.ids is not None:
+            # Use data ids
+            id2full_name = {name[:4]: name for name in object_names if '-' in name}
+            object_names = [id2full_name[id] for id in cfg.dataset.ids if id in id2full_name]
+
         for object_name in object_names:
-            if '-' not in object_name:
+            if "-" not in object_name:
                 continue
 
             if object_name in exception_obj_name_list:
                 continue
             sequence_names = sorted(os.listdir(osp.join(data_dirs, object_name)))
-            sequence_names = [sequence_name for sequence_name in sequence_names if '-' in sequence_name][:num_seq]
-            data_dirs_list.append(' '.join([osp.join(data_dirs, object_name)] + sequence_names))
-        
+            sequence_names = [
+                sequence_name
+                for sequence_name in sequence_names
+                if "-" in sequence_name
+            ][:num_seq]
+            data_dirs_list.append(
+                " ".join([osp.join(data_dirs, object_name)] + sequence_names)
+            )
+
         data_dirs = data_dirs_list
 
     if not cfg.use_global_ray:
@@ -196,7 +226,9 @@ def sfm_worker(data_dirs, cfg, pba=None):
         img_lists = []
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
-            img_lists += glob.glob(str(Path(seq_dir)) + "/color_crop/*.png", recursive=True)
+            img_lists += glob.glob(
+                str(Path(seq_dir)) + "/color_crop/*.png", recursive=True
+            )
 
         # ------------------ downsample ------------------
         down_img_lists = []
@@ -341,7 +373,9 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 logger.info("LoFTR coarse mapping begin...")
                 os.system(f"rm -rf {empty_dir}")
                 os.system(f"rm -rf {deep_sfm_dir}")
-                os.system(f'rm -rf {osp.join(covis_pairs_out.rsplit("/", 1)[0], "fine_matches.pkl")}') # Force refinement to recompute fine match
+                os.system(
+                    f'rm -rf {osp.join(covis_pairs_out.rsplit("/", 1)[0], "fine_matches.pkl")}'
+                )  # Force refinement to recompute fine match
 
                 pairs_from_covisibility.covis_from_index(
                     img_lists, covis_pairs_out, num_matched=covis_num, gap=cfg.sfm.gap
@@ -462,16 +496,31 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_names)
 
     # Save loftr coarse keypoints:
     cfg_dup = deepcopy(cfg)
-    cfg_dup.network.detection = 'loftr_coarse'
-    feature_coarse_path = osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]
+    cfg_dup.network.detection = "loftr_coarse"
+    feature_coarse_path = (
+        osp.splitext(feature_out)[0] + "_coarse" + osp.splitext(feature_out)[1]
+    )
     # FIXME: bug here!
     feature_process.get_kpt_ann(
-        cfg_dup, img_lists, feature_coarse_path, outputs_dir, merge_idxs, merge_xyzs, save_feature_for_each_image=False
+        cfg_dup,
+        img_lists,
+        feature_coarse_path,
+        outputs_dir,
+        merge_idxs,
+        merge_xyzs,
+        save_feature_for_each_image=False,
     )
 
     feature_process.get_kpt_ann(
-        cfg, img_lists, feature_out, outputs_dir, merge_idxs, merge_xyzs, save_feature_for_each_image=False
+        cfg,
+        img_lists,
+        feature_out,
+        outputs_dir,
+        merge_idxs,
+        merge_xyzs,
+        save_feature_for_each_image=False,
     )
+
 
 @hydra.main(config_path="configs/", config_name="config.yaml")
 def main(cfg: DictConfig):

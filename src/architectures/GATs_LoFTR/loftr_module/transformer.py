@@ -14,7 +14,7 @@ class LoFTREncoderLayer(nn.Module):
                  nhead,
                  dropout=0.1,
                  attention='linear', kernel_fn='elu + 1', redraw_interval=1, d_kernel=None,
-                 rezero=None):
+                 rezero=None, norm_method='layernorm'):
         super(LoFTREncoderLayer, self).__init__()
 
         self.dim = d_model // nhead
@@ -36,8 +36,15 @@ class LoFTREncoderLayer(nn.Module):
         )
 
         # norm and dropout
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
+        if norm_method == 'layernorm':
+            self.norm1 = nn.LayerNorm(d_model)
+            self.norm2 = nn.LayerNorm(d_model)
+        elif norm_method == 'instancenorm':
+            self.norm1 = nn.InstanceNorm1d(d_model)
+            self.norm2 = nn.InstanceNorm1d(d_model)
+        else:
+            raise NotImplementedError
+
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         
@@ -84,24 +91,23 @@ class LocalFeatureTransformer(nn.Module):
         self.d_model = config['d_model'] # Feature of query image
         self.nhead = config['nhead']
         self.layer_names = list(config['layer_names']) * config['layer_iter_n']
+        self.norm_method = config['norm_method']
         if config['redraw_interval'] is not None:
             assert config['redraw_interval'] % 2 == 0, 'redraw_interval must be divisible by 2 since each attetnion layer is repeatedly called twice.'
 
         encoder_layer = build_encoder_layer(config)
-        graphAttention_layer = GraphAttentionLayer(config['d_db_feat'], config['d_db_feat'], config['GATs_dropout'], config['GATs_alpha'])
-        self.layers = nn.ModuleList([copy.deepcopy(graphAttention_layer if i % 3 == 0 else encoder_layer) for i in range(len(self.layer_names))])
+        # graphAttention_layer = GraphAttentionLayer(config['d_db_feat'], config['d_db_feat'], config['GATs_dropout'], config['GATs_alpha'])
+        # self.layers = nn.ModuleList([copy.deepcopy(graphAttention_layer if i % 3 == 0 else encoder_layer) for i in range(len(self.layer_names))])
 
-        # module_list = []
-        # for i in range(len(self.layer_names)):
-        #     if i % 3 == 0:
-        #         if i == 0:
-        #             # Need to map input db feature dim to model feature dim
-        #             module_list.append(GraphAttentionLayer(config['d_db_feat'], config['d_model'], config['GATs_dropout'], config['GATs_alpha'], final_proj=True))
-        #         else:
-        #             module_list.append(GraphAttentionLayer(config['d_model'], config['d_model'], config['GATs_dropout'], config['GATs_alpha'], final_proj=False))
-        #     else:
-        #         module_list.append(encoder_layer)
-        # self.layers = nn.ModuleList(module_list)
+        module_list = []
+        for layer_name in self.layer_names:
+            if layer_name == 'GATs':
+                module_list.append(GraphAttentionLayer(config['d_db_feat'], config['d_model'], config['GATs_dropout'], config['GATs_alpha']))
+            elif layer_name in ['self', 'cross']:
+                module_list.append(copy.deepcopy(encoder_layer))
+            else:
+                raise NotImplementedError
+        self.layers = nn.ModuleList(module_list)
 
         if config['final_proj']:
             self.final_proj = nn.Linear(config['d_model'], config['d_model'], bias=True)
@@ -161,7 +167,8 @@ def build_encoder_layer(config):
                                   config['nhead'],
                                   config['dropout'],
                                   config['attention'], config['kernel_fn'], config['redraw_interval'], config['d_kernel'],
-                                  rezero=config['rezero'])
+                                  rezero=config['rezero'],
+                                  norm_method=config['norm_method'])
     elif config['type'] == 'LoFTR-Conv1d':
         layer = LoFTREncoderLayerConv1d(config['d_model'],
                                         config['nhead'],

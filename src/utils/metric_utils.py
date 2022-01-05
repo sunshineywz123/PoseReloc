@@ -1,9 +1,6 @@
 import numpy as np
 import os
 import cv2
-import torch
-from loguru import logger
-from collections import OrderedDict
 from .colmap.read_write_model import qvec2rotmat, read_images_binary
 from .colmap.eval_helper import quaternion_from_matrix
 
@@ -177,10 +174,13 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1, pnp_reprojection_error=5):
         pose = np.concatenate([rotation, tvec], axis=-1)
         pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
 
+        if inliers is None:
+            inliers = np.array([]).astype(np.bool)
+
         return pose, pose_homo, inliers
     except cv2.error:
         print("CV ERROR")
-        return np.eye(4)[:3], np.eye(4), []
+        return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool)
 
 
 def compute_query_pose_errors(data, configs):

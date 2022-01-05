@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 from torch.cuda import amp
+import numpy as np
 from einops.einops import rearrange
 from src.utils.profiler import PassThroughProfiler
 
@@ -57,6 +58,25 @@ def build_feat_normalizer(method, **kwargs):
     else:
         raise ValueError
 
+class TemperatureNet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.learnable = config['temperature_learnable']
+        if self.learnable:
+            self.min_, self.max_ = config['range']
+            temperature = config['temperature']
+            const = torch.tensor(-np.log(1 / ((temperature - self.min_) / (self.max_ - self.min_ + 1e-5) + 1e-5) -1 ))
+            self.register_buffer('const', torch.nn.Parameter(const))
+        else:
+            self.temperature = config['temperature']
+    
+    def forward(self):
+        if self.learnable:
+            temperature = self.min_ + self.const.sigmoid() * (self.max_ - self.min_)
+        else:
+            temperature = self.temperature
+        return temperature
 
 class CoarseMatching(nn.Module):
     """
@@ -76,7 +96,7 @@ class CoarseMatching(nn.Module):
             self.skh_prefilter = config["skh"]["prefilter"]
             self.skh_enable_fp16 = config["skh"]["fp16"]
         elif self.type == "dual-softmax":
-            self.temperature = config["dual_softmax"]["temperature"]
+            self.temperature = TemperatureNet(config['dual_softmax'])
         else:
             raise NotImplementedError()
 
@@ -121,7 +141,7 @@ class CoarseMatching(nn.Module):
             # dual-softmax (ablation on ScanNet only, no consideration on padding)
             # with self.profiler.record_function('LoFTR/coarse-matching/sim-matrix'):
             sim_matrix = (
-                torch.einsum("nlc,nsc->nls", feat_db_3d, feat_query) / self.temperature
+                torch.einsum("nlc,nsc->nls", feat_db_3d, feat_query) / (self.temperature() + 1e-4)
             )
             # if mask_query is not None:
             #     valid_sim_mask = mask_c0[..., None] * mask_c1[:, None]
@@ -133,11 +153,11 @@ class CoarseMatching(nn.Module):
             conf_matrix = F.softmax(sim_matrix, 1) * F.softmax(sim_matrix, 2)
 
         elif self.type == "sinkhorn":
-            raise NotImplementedError
+            # raise NotImplementedError
             # sinkhorn, dustbin included
             with amp.autocast(enabled=self.skh_enable_fp16):
                 log_assign_matrix = self.optimal_transport(
-                    feat_c0, feat_c1, data, mask_c0, mask_c1
+                    feat_db_3d, feat_query, data, mask_c1=mask_query
                 )
                 assign_matrix = log_assign_matrix.exp()
             conf_matrix = assign_matrix[:, :-1, :-1]
