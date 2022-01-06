@@ -13,6 +13,50 @@ from src.utils import data_utils
 from pathlib import Path
 from transforms3d import affines, quaternions
 
+def get_gt_pose_path_by_color(color_path):
+    return color_path.replace('/color_crop/', '/poses_ba/').replace(
+        '.png', '.txt'
+    )
+
+def get_intrin_path_by_color(color_path):
+    return color_path.replace('/color_crop/', '/intrin_crop_ba/').replace(
+        '.png', '.txt'
+    )
+
+def get_test_seq_path(obj_root, last_n_seq_as_test=1):
+    seq_names = os.listdir(obj_root)
+    seq_ids = [int(seq_name.split('-')[-1]) for seq_name in seq_names if '-' in seq_name]
+    
+    test_obj_name = seq_names[0].split('-')[0]
+    test_seq_ids = sorted(seq_ids)[(-1 * last_n_seq_as_test):]
+    test_seq_paths = [osp.join(obj_root, test_obj_name + '-' + str(test_seq_id)) for test_seq_id in test_seq_ids]
+    return test_seq_paths
+
+def get_refine_box(box_file, trans_box_file):
+    def read_transformation(trans_box_file):
+        with open(trans_box_file, 'r') as f:
+            line = f.readlines()[1]
+
+        data = [float(var) for var in line.split(' ')]
+        scale = np.array(data[0])
+        rot_vec = np.array(data[1:4])
+        trans_vec = np.array(data[4:])
+        
+        return scale, rot_vec, trans_vec
+
+    box3d, box3d_homo = get_bbox3d(box_file)
+    scale, rot_vec, trans_vec = read_transformation(trans_box_file) 
+    
+    transformation = np.eye(4)
+    rotation = cv2.Rodrigues(rot_vec)[0]
+    transformation[:3, :3] = rotation
+    transformation[:3, 3:] = trans_vec.reshape(3, 1)
+
+    box3d_homo *= scale
+    refine_box = transformation @ box3d_homo.T 
+    refine_box[:3] /= refine_box[3:]
+
+    return refine_box[:3].T
 
 def get_arkit_default_path(data_dir):
     video_file = osp.join(data_dir, 'Frames.m4v')
@@ -372,7 +416,9 @@ if __name__ == "__main__":
         # '0600-toyrobot-others'
         # '0601-oldtea-box', '0602-sensesheep-others', '0603-fakebanana-others', '0604-catmodel-others'
         # '0605-pingpangball-ball', '0606-yellowduck-others', '0607-oringe-others'
-        '0608-greenteapot-others', '0609-blackteapot-others', '0610-lecreusetcup-others', '0611-bosecolumnaudio-others'
+        # '0608-greenteapot-others', '0609-blackteapot-others', '0610-lecreusetcup-others', '0611-bosecolumnaudio-others'
+        # "0612-insta-others", '0613-batterycharger-others', '0614-hhkbhandrest-others', '0615-logimouse-others', '0616-sensezong-others', 
+        '0617-miehuoqixiang-others'
     ]
     deal_first = True
     deal_last = True

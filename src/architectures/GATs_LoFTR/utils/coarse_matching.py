@@ -342,42 +342,44 @@ class CoarseMatching(nn.Module):
             # NOTE: The sampling is performed across all pairs in a batch without manually balancing
             # NOTE: #samples for fine-level increases w.r.t. batch_size
             if "mask0" not in data:
-                num_candidates_max = mask.size(0) * max(mask.size(1), mask.size(2))
+                num_candidates_max = mask.size(0) * min(mask.size(1), mask.size(2))
             else:
                 raise not NotImplementedError
                 num_candidates_max = calc_max_candidates(data["mask0"], data["mask1"])
-            num_matches_train = int(num_candidates_max * self.train_coarse_percent)
+            max_num_matches_train = int(num_candidates_max * self.train_coarse_percent) # Max train number
             num_matches_pred = len(b_ids)
             assert (
-                self.train_pad_num_gt_min < num_matches_train
+                self.train_pad_num_gt_min < max_num_matches_train
             ), "min-num-gt-pad should be less than num-train-matches"
 
             # pred_indices is to select from prediction
-            if num_matches_pred <= num_matches_train - self.train_pad_num_gt_min:
+            if num_matches_pred <= max_num_matches_train - self.train_pad_num_gt_min:
                 pred_indices = torch.arange(num_matches_pred, device=device)
             else:
                 pred_indices = torch.randint(
                     num_matches_pred,
-                    (num_matches_train - self.train_pad_num_gt_min,),
+                    (max_num_matches_train - self.train_pad_num_gt_min,),
                     device=device,
                 )
 
             # gt_pad_indices is to select from gt padding. e.g. max(3787-4800, 200)
+            spv_b_ids, spv_i_ids, spv_j_ids = torch.where(data['conf_matrix_gt'])
+            assert len(spv_b_ids) != 0
             gt_pad_indices = torch.randint(
-                len(data["spv_b_ids"]),
-                (max(num_matches_train - num_matches_pred, self.train_pad_num_gt_min),),
+                len(spv_b_ids),
+                (max(max_num_matches_train - num_matches_pred, self.train_pad_num_gt_min),),
                 device=device,
             )
             mconf_gt = torch.zeros(
-                len(data["spv_b_ids"]), device=device
+                len(spv_b_ids), device=device
             )  # set conf of gt paddings to all zero
 
             b_ids, i_ids, j_ids, mconf = map(
                 lambda x, y: torch.cat([x[pred_indices], y[gt_pad_indices]], dim=0),
                 *zip(
-                    [b_ids, data["spv_b_ids"]],
-                    [i_ids, data["spv_i_ids"]],
-                    [j_ids, data["spv_j_ids"]],
+                    [b_ids, spv_b_ids],
+                    [i_ids, spv_i_ids],
+                    [j_ids, spv_j_ids],
                     [mconf, mconf_gt],
                 ),
             )

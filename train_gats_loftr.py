@@ -41,6 +41,8 @@ def train(config: DictConfig):
     config.model.trainer.true_lr = config.model.trainer.canonical_lr * _scaling
     # config.TRAINER.WARMUP_STEP = math.floor(config.TRAINER.WARMUP_STEP / _scaling)
 
+    config.model.loss.fine_weight = 0.25 * (config.model.loftr.loftr_fine.window_size / 5 ) ** 2
+
     # Init PyTorch Lightning model ⚡
     model: LightningModule = hydra.utils.instantiate(config["model"])
 

@@ -29,14 +29,19 @@ class GATsLoFTRDataset(Dataset):
         shape2d=2000,
         shape3d=10000,
         percent=1.0,
+        split="train",
         load_pose_gt=False,
     ):
         super(Dataset, self).__init__()
 
+        self.split = split
         self.coco = COCO(anno_file)
         self.anns = np.array(self.coco.getImgIds())
+
         logger.info(f"Use {percent * 100}% data")
-        self.anns = self.anns[: math.floor(len(self.anns) * percent)]
+        sample_inverval = int(1 / percent)
+        self.anns = self.anns[::sample_inverval]
+
         self.num_leaf = num_leaf
         self.load_pose_gt = load_pose_gt
 
@@ -104,9 +109,15 @@ class GATsLoFTRDataset(Dataset):
             num_3d_orig,
         )
 
-    def reshape_assignmatrix(
+    def build_assignmatrix(
         self, keypoints2D_coarse, keypoints2D_fine, assign_matrix, pad=True
     ):
+        """
+        Build assign matrix for coarse and fine
+        Coarse assign matrix: store 0 or 1
+        Fine matrix: store corresponding 2D fine location in query image of the matched coarse grid point (N*M*2)
+        """
+
         """ Reshape assign matrix (from 2xk to nxm)"""
         assign_matrix = assign_matrix.long()
 
@@ -115,9 +126,13 @@ class GATsLoFTRDataset(Dataset):
                 self.shape3d, self.n_query_coarse_grid, dtype=torch.int16
             )  # [n_pointcloud, n_coarse_grid]
 
+            fine_location_matrix = torch.full(
+                (self.shape3d, self.n_query_coarse_grid, 2), -50, dtype=torch.float
+            )
+
             # Padding
             valid = assign_matrix[1] < self.shape3d
-            assign_matrix = assign_matrix[:, valid]  
+            assign_matrix = assign_matrix[:, valid]
 
             # Get grid coordinate for query image
             keypoints_idx = assign_matrix[0]
@@ -141,19 +156,20 @@ class GATsLoFTRDataset(Dataset):
                 logger.warning("Keypoints duplicate! Problem exists")
 
             j_ids = (
-                keypoints2D_coarse_selected_rescaled[:, 1] * self.w_c
-                + keypoints2D_coarse_selected_rescaled[:, 0]
+                keypoints2D_coarse_selected_rescaled[:, 1] * self.w_c  # y
+                + keypoints2D_coarse_selected_rescaled[:, 0]  # x
             )
             j_ids = j_ids.long()
 
             # x, y = j_ids % self.w_c, j_ids // self.w_c
 
             conf_matrix[assign_matrix[1], j_ids] = 1
+            fine_location_matrix[assign_matrix[1], j_ids] = keypoints2D_fine_selected
 
         else:
             raise NotImplementedError
 
-        return j_ids, keypoints2D_coarse_selected, keypoints2D_fine_selected, assign_matrix[1], conf_matrix
+        return conf_matrix, fine_location_matrix
 
     def get_intrin_by_color_pth(self, img_path):
         intrin_path = img_path.replace("/color_crop/", "/intrin_crop_ba/").replace(
@@ -210,31 +226,6 @@ class GATsLoFTRDataset(Dataset):
         ) = self.read_anno3d(
             avg_anno3d_file, collect_anno3d_file, idxs_file, pad=self.pad
         )
-        anno2d_file = anno["anno2d_file"]
-
-        anno2d_coarse_file = anno2d_file.replace("/anno_loftr/", "/anno_loftr_coarse/")
-        # FIXME: not an efficient solution: Load feature twice however no use! change sfm save keypoints' feature part
-        (
-            keypoints2d_coarse,
-            scores2d,
-            assign_matrix,
-            num_2d_orig,
-        ) = self.read_anno2d(anno2d_coarse_file)
-
-        (
-            keypoints2d_fine,
-            scores2d,
-            assign_matrix,
-            num_2d_orig,
-        ) = self.read_anno2d(anno2d_file)
-
-        (
-            j_ids,
-            keypoints2D_coarse_selected,
-            keypoints2D_fine_selected,
-            points3D_idx_padded,
-            conf_matrix,
-        ) = self.reshape_assignmatrix(keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad)
 
         data = {
             "keypoints3d": keypoints3d,  # [n2, 3]
@@ -244,14 +235,41 @@ class GATsLoFTRDataset(Dataset):
             "scores2d_db": clt_descriptors2d.squeeze(1),  # [n2 * num_leaf]
             "query_image": query_img,  # [1*h*w]
             "query_image_scale": query_img_scale,  # [2]
-            # GT
-            "conf_matrix_gt": conf_matrix,  # [n_point_cloud, n_query_coarse_grid] Used for coarse GT
-
-            # TODO: Pad for batch size > 1
-            # "mkpts3D_idx_gt": points3D_idx_padded, # [N, 3]
-            # "mkpts2D_gt": keypoints2D_fine_selected, # [N, 2] # Used for fine GT, need to pad!
-            # "mkpts2D_coarse_gt": keypoints2D_coarse_selected # [N, 2] # Use less
         }
+
+        if self.split == "train":
+            # For query image GT correspondences
+            anno2d_file = anno["anno2d_file"]
+            anno2d_coarse_file = anno2d_file.replace(
+                "/anno_loftr/", "/anno_loftr_coarse/"
+            )
+            # FIXME: not an efficient solution: Load feature twice however no use! change sfm save keypoints' feature part
+            (
+                keypoints2d_coarse,
+                scores2d,
+                assign_matrix,
+                num_2d_orig,
+            ) = self.read_anno2d(anno2d_coarse_file)
+
+            (
+                keypoints2d_fine,
+                scores2d,
+                assign_matrix,
+                num_2d_orig,
+            ) = self.read_anno2d(anno2d_file)
+
+            (conf_matrix, fine_location_matrix) = self.build_assignmatrix(
+                keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad
+            )
+
+            data.update(
+                {
+                    # GT
+                    "conf_matrix_gt": conf_matrix,  # [n_point_cloud, n_query_coarse_grid] Used for coarse GT
+                    "fine_location_matrix_gt": fine_location_matrix,  # [n_point_cloud, n_query_coarse_grid, 2] (x,y)
+                }
+            )
+
         if query_img_mask is not None:
             data.update({"query_image_mask": query_img_mask})  # [h*w]
 

@@ -70,12 +70,14 @@ class GATsLoFTRDataModule(LightningDataModule):
             shape2d=self.shape2d,
             shape3d=self.shape3d,
             percent=self.train_percent,
+            split='train',
             load_pose_gt=True
         )
         print("=> Read train anno file: ", self.train_anno_file)
 
         val_set = GATsLoFTRDataset(
             anno_file=self.val_anno_file,
+            pad=False,
             # anno_file=self.train_anno_file,
             num_leaf=self.num_leaf,
             img_pad=self.img_pad,
@@ -85,6 +87,7 @@ class GATsLoFTRDataModule(LightningDataModule):
             shape2d=self.shape2d,
             shape3d=self.shape3d,
             percent=self.val_percent,
+            split='val',
             load_pose_gt=True,
         )
 

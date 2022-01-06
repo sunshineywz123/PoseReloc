@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import torch
 from torch.cuda import amp
-import numpy as np
 import pytorch_lightning as pl
 from loguru import logger
 from itertools import chain
 from src.architectures.GATs_LoFTR import GATs_LoFTR
+from src.architectures.GATs_LoFTR.utils.fine_supervision import fine_supervision
 from src.architectures.GATs_LoFTR.optimizers.optimizers import (
     build_optimizer,
     build_scheduler,
@@ -51,7 +51,10 @@ class PL_GATsLoFTR(pl.LightningModule):
             )
 
     def training_step(self, batch, batch_idx):
+
         self.matcher(batch)
+
+        fine_supervision(batch, self.hparams)
 
         with amp.autocast(enabled=False):
             self.loss(batch)
@@ -110,8 +113,8 @@ class PL_GATsLoFTR(pl.LightningModule):
                         self.global_step,
                     )
             if self.hparams["trainer"]["enable_plotting"]:
+                compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"])
                 figures = draw_reprojection_pair(batch, visual_color_type="conf")
-
                 for k, v in figures.items():
                     self.logger.experiment[0].add_figure(
                         f"train_match/{k}", v, self.global_step
@@ -128,7 +131,11 @@ class PL_GATsLoFTR(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         self.matcher(batch)
-        self.loss(batch)
+
+        # # NOTE: GT not exists in validation stage
+        # fine_supervision(batch, self.hparams)
+        # with amp.autocast(enabled=False):
+        #     self.loss(batch)
 
         # Compute metrics
         compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"])
@@ -145,7 +152,7 @@ class PL_GATsLoFTR(pl.LightningModule):
             figures = draw_reprojection_pair(batch, visual_color_type="conf")
 
         return {
-            "loss_scalars": batch["loss_scalars"],
+            # "loss_scalars": batch["loss_scalars"],
             "figures": figures,
             "metrics": metrics,
         }
@@ -164,12 +171,12 @@ class PL_GATsLoFTR(pl.LightningModule):
             def flattenList(x):
                 return list(chain(*x))
 
-            # 1. loss_scalars: dict of list, on cpu
-            _loss_scalars = [o["loss_scalars"] for o in outputs]
-            loss_scalars = {
-                k: flattenList(gather([_ls[k] for _ls in _loss_scalars]))
-                for k in _loss_scalars[0]
-            }
+            # # 1. loss_scalars: dict of list, on cpu
+            # _loss_scalars = [o["loss_scalars"] for o in outputs]
+            # loss_scalars = {
+            #     k: flattenList(gather([_ls[k] for _ls in _loss_scalars]))
+            #     for k in _loss_scalars[0]
+            # }
 
             # 2. val metrics: dict of list, numpy
             _metrics = [o["metrics"] for o in outputs]
@@ -187,11 +194,11 @@ class PL_GATsLoFTR(pl.LightningModule):
 
             # tensorboard records only on rank 0
             if self.trainer.global_rank == 0:
-                for k, v in loss_scalars.items():
-                    mean_v = torch.stack(v).mean()
-                    self.logger.experiment[0].add_scalar(
-                        f"val_{valset_idx}/avg_{k}", mean_v, global_step=cur_epoch
-                    )
+                # for k, v in loss_scalars.items():
+                #     mean_v = torch.stack(v).mean()
+                #     self.logger.experiment[0].add_scalar(
+                #         f"val_{valset_idx}/avg_{k}", mean_v, global_step=cur_epoch
+                #     )
 
                 val_metrics_4tb = aggregate_metrics(
                     metrics, self.hparams["eval_metrics"]["pose_thresholds"]

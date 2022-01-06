@@ -17,15 +17,10 @@ from .backbone import (
     _get_feat_dims,
 )
 from .utils.normalize import normalize_2d_keypoints, normalize_3d_keypoints
-from .loftr_module import LocalFeatureTransformer
+from .loftr_module import LocalFeatureTransformer, FinePreprocess
 from .utils.position_encoding import PositionEncodingSine, KeypointEncoding
 from .utils.coarse_matching import CoarseMatching
-
-# from .utils.fine_matching import FineMatching
-# from .utils.selective_kernel import build_ssk_merge
-# from .utils.guided_matching_fine import build_guided_matching
-
-# from .two_view_refinement.pose_depth_refinement import PoseDepthRefinement
+from .utils.fine_matching import FineMatching
 
 
 class GATs_LoFTR(nn.Module):
@@ -35,7 +30,6 @@ class GATs_LoFTR(nn.Module):
         self.config = config
         self.profiler = profiler or PassThroughProfiler()
         self.debug = debug
-        # self.enable_fine_loftr = self.config["loftr_fine"]["enable"]
 
         # Modules
         # Used to extract 2D query image feature
@@ -56,7 +50,7 @@ class GATs_LoFTR(nn.Module):
                 inp_dim=4,
                 feature_dim=self.config["keypoints_encoding"]["descriptor_dim"],
                 layers=self.config["keypoints_encoding"]["keypoints_encoder"],
-                norm_method=self.config['keypoints_encoding']['norm_method']
+                norm_method=self.config["keypoints_encoding"]["norm_method"],
             )
         else:
             self.kpt_3d_pos_encoding = None
@@ -67,18 +61,16 @@ class GATs_LoFTR(nn.Module):
             self.config["coarse_matching"], profiler=self.profiler,
         )
 
-        # self.fine_preprocess = FinePreprocess(
-        #     self.config["loftr_fine"],
-        #     self.config["loftr_coarse"]["d_model"],
-        #     cf_res=self.config["loftr_backbone"]["resolution"],
-        #     feat_ids=self.config["loftr_backbone"]["resnetfpn"]["output_layers"],
-        #     feat_dims=_get_feat_dims(self.config["loftr_backbone"]),
-        # )
+        self.fine_preprocess = FinePreprocess(
+            self.config["loftr_fine"],
+            self.config["loftr_coarse"]["d_model"],
+            cf_res=self.config["loftr_backbone"]["resolution"],
+            feat_ids=self.config["loftr_backbone"]["resnetfpn"]["output_layers"],
+            feat_dims=_get_feat_dims(self.config["loftr_backbone"]),
+        )
 
-        # self.loftr_fine = LocalFeatureTransformer(self.config["loftr_fine"])
-        # self.fine_matching = FineMatching(
-        #     self.config["loftr_match_fine"], _full_cfg=upper_config(self.config)
-        # )
+        self.loftr_fine = LocalFeatureTransformer(self.config["loftr_fine"])
+        self.fine_matching = FineMatching(self.config["fine_matching"])
 
         # Optional Modules
         # self.coarse_prior = build_coarse_prior(self.config["loftr_coarse"])
@@ -166,13 +158,7 @@ class GATs_LoFTR(nn.Module):
                     "q_hw_i": data["query_image"].shape[2:],
                 }
             )
-            # if data["hw0_i"] == data["hw1_i"]:  # faster & better BN convergence
-            #     feats = self.backbone(
-            #         torch.cat([data["image0"], data["image1"]], dim=0)
-            #     )
-            #     feats0, feats1 = _split_backbone_feats(feats, data["bs"])
-            # else:  # handle input of different shapes
-            #     feats0, feats1 = map(self.backbone, [data["image0"], data["image1"]])
+
             query_feature_map = self.backbone(data["query_image"])
 
             query_feat_b_c, query_feat_f = _extract_backbone_feats(
@@ -212,7 +198,6 @@ class GATs_LoFTR(nn.Module):
             )
             desc2d_db = data["descriptors2d_db"]
 
-            # handle padding mask, for MegaDepth dataset
             query_mask = None
             if "query_image_mask" in data:
                 query_mask = data["query_image_mask"].flatten(-2)
@@ -227,7 +212,7 @@ class GATs_LoFTR(nn.Module):
         with self.profiler.record_function("LoFTR/coarse-matching"):
             self.coarse_matching(desc3d_db, query_feat_c, data, mask_query=query_mask)
 
-        if not self.config["loftr_fine"]["enable"]:
+        if not self.config["fine_matching"]["enable"]:
             data.update(
                 {
                     "mkpts_3d_db": data["mkpts_3d_db"],
@@ -237,42 +222,35 @@ class GATs_LoFTR(nn.Module):
             return
 
         # 4. fine-level refinement
+        # TODO: use descriptors3D after coarse?
         with self.profiler.record_function("LoFTR/fine-refinement"):
-            feat_f0_unfold, feat_f1_unfold = self.fine_preprocess(
-                feat_f0, feat_f1, feat_c0, feat_c1, data, feats0=feats0, feats1=feats1
+            (
+                desc3d_db_selected,
+                desc2d_db_selected,
+                query_feat_f_unfolded,
+            ) = self.fine_preprocess(
+                data, data["descriptors3d_db"], data["descriptors2d_db"], query_feat_f
             )
-            feat_f0_raw, feat_f1_raw = feat_f0_unfold.clone(), feat_f1_unfold.clone()
             # at least one coarse level predicted
-            if feat_f0_unfold.size(0) != 0 and self.enable_fine_loftr:
-                feat_f0_unfold, feat_f1_unfold = self.loftr_fine(
-                    feat_f0_unfold, feat_f1_unfold
+            if (
+                query_feat_f_unfolded.size(0) != 0
+                and self.config["loftr_fine"]["enable"]
+            ):
+                desc3d_db_selected, desc2d_db_selected = self.loftr_fine(
+                    desc3d_db_selected, desc2d_db_selected, query_feat_f_unfolded
                 )
 
         # 5. match fine-level
         with self.profiler.record_function("LoFTR/fine-matching"):
-            # TODO: add `cfg.FINE_MATCHING.ENABLE`
-            self.fine_matching(feat_f0_unfold, feat_f1_unfold, data)
-
-        # 6. (optional) fine-level rejection (with post loftr local feature)
-        with self.profiler.record_function("LoFTR/fine-rejection"):
-            feat_f0_rej, feat_f1_rej = (
-                (feat_f0_unfold, feat_f1_unfold)
-                if self.config["loftr_fine"]["rejector"]["post_loftr"]
-                else (feat_f0_raw, feat_f1_raw)
-            )
-            self.fine_rejector(feat_f0_rej, feat_f1_rej, data)
-
-        # 7. (optional) Guided matching of existing detections
-        with self.profiler.record_function("LoFTR/guided-matching"):
-            self.guided_matching(data)
+            self.fine_matching(desc3d_db_selected, query_feat_f_unfolded, data)
 
         # Pose regression
         # TODO: remove to a independent function in future
-        with self.profiler.record_function("SfM pose refinement"):
-            # data.update({"feats0":feats0, "feats1":feats1}) # backbone features ['coarse', 'fine']
-            # data.update({"feat_c0": feat_c0, "feat_c1": feat_c1}) # coarse feature after loftr feature coarse
-            # data.update({'feat_f0' : feat_f0, 'feat_f1' : feat_f1}) # fine feature backbone
-            data.update(
-                {"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold}
-            )
-            # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)
+        # with self.profiler.record_function("SfM pose refinement"):
+        #     # data.update({"feats0":feats0, "feats1":feats1}) # backbone features ['coarse', 'fine']
+        #     # data.update({"feat_c0": feat_c0, "feat_c1": feat_c1}) # coarse feature after loftr feature coarse
+        #     # data.update({'feat_f0' : feat_f0, 'feat_f1' : feat_f1}) # fine feature backbone
+        #     data.update(
+        #         {"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold}
+        #     )
+        #     # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)

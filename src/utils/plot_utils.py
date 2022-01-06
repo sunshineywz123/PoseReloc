@@ -15,7 +15,7 @@ jet_colors = jet(np.arange(256))[:, :3]  # color list: normalized to [0,1]
 def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
     n = len(imgs)
     assert n == 2, "number of images must be two"
-    figsize = (size * n, size * 3 / 4) if size is not None else None
+    figsize = (size * n, size) if size is not None else None
     _, ax = plt.subplots(1, n, figsize=figsize, dpi=dpi)
     for i in range(n):
         ax[i].imshow(imgs[i], cmap=plt.get_cmap("gray"), vmin=0, vmax=255)

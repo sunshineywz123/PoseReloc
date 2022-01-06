@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import cv2
+import torch
 from .colmap.read_write_model import qvec2rotmat, read_images_binary
 from .colmap.eval_helper import quaternion_from_matrix
 
@@ -179,10 +180,11 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1, pnp_reprojection_error=5):
 
         return pose, pose_homo, inliers
     except cv2.error:
-        print("CV ERROR")
+        # print("CV ERROR")
         return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool)
 
 
+@torch.no_grad()
 def compute_query_pose_errors(data, configs):
     """
     Update:

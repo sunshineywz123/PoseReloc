@@ -247,7 +247,7 @@ class LoFTRLoss(nn.Module):
         loss_scalars.update({"loss_c": loss_c.clone().detach().cpu()})
 
         # 2. fine-level loss
-        if 'exped_f' in data:
+        if 'expec_f' in data:
             loss_f = self.compute_fine_loss(data["expec_f"], data["expec_f_gt"])
             if loss_f is not None:
                 loss += loss_f * self.config["fine_weight"]
