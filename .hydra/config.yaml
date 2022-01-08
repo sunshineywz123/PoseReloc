@@ -56,9 +56,9 @@ output_base_dir: /nas/users/hexingyi/onepose_sfm
 match_type: softmax
 redo: true
 enable_loftr_post_refine: true
-overwrite_all: false
-overwrite_coarse: false
-overwrite_fine: false
+overwrite_all: true
+overwrite_coarse: true
+overwrite_fine: true
 use_global_ray: true
 use_local_ray: true
 debug: true
@@ -75,12 +75,14 @@ dataset:
   top_k_obj: null
   num_seq: null
   ids:
-  - '0612'
-  - '0613'
-  - '0614'
-  - '0615'
-  - '0616'
-  - '0617'
+  - '0618'
+  - '0619'
+  - '0620'
+  - '0621'
+  - '0622'
+  - '0623'
+  - '0624'
+  - '0625'
   exception_obj_names:
   - null
   outputs_dir: ${output_base_dir}

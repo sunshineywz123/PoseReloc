@@ -5,6 +5,7 @@ import os.path as osp
 import matplotlib.pyplot as plt
 
 from src.utils.colmap.read_write_model import write_model
+from src.utils.vis_utils import add_pointcloud_to_vis3d
 
 
 def get_points_count(points3D, show=False):
@@ -53,7 +54,7 @@ def get_tkl(model_path, thres, show=False):
     return track_length, points_count_list
 
 
-def vis_tkl_filtered_pcds(model_path, points_count_list, track_length, output_path):
+def vis_tkl_filtered_pcds(model_path, points_count_list, track_length, output_path, vis3d_pth=None):
     """ 
     Given a track length value, filter 3d points.
     Output filtered pcds for visualization.
@@ -74,10 +75,14 @@ def vis_tkl_filtered_pcds(model_path, points_count_list, track_length, output_pa
     
     output_path = osp.join(output_path, 'tkl_model')
     output_file_path = osp.join(output_path, 'tl-{}.ply'.format(track_length))
-    # TODO: add filtered point cloud to vis3d
     if not osp.exists(output_path):
         os.makedirs(output_path)
     
     write_model(cameras, images, points3D, output_path, '.bin') # Cameras and images have not been update yet
     os.system(f'colmap model_converter --input_path {output_path} --output_path {output_file_path} --output_type PLY')
+
+    if vis3d_pth is not None:
+        dump_dir, name = vis3d_pth.rsplit('/',1)
+        add_pointcloud_to_vis3d(output_file_path, dump_dir, name)
+
     return output_file_path

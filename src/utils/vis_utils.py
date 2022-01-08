@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 from numpy.core.numerictypes import sctype2char
-
+from vis3d.vis3d import Vis3D
 
 def make_matching_plot_fast(image0, image1, kpts0, kpts1,
                             mkpts0, mkpts1, color, text,
@@ -182,3 +182,7 @@ def draw_2d_box(image, corners_2d, linewidth=3):
     for pts in box_pts:
         pt1, pt2 = pts
         cv2.line(image, pt1, pt2, (0, 0, 255), linewidth)
+
+def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
+    vis3d = Vis3D(dump_dir, save_name, xyz_pattern=("x", "-y", "-z"))
+    vis3d.add_point_cloud(pointcloud_pth, name="filtered_pointcloud")

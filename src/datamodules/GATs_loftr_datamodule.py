@@ -77,8 +77,8 @@ class GATsLoFTRDataModule(LightningDataModule):
 
         val_set = GATsLoFTRDataset(
             anno_file=self.val_anno_file,
-            pad=False,
             # anno_file=self.train_anno_file,
+            pad=False, # FIXME: need to change to False
             num_leaf=self.num_leaf,
             img_pad=self.img_pad,
             img_resize=self.img_resize,

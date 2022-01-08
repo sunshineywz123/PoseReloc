@@ -1,6 +1,7 @@
 import math
 import cv2
 from loguru import logger
+from numpy.core.defchararray import index
 
 try:
     import ujson as json
@@ -67,13 +68,11 @@ class GATsLoFTRDataset(Dataset):
 
         num_2d_orig = keypoints2d.shape[0]
 
-        # if pad:
-        #     keypoints2d, descriptors2d, scores2d = data_utils.pad_keypoints2d_random(
-        #         keypoints2d, descriptors2d, scores2d, height, width, self.shape2d
-        #     )
         return keypoints2d, scores2d, assign_matrix, num_2d_orig
 
-    def read_anno3d(self, avg_anno3d_file, clt_anno3d_file, idxs_file, pad=True):
+    def read_anno3d(
+        self, avg_anno3d_file, clt_anno3d_file, idxs_file, pad=True, assignmatrix=None
+    ):
         """ Read(and pad) 3d info"""
         avg_data = np.load(avg_anno3d_file)
         # with open(avg_anno3d_file, 'r') as f:
@@ -92,14 +91,50 @@ class GATsLoFTRDataset(Dataset):
         clt_scores = torch.Tensor(clt_data["scores3d"])  # [k, 1]
 
         num_3d_orig = keypoints3d.shape[0]
+
+        clt_descriptors, clt_scores = data_utils.build_features3d_leaves(
+            clt_descriptors, clt_scores, idxs, num_leaf=self.num_leaf
+        )
         if pad:
-            keypoints3d = data_utils.pad_keypoints3d_random(keypoints3d, self.shape3d)
-            avg_descriptors3d, avg_scores = data_utils.pad_features3d_random(
-                avg_descriptors3d, avg_scores, self.shape3d
-            )
-            clt_descriptors, clt_scores = data_utils.build_features3d_leaves(
-                clt_descriptors, clt_scores, idxs, self.shape3d, num_leaf=self.num_leaf
-            )
+            if assignmatrix is not None:
+                (
+                    keypoints3d,
+                    assignmatrix,
+                    padding_index,
+                ) = data_utils.pad_keypoints3d_according_to_assignmatrix(
+                    keypoints3d, self.shape3d, assignmatrix=assignmatrix
+                )
+                (
+                    avg_descriptors3d,
+                    avg_scores,
+                ) = data_utils.pad_features3d_according_to_assignmatrix(
+                    avg_descriptors3d, avg_scores, self.shape3d, padding_index
+                )
+                (
+                    clt_descriptors,
+                    clt_scores,
+                ) = data_utils.pad_features3d_leaves_according_to_assignmatrix(
+                    clt_descriptors,
+                    clt_scores,
+                    idxs,
+                    self.shape3d,
+                    num_leaf=self.num_leaf,
+                    padding_index=padding_index,
+                )
+            else:
+                keypoints3d = data_utils.pad_keypoints3d_random(
+                    keypoints3d, self.shape3d
+                )
+                avg_descriptors3d, avg_scores = data_utils.pad_features3d_random(
+                    avg_descriptors3d, avg_scores, self.shape3d
+                )
+                clt_descriptors, clt_scores = data_utils.pad_features3d_leaves(
+                    clt_descriptors,
+                    clt_scores,
+                    idxs,
+                    self.shape3d,
+                    num_leaf=self.num_leaf,
+                )
         return (
             keypoints3d,
             avg_descriptors3d,
@@ -107,6 +142,7 @@ class GATsLoFTRDataset(Dataset):
             clt_descriptors,
             clt_scores,
             num_3d_orig,
+            assignmatrix,  # Update assignmatrix
         )
 
     def build_assignmatrix(
@@ -213,29 +249,7 @@ class GATsLoFTRDataset(Dataset):
 
         self.n_query_coarse_grid = int(self.h_c * self.w_c)
 
-        idxs_file = anno["idxs_file"]
-        avg_anno3d_file = anno["avg_anno3d_file"]
-        collect_anno3d_file = anno["collect_anno3d_file"]
-        (
-            keypoints3d,
-            avg_descriptors3d,
-            avg_scores3d,
-            clt_descriptors2d,
-            clt_scores2d,
-            num_3d_orig,
-        ) = self.read_anno3d(
-            avg_anno3d_file, collect_anno3d_file, idxs_file, pad=self.pad
-        )
-
-        data = {
-            "keypoints3d": keypoints3d,  # [n2, 3]
-            "descriptors3d_db": avg_descriptors3d,  # [dim, n2]
-            "descriptors2d_db": clt_descriptors2d,  # [dim, n2 * num_leaf]
-            "scores3d_db": avg_scores3d.squeeze(1),  # [n2]
-            "scores2d_db": clt_descriptors2d.squeeze(1),  # [n2 * num_leaf]
-            "query_image": query_img,  # [1*h*w]
-            "query_image_scale": query_img_scale,  # [2]
-        }
+        data = {}
 
         if self.split == "train":
             # For query image GT correspondences
@@ -257,6 +271,41 @@ class GATsLoFTRDataset(Dataset):
                 assign_matrix,
                 num_2d_orig,
             ) = self.read_anno2d(anno2d_file)
+        else:
+            assign_matrix = None
+
+        idxs_file = anno["idxs_file"]
+        avg_anno3d_file = anno["avg_anno3d_file"]
+        collect_anno3d_file = anno["collect_anno3d_file"]
+        (
+            keypoints3d,
+            avg_descriptors3d,
+            avg_scores3d,
+            clt_descriptors2d,
+            clt_scores2d,
+            num_3d_orig,
+            assign_matrix,
+        ) = self.read_anno3d(
+            avg_anno3d_file,
+            collect_anno3d_file,
+            idxs_file,
+            pad=self.pad,
+            assignmatrix=assign_matrix,
+        )
+
+        data.update(
+            {
+                "keypoints3d": keypoints3d,  # [n2, 3]
+                "descriptors3d_db": avg_descriptors3d,  # [dim, n2]
+                "descriptors2d_db": clt_descriptors2d,  # [dim, n2 * num_leaf]
+                "scores3d_db": avg_scores3d.squeeze(1),  # [n2]
+                "scores2d_db": clt_descriptors2d.squeeze(1),  # [n2 * num_leaf]
+                "query_image": query_img,  # [1*h*w]
+                "query_image_scale": query_img_scale,  # [2]
+            }
+        )
+
+        if self.split == "train":
 
             (conf_matrix, fine_location_matrix) = self.build_assignmatrix(
                 keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad

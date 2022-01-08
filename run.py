@@ -218,6 +218,7 @@ def sfm(cfg):
 
 
 def sfm_worker(data_dirs, cfg, pba=None):
+    logger.info(f"Worker will process: {data_dirs}")
     data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")
@@ -449,7 +450,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         logger.error("colmap coarse is empty!")
 
 
-def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_names):
+def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     """ Filter points and average feature"""
     from src.hloc.postprocess import filter_points, feature_process, filter_tkl
 
@@ -468,7 +469,18 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_names)
         + cfg.network.detection
         + "_"
         + cfg.network.matching,
-        obj_names,
+        obj_name,
+    )
+    vis3d_pth = osp.join(
+        outputs_dir_root,
+        "outputs_"
+        + cfg.match_type
+        + "_"
+        + cfg.network.detection
+        + "_"
+        + cfg.network.matching,
+        "vis3d",
+        obj_name,
     )
     feature_out = osp.join(outputs_dir, f"feats-{cfg.network.detection}.h5")
     deep_sfm_dir = osp.join(outputs_dir, "sfm_ws")
@@ -479,7 +491,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_names)
         model_path, thres=cfg.dataset.max_num_kp3d, show=False
     )
     tkl_file_path = filter_tkl.vis_tkl_filtered_pcds(
-        model_path, points_count_list, track_length, outputs_dir
+        model_path, points_count_list, track_length, outputs_dir, vis3d_pth
     )  # visualization only
 
     xyzs, points_ids = filter_points.filter_3d(

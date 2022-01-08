@@ -365,6 +365,8 @@ class CoarseMatching(nn.Module):
             # gt_pad_indices is to select from gt padding. e.g. max(3787-4800, 200)
             spv_b_ids, spv_i_ids, spv_j_ids = torch.where(data['conf_matrix_gt'])
             assert len(spv_b_ids) != 0
+            # if len(spv_j_ids) == 0:
+            #     logger.warning("Len of gt padding is zero!")
             gt_pad_indices = torch.randint(
                 len(spv_b_ids),
                 (max(max_num_matches_train - num_matches_pred, self.train_pad_num_gt_min),),

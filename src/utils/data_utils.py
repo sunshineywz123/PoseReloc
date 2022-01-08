@@ -147,6 +147,68 @@ def pad_keypoints3d_random(keypoints, n_target_kpts):
     return keypoints
 
 
+def pad_keypoints3d_according_to_assignmatrix(keypoints, n_target_kpts, assignmatrix):
+    """ Pad or truncate orig 3d keypoints to fixed size."""
+    # assignmatrix: [2, N]
+    n_pad = n_target_kpts - keypoints.shape[0]
+
+    if n_pad < 0:
+        assignmatrix = assignmatrix.long()
+        # Aim to keep all matches in assignmatrix
+        # Get matches 3D points coord:
+        keypoints_idx = torch.arange(keypoints.shape[0])
+        unmatched_mask = torch.ones((keypoints.shape[0],), dtype=torch.bool)  # All True
+        matched_3D_points = keypoints[assignmatrix[1]]  # N*3
+        unmatched_mask[assignmatrix[1]] = False
+        unmatched_3D_points = keypoints[unmatched_mask]
+
+        num_of_pad = n_target_kpts - matched_3D_points.shape[0]
+        assert num_of_pad >= 0
+
+        unmatches_3D_random_index = torch.randint(
+            unmatched_3D_points.shape[0], (num_of_pad,)
+        )
+        keypoints_padded = torch.cat(
+            [matched_3D_points, unmatched_3D_points[unmatches_3D_random_index]]
+        )  # [n_targets_kpts, 3]
+
+        # Shuffle: (Maybe not useful?)
+        shuffle_index = torch.randperm(keypoints_padded.shape[0])
+        inverse_shuffle_index = torch.zeros((shuffle_index.shape[0]), dtype=torch.long)
+        inverse_shuffle_index[shuffle_index] = torch.arange(shuffle_index.shape[0])
+        keypoints_padded_shuffled = keypoints_padded[shuffle_index]
+
+        # Build index for later selection:
+        index = torch.cat(
+            [assignmatrix[1], keypoints_idx[unmatched_mask][unmatches_3D_random_index]]
+        )
+        index_shuffled = index[shuffle_index]
+
+        # Update assignmatrix
+        assignmatrix[1, :] = inverse_shuffle_index[: matched_3D_points.shape[0]]
+        keypoints = keypoints_padded_shuffled
+
+    else:
+        while n_pad > 0:
+            rand_kpts_x = torch.rand(n_pad, 1) - 0.5  # zero mean
+            rand_kpts_y = torch.rand(n_pad, 1) - 0.5  # zero mean
+            rand_kpts_z = torch.rand(n_pad, 1) - 0.5  # zero mean
+            rand_kpts = torch.cat(
+                [rand_kpts_x, rand_kpts_y, rand_kpts_z], dim=1
+            )  # [n_pad, 3]
+
+            exist = (rand_kpts[:, None, :] == keypoints[None, :, :]).all(-1).any(1)
+            kept_kpts = rand_kpts[~exist]  # [n_kept, 3]
+            n_pad -= len(kept_kpts)
+
+            if len(kept_kpts) > 0:
+                keypoints = torch.cat([keypoints, kept_kpts], dim=0)
+
+        index_shuffled = None
+
+    return keypoints, assignmatrix, index_shuffled
+
+
 def pad_features3d_random(descriptors, scores, n_target_shape):
     """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
     dim = descriptors.shape[0]
@@ -162,13 +224,26 @@ def pad_features3d_random(descriptors, scores, n_target_shape):
     return descriptors, scores
 
 
-def build_features3d_leaves(descriptors, scores, idxs, n_target_shape, num_leaf):
-    """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
-    # assert idxs.min() > num_leaf, "The num of affilated 2d points of some 3d points is less than num_leaf."
+def pad_features3d_according_to_assignmatrix(
+    descriptors, scores, n_target_shape, padding_index
+):
+    """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
+    dim = descriptors.shape[0]
+    n_pad = n_target_shape - descriptors.shape[1]
 
+    if n_pad < 0:
+        descriptors = descriptors[:, padding_index]
+        scores = scores[padding_index, :]
+    else:
+        descriptors = torch.cat([descriptors, torch.ones(dim, n_pad)], dim=-1)
+        scores = torch.cat([scores, torch.zeros(n_pad, 1)], dim=0)
+
+    return descriptors, scores
+
+
+def build_features3d_leaves(descriptors, scores, idxs, num_leaf):
     dim = descriptors.shape[0]
     orig_num = idxs.shape[0]
-    n_pad = n_target_shape - orig_num
 
     # pad dustbin descriptors and scores
     descriptors_dustbin = torch.cat([descriptors, torch.ones(dim, 1)], dim=1)
@@ -196,9 +271,47 @@ def build_features3d_leaves(descriptors, scores, idxs, n_target_shape, num_leaf)
     descriptors = descriptors_dustbin[:, affilicate_idxs]  # [dim, num_leaf * orig_num]
     scores = scores_dustbin[affilicate_idxs, :]  # [num_leaf * orig_num, 1]
 
+    return descriptors, scores
+
+
+def pad_features3d_leaves(descriptors, scores, idxs, n_target_shape, num_leaf):
+    """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
+    # assert idxs.min() > num_leaf, "The num of affilated 2d points of some 3d points is less than num_leaf."
+
+    dim = descriptors.shape[0]
+    orig_num = idxs.shape[0]
+    n_pad = n_target_shape - orig_num
+
     if n_pad < 0:
         descriptors = descriptors[:, : num_leaf * n_target_shape]
         scores = scores[: num_leaf * n_target_shape, :]
+    else:
+        descriptors = torch.cat(
+            [descriptors, torch.ones(dim, n_pad * num_leaf)], dim=-1
+        )
+        scores = torch.cat([scores, torch.zeros(n_pad * num_leaf, 1)], dim=0)
+
+    return descriptors, scores
+
+
+def pad_features3d_leaves_according_to_assignmatrix(
+    descriptors, scores, idxs, n_target_shape, num_leaf, padding_index
+):
+    """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
+    dim = descriptors.shape[0]
+    orig_num = idxs.shape[0]
+    n_pad = n_target_shape - orig_num
+
+    if n_pad < 0:
+        dim = descriptors.shape[0]
+        descriptors = descriptors.view(dim, -1, num_leaf)
+        scores = scores.view(-1, num_leaf, 1)
+
+        descriptors = descriptors[:, padding_index, :]
+        scores = scores[padding_index, :]
+
+        descriptors = descriptors.view(dim, -1)
+        scores = scores.view(-1, 1)
     else:
         descriptors = torch.cat(
             [descriptors, torch.ones(dim, n_pad * num_leaf)], dim=-1
@@ -361,33 +474,6 @@ def reshape_assign_matrix(
         conf_matrix[assign_matrix[0], assign_matrix[1]] = 1
 
     return conf_matrix
-
-
-# def reshape_assign_matrix_v2(assign_matrix, orig_shape2d, orig_shape3d, shape2d, shape3d, num_leaf, pad=True):
-#     """ Reshape assign matrix"""
-#     assign_matrix = assign_matrix.long()
-
-#     if pad:
-#         conf_matrix = torch.zeros(shape2d, shape3d * num_leaf, dtype=torch.int16)
-
-#         valid = (assign_matrix[0] < shape2d) & (assign_matrix[1] < shape3d)
-#         assign_matrix = assign_matrix[:, valid]
-
-#         for i in range(0, num_leaf):
-#             conf_matrix[assign_matrix[0], num_leaf * assign_matrix[1] + i] = 1
-#         # conf_matrix[assign_matrix[0], num_leaf * assign_matrix[1]: num_leaf * (assign_matrix[1] + 1)] = 1
-#         conf_matrix[orig_shape2d:] = -1
-#         conf_matrix[:, orig_shape3d * num_leaf:] = -1
-#     else:
-#         conf_matrix = torch.zeros(orig_shape2d, orig_shape3d, dtype=torch.int16)
-
-#         valid = (assign_matrix[0] < shape2d) & (assign_matrix[1] < shape3d)
-#         conf_matrix = conf_matrix[:, valid]
-
-#         for i in range(0, num_leaf):
-#             conf_matrix[assign_matrix[0], num_leaf * assign_matrix[1] + i] = 1
-
-#     return conf_matrix
 
 
 def get_image_crop_resize(image, box, resize_shape):
