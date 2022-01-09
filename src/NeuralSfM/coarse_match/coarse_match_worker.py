@@ -128,14 +128,18 @@ def extract_matches(data, detector=None, matcher=None, ransac_args=None, inlier_
 
 
 @torch.no_grad()
-def match_worker(dataset, subset_ids, args, pba=None):
+def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
     """extract matches from part of the possible image pair permutations"""
     detector, matcher = build_model(args['model'])
     detector.cuda()
     matcher.cuda()
     matches = {}
 
-    subset_ids = tqdm(subset_ids) if pba is None else subset_ids
+    if verbose:
+        subset_ids = tqdm(subset_ids) if pba is None else subset_ids
+    else:
+        assert pba is None
+        subset_ids = subset_ids
 
     # match all permutations
     for subset_id in subset_ids:
@@ -163,15 +167,20 @@ def match_worker(dataset, subset_ids, args, pba=None):
 
 @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
 # @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
-def match_worker_ray_wrapper(dataset, subset_ids, args, pba: ActorHandle):
-    return match_worker(dataset, subset_ids, args, pba)
+def match_worker_ray_wrapper(*args, **kwargs):
+    return match_worker(*args, **kwargs)
 
-def keypoint_worker(name_kpts, pba=None):
+def keypoint_worker(name_kpts, pba=None, verbose=True):
     """merge keypoints associated with one image.
     python >= 3.7 only.
     """
     keypoints = {}
-    name_kpts = tqdm(name_kpts) if pba is None else name_kpts
+    if verbose:
+        name_kpts = tqdm(name_kpts) if pba is None else name_kpts
+    else:
+        assert pba is None
+        name_kpts = name_kpts
+
     for name, kpts in name_kpts:
         # filtering
         kpt2score = agg_groupby_2d(kpts[:, :2].astype(int), kpts[:, -1], agg="sum")
@@ -188,15 +197,19 @@ def keypoint_worker(name_kpts, pba=None):
     return keypoints
 
 @ray.remote(num_cpus=1)
-def keypoints_worker_ray_wrapper(name_kpts, pba: ActorHandle):
-    return keypoint_worker(name_kpts, pba)
+def keypoints_worker_ray_wrapper(*args, **kwargs):
+    return keypoint_worker(*args, **kwargs)
 
 
-def update_matches(matches, keypoints, pba=None, **kwargs):
+def update_matches(matches, keypoints, pba=None, verbose=True, **kwargs):
     # convert match to indices
     ret_matches = {}
 
-    matches_items = tqdm(matches.items()) if pba is None else matches.items()
+    if verbose:
+        matches_items = tqdm(matches.items()) if pba is None else matches.items()
+    else:
+        assert pba is None
+        matches_items = matches.items()
 
     for k, v in matches_items:
         mkpts0, mkpts1 = (
@@ -227,16 +240,21 @@ def update_matches(matches, keypoints, pba=None, **kwargs):
     return ret_matches
 
 @ray.remote(num_cpus=1)
-def update_matches_ray_wrapper(matches, keypoints, pba: ActorHandle, **kwargs):
-    return update_matches(matches, keypoints, pba, **kwargs)
+def update_matches_ray_wrapper(*args, **kwargs):
+    return update_matches(*args, **kwargs)
 
 
-def transform_keypoints(keypoints, pba=None):
+def transform_keypoints(keypoints, pba=None, verbose=True):
     """assume keypoints sorted w.r.t. score"""
     ret_kpts = {}
     ret_scores = {}
 
-    keypoints_items = tqdm(keypoints.items()) if pba is None else keypoints.items()
+    if verbose:
+        keypoints_items = tqdm(keypoints.items()) if pba is None else keypoints.items()
+    else:
+        assert pba is None
+        keypoints_items = keypoints.items()
+
     for k, v in keypoints_items:
         v = {_k: _v for _k, _v in v.items() if len(_k) == 2}
         kpts = np.array([list(kpt) for kpt in v.keys()]).astype(np.float32)
@@ -249,5 +267,5 @@ def transform_keypoints(keypoints, pba=None):
     return ret_kpts, ret_scores
 
 @ray.remote(num_cpus=1)
-def transform_keypoints_ray_wrapper(keypoints, pba: ActorHandle):
-    return transform_keypoints(keypoints, pba)
+def transform_keypoints_ray_wrapper(*args, **kwargs):
+    return transform_keypoints(*args, **kwargs)

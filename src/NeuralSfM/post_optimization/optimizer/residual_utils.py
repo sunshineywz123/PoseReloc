@@ -91,7 +91,8 @@ def sample_feature_from_unfold_featuremap(
     mode="OnGrid",
     norm_feature=False,
     return_outof_grid_mask=False,
-    patch_feature_size=None
+    patch_feature_size=None,
+    verbose=True
 ):
     """
     Sample feature from unfold feature map(fine level feature map)
@@ -145,11 +146,12 @@ def sample_feature_from_unfold_featuremap(
         out_of_grid_mask = (offset < -1) | (offset > 1)
         out_of_grid_mask = out_of_grid_mask[:, 0] | out_of_grid_mask[:, 1]
 
-        if out_of_grid_mask.sum() !=0:
-            if out_of_grid_mask.sum() > 200:
-                logger.warning(
-                    f"Fine-level Window size is not big enough: w={W}, {out_of_grid_mask.sum()} points locate outside window, total {out_of_grid_mask.shape[0]} points"
-                )
+        if verbose:
+            if out_of_grid_mask.sum() !=0:
+                if out_of_grid_mask.sum() > 200:
+                    logger.warning(
+                        f"Fine-level Window size is not big enough: w={W}, {out_of_grid_mask.sum()} points locate outside window, total {out_of_grid_mask.shape[0]} points"
+                    )
             
 
         unfold_feature = rearrange(

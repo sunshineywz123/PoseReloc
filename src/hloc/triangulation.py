@@ -16,7 +16,7 @@ def names_to_pair(name0, name1):
     return '_'.join((name0.replace('/', '-'), name1.replace('/', '-')))
 
 
-def geometric_verification(colmap_path, database_path, pairs_path):
+def geometric_verification(colmap_path, database_path, pairs_path, verbose=True):
     """ Geometric verfication """
     logging.info('Performing geometric verification of the matches...')
     cmd = [
@@ -25,7 +25,11 @@ def geometric_verification(colmap_path, database_path, pairs_path):
         '--match_list_path', str(pairs_path),
         '--match_type', 'pairs'
     ]
-    ret = subprocess.call(cmd)
+    if verbose:
+        ret = subprocess.call(cmd)
+    else:
+        ret_all = subprocess.run(cmd, capture_output=True)
+        ret = ret_all.returncode
     if ret != 0:
         logging.warning('Problem with matches_importer, existing.')
         exit(ret)
@@ -55,13 +59,17 @@ def create_db_from_model(empty_model, database_path):
     return {image.name: i for i, image in images.items()}
 
 
-def import_features(image_ids, database_path, feature_path):
+def import_features(image_ids, database_path, feature_path, verbose=True):
     """ Import keypoints info into COLMAP database. """
     logging.info("Importing features into the database...")
     feature_file = h5py.File(str(feature_path), 'r')
     db = COLMAPDatabase.connect(database_path)
-
-    for image_name, image_id in tqdm.tqdm(image_ids.items()):
+    
+    if verbose:
+        iter_obj = tqdm.tqdm(image_ids.items())
+    else:
+        iter_obj = image_ids.items()
+    for image_name, image_id in iter_obj:
         keypoints = feature_file[image_name]['keypoints'].__array__()
         keypoints += 0.5
         db.add_keypoints(image_id, keypoints)
@@ -96,7 +104,7 @@ def in_box(keypoints, box):
 
 
 def import_matches(image_ids, database_path, pairs_path, matches_path, feature_path, match_model='superpoint', \
-                   min_match_score=None, skip_geometric_verification=False):
+                   min_match_score=None, skip_geometric_verification=False, verbose=True):
     """ Import matches info into COLMAP database. """
     logging.info("Importing matches into the database...")
 
@@ -107,8 +115,12 @@ def import_matches(image_ids, database_path, pairs_path, matches_path, feature_p
     match_file = h5py.File(str(matches_path), 'r')
     db = COLMAPDatabase.connect(database_path)
     
+    if verbose:
+        iter_obj = tqdm.tqdm(pairs)
+    else:
+        iter_obj = pairs
     matched = set()
-    for name0, name1 in tqdm.tqdm(pairs):
+    for name0, name1 in iter_obj:
         id0, id1 = image_ids[name0], image_ids[name1]
         if len({(id0, id1), (id1, id0)} & matched) > 0:
             continue
@@ -166,7 +178,7 @@ def import_matches(image_ids, database_path, pairs_path, matches_path, feature_p
     db.close()
 
 
-def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_model):
+def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_model, verbose=True):
     """ run triangulation on given database """
     logging.info('Running the triangulation...')
     
@@ -180,8 +192,15 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_m
         '--Mapper.ba_refine_principal_point', '0',
         '--Mapper.ba_refine_extra_params', '0'
     ]
-    logging.info(' '.join(cmd))
-    ret = subprocess.call(cmd)
+    if verbose:
+        logging.info(' '.join(cmd))
+        ret = subprocess.call(cmd)
+    else:
+        ret_all = subprocess.run(cmd, capture_output=True)
+        with open(osp.join(model_path, 'output.txt'), 'w') as f:
+            f.write(ret_all.stdout.decode())
+        ret = ret_all.returncode
+
     if ret != 0:
         logging.warning('Problem with point_triangulator, existing.')
         exit(ret)
@@ -208,7 +227,7 @@ def run_triangulation(colmap_path, model_path, database_path, image_dir, empty_m
 
 
 def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_model='superpoint', \
-         colmap_path='colmap', skip_geometric_verification=False, min_match_score=None, image_dir=None):
+         colmap_path='colmap', skip_geometric_verification=False, min_match_score=None, image_dir=None, verbose=True):
     """ 
         Import keypoints, matches.
         Given keypoints and matches, reconstruct sparse model from given camera pose.
@@ -224,16 +243,16 @@ def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_
     Path(model).mkdir(exist_ok=True)
 
     image_ids = create_db_from_model(Path(empty_sfm_model), Path(database))
-    import_features(image_ids, database, features)
+    import_features(image_ids, database, features, verbose=verbose)
     import_matches(image_ids, database, pairs, matches, features, match_model,
-                min_match_score, skip_geometric_verification)
+                min_match_score, skip_geometric_verification, verbose=verbose)
     
     if not skip_geometric_verification:
-        geometric_verification(colmap_path, database, pairs)
+        geometric_verification(colmap_path, database, pairs, verbose=verbose)
     
     if not image_dir:
         image_dir = '/'
-    stats = run_triangulation(colmap_path, model, database, image_dir, empty_sfm_model)
+    stats = run_triangulation(colmap_path, model, database, image_dir, empty_sfm_model, verbose=verbose)
     os.system(f'colmap model_converter --input_path {model} --output_path {outputs_dir}/model.ply --output_type PLY')
 
 @ray.remote(num_cpus=2, num_gpus=1)  # release gpu after finishing

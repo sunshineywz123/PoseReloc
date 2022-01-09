@@ -6,7 +6,7 @@ from src.utils.ray_utils import ProgressBar, chunk_index
 from .fine_match_worker import *
 
 
-def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False):
+def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False, verbose=True):
     detector, matcher = build_model(cfgs["model"])
 
     if not use_ray:
@@ -19,6 +19,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
             extract_feature_method=cfgs['extract_feature_method'],
             visualize=cfgs["visualize"],
             visualize_dir=visualize_dir,
+            verbose=verbose
         )
     else:
         # Initial ray:
@@ -32,7 +33,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
                 local_mode=cfg_ray["local_mode"], ignore_reinit_error=True
             )
 
-        pb = ProgressBar(len(matching_pairs_dataset), "Matching image pairs...")
+        pb = ProgressBar(len(matching_pairs_dataset), "Matching image pairs...") if verbose else None
         all_subset_ids = chunk_index(
             len(matching_pairs_dataset),
             math.ceil(len(matching_pairs_dataset) / cfg_ray["n_workers"]),
@@ -46,11 +47,12 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
                 extract_feature_method=cfgs['extract_feature_method'],
                 visualize=cfgs["visualize"],
                 visualize_dir=visualize_dir,
-                pba=pb.actor,
+                pba=pb.actor if pb is not None else None,
+                verbose=verbose
             )
             for subset_ids in all_subset_ids
         ]
-        pb.print_until_done()
+        pb.print_until_done() if pb is not None else None
         results = ray.get(obj_refs)
         fine_match_results = dict(ChainMap(*results))
 

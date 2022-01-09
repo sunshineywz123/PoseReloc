@@ -134,7 +134,7 @@ class ConstructOptimizationData(Dataset):
         point_cloud_id = np.full_like(initial_depth, point_cloudID)
 
         data = {
-            "intrinsic0": torch.from_numpy(intrinsic0).expand(
+            "intrinsic0": torch.from_numpy(np.copy(intrinsic0)).expand(
                 num_query, -1, -1
             ),  # from [1*3*3] to [N*3*3]
             "intrinsic1": torch.from_numpy(intrinsic1),  # [N*3*3]

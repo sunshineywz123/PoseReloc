@@ -15,7 +15,6 @@ from tqdm import tqdm
 
 from loguru import logger
 from pathlib import Path
-from matplotlib.pyplot import box
 from omegaconf import DictConfig
 
 from src.utils.ray_utils import ProgressBar, chunks
@@ -25,130 +24,6 @@ def parseScanData(cfg):
     """ Parse arkit scanning data"""
     # TODO: add arkit data processing
     pass
-
-
-# def merge_(
-#     anno_2d_file,
-#     avg_anno_3d_file,
-#     collect_anno_3d_file,
-#     idxs_file,
-#     img_id,
-#     ann_id,
-#     images,
-#     annotations,
-# ):
-#     """ Merge annotations about difference objs"""
-#     with open(anno_2d_file, "r") as f:
-#         annos_2d = json.load(f)
-
-#     for anno_2d in annos_2d:
-#         img_id += 1
-#         info = {
-#             "id": img_id,
-#             "img_file": anno_2d["img_file"],
-#         }
-#         images.append(info)
-
-#         ann_id += 1
-#         anno = {
-#             "image_id": img_id,
-#             "id": ann_id,
-#             "pose_file": anno_2d["pose_file"],
-#             "anno2d_file": anno_2d["anno_file"],
-#             "avg_anno3d_file": avg_anno_3d_file,
-#             "collect_anno3d_file": collect_anno_3d_file,
-#             "idxs_file": idxs_file,
-#         }
-#         annotations.append(anno)
-#     return img_id, ann_id
-
-
-# def merge_anno(cfg):
-#     """ Merge different objects' anno file into one anno file """
-#     anno_dirs = []
-#     names = cfg.names
-
-#     if isinstance(names, str):
-#         # Parse object directory
-#         assert isinstance(names, str)
-#         exception_obj_name_list = cfg.exception_obj_names
-#         top_k_obj = cfg.top_k_obj
-#         logger.info(f"Process all objects in directory:{names}")
-
-#         object_names = []
-#         object_names_list = os.listdir(names)[:top_k_obj]
-#         for object_name in object_names_list:
-#             if "-" not in object_name:
-#                 continue
-#             if object_name in exception_obj_name_list:
-#                 continue
-#             object_names.append(object_name)
-
-#         names = object_names
-
-#     all_data_names = os.listdir(
-#         osp.join(
-#             cfg.datamodule.data_dir,
-#             f"outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}",
-#         )
-#     )
-#     id2datafullname = {
-#         data_name[:4]: data_name for data_name in all_data_names if "-" in data_name
-#     }
-#     for name in names:
-#         if len(name) == 4:
-#             # ID only!
-#             if name in id2datafullname:
-#                 name = id2datafullname[name]
-#             else:
-#                 logger.warning(f'id {name} not exist in sfm directory')
-#         anno_dir = osp.join(
-#             cfg.datamodule.data_dir,
-#             f"outputs_{cfg.match_type}_{cfg.network.detection}_{cfg.network.matching}",
-#             name,
-#             "anno",
-#         )
-#         anno_dirs.append(anno_dir)
-
-#     img_id = 0
-#     ann_id = 0
-#     images = []
-#     annotations = []
-
-#     for anno_dir in tqdm(anno_dirs):
-#         logger.info(f"Merging anno dir: {anno_dir}")
-#         anno_2d_file = osp.join(anno_dir, "anno_2d.json")
-#         avg_anno_3d_file = osp.join(anno_dir, "anno_3d_average.npz")
-#         collect_anno_3d_file = osp.join(anno_dir, "anno_3d_collect.npz")
-#         idxs_file = osp.join(anno_dir, "idxs.npy")
-
-#         if (
-#             not osp.isfile(anno_2d_file)
-#             or not osp.isfile(avg_anno_3d_file)
-#             or not osp.isfile(collect_anno_3d_file)
-#         ):
-#             logger.info(f"No annotation in: {anno_dir}")
-#             continue
-
-#         img_id, ann_id = merge_(
-#             anno_2d_file,
-#             avg_anno_3d_file,
-#             collect_anno_3d_file,
-#             idxs_file,
-#             img_id,
-#             ann_id,
-#             images,
-#             annotations,
-#         )
-
-#     logger.info(f"Total num: {len(images)}")
-#     instance = {"images": images, "annotations": annotations}
-
-#     out_dir = osp.dirname(cfg.datamodule.out_path)
-#     Path(out_dir).mkdir(exist_ok=True, parents=True)
-#     with open(cfg.datamodule.out_path, "w") as f:
-#         json.dump(instance, f)
-
 
 def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
@@ -220,7 +95,7 @@ def sfm(cfg):
 
 
 def sfm_worker(data_dirs, cfg, pba=None):
-    logger.info(f"Worker will process: {len(data_dirs)} objects!")
+    logger.info(f"Worker will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects")
     data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")
@@ -255,8 +130,11 @@ def sfm_worker(data_dirs, cfg, pba=None):
 
         sfm_core(cfg, img_lists, outputs_dir_root, obj_name)
         postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name)
+
+        logger.info(f"Finish Processing {data_dir}.")
         if pba is not None:
             pba.update.remote(1)
+    logger.info(f'Worker finish!')
     return None
 
 
@@ -402,6 +280,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         matches_out,
                         match_model=cfg.network.matching,
                         image_dir=None,
+                        verbose=cfg.verbose
                     )
                     results = ray.get(triangulation_results)
                 else:
@@ -414,6 +293,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         matches_out,
                         match_model=cfg.network.matching,
                         image_dir=None,
+                        verbose=cfg.verbose
                     )
 
                 if cfg.enable_loftr_post_refine:
@@ -447,6 +327,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         fine_match_use_ray=cfg.use_local_ray,
                         visualize_dir=visualize_dir,
                         vis3d_pth=vis3d_pth,
+                        verbose=cfg.verbose
                     )
                     if state == False:
                         logger.error("colmap coarse is empty!")
@@ -548,7 +429,8 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
-        use_ray=cfg.use_local_ray
+        use_ray=cfg.use_local_ray,
+        verbose=cfg.verbose
     )
 
     feature_process.get_kpt_ann(
@@ -559,7 +441,8 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
-        use_ray=cfg.use_local_ray
+        use_ray=cfg.use_local_ray,
+        verbose=cfg.verbose
     )
 
 

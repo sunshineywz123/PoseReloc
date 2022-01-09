@@ -7,7 +7,7 @@ from src.NeuralSfM.post_optimization.utils.geometry_utils import *
 from .utils.io_utils import feature_load, feature_save
 
 
-def feature_aggregation_and_update(colmap_image_dataset, fine_match_results_dict, feature_out_pth, image_lists, aggregation_method='avg'):
+def feature_aggregation_and_update(colmap_image_dataset, fine_match_results_dict, feature_out_pth, image_lists, aggregation_method='avg', verbose=True):
     # Update feature file
     feature_coarse_path = osp.splitext(feature_out_pth)[0] + '_coarse' + osp.splitext(feature_out_pth)[1]
     feature_dict_coarse = feature_load(feature_coarse_path, image_lists)
@@ -22,7 +22,12 @@ def feature_aggregation_and_update(colmap_image_dataset, fine_match_results_dict
     fine_match_results_dict = fine_match_results_dict
 
     logger.info('Update feature and keypoints begin...')
-    for index in tqdm(range(len(point_cloud_assigned_imgID_kptsID_list))):
+    if verbose:
+        iter_obj = tqdm(range(len(point_cloud_assigned_imgID_kptsID_list)))
+    else:
+        iter_obj = range(len(point_cloud_assigned_imgID_kptsID_list))
+
+    for index in iter_obj:
         point_cloudID, assigned_state = point_cloud_assigned_imgID_kptsID_list[index]
         assigned_colmap_frameID, assigned_keypoint_index = assigned_state
 

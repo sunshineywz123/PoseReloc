@@ -123,6 +123,7 @@ def FirstOrderSolve(
             *variables_expanded,
             *constantsPar,
             confidance=confidance,
+            verbose=verbose,
             marker=False,
             marker_return=True
         )
@@ -176,6 +177,7 @@ def FirstOrderSolve(
             *variables_expanded,
             *constantsPar,
             confidance=confidance,
+            verbose=verbose,
             marker=False,
             marker_return=True
         )

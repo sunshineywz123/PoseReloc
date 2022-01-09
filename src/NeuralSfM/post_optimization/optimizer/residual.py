@@ -20,6 +20,7 @@ def residual(
     enable_feature_distance_loss=True,
     distance_loss_scale=80,
     mode="feature_metric_error",
+    verbose=True,
     **kwargs
 ):
     """
@@ -74,6 +75,7 @@ def residual(
             scale=scale1,
             mode="Offset_Sample",
             return_outof_grid_mask=True,
+            verbose=verbose
         )  # distance: N*1
         # TODO: solve scale problem, mkpts is in original image resolution, scale should to be original image to fine scale
 
@@ -120,6 +122,7 @@ def pose_ba_residual(
     distance_loss_scale=80,
     mode="feature_metric_error",
     confidance=None,
+    verbose=True,
     **kwargs
 ):
     """
@@ -186,6 +189,7 @@ def pose_ba_residual(
             scale=scale1,
             mode="Offset_Sample",
             return_outof_grid_mask=True,
+            verbose=verbose
         )  # distance: N*1
         # TODO: solve scale problem, mkpts is in original image resolution, scale should to be original image to fine scale
 
@@ -236,6 +240,7 @@ def depth_residual(
     distance_loss_scale=80,
     mode="feature_metric_error",
     confidance=None,
+    verbose=True,
     **kwargs
 ):
     """
@@ -303,6 +308,7 @@ def depth_residual(
             scale=scale1,
             mode="Offset_Sample",
             return_outof_grid_mask=True,
+            verbose=verbose
         )  # distance: N*1
         # TODO: solve scale problem, mkpts is in original image resolution, scale should to be original image to fine scale
 

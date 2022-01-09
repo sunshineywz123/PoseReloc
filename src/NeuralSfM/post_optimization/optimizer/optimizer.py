@@ -30,21 +30,19 @@ class Optimizer(nn.Module):
         self.colmap_frame_dict = optimization_dataset.colmap_frame_dict
 
         # DataLoading related
-        self.num_workers = cfgs['num_workers']
-        self.batch_size = cfgs['batch_size']
+        self.num_workers = cfgs["num_workers"]
+        self.batch_size = cfgs["batch_size"]
 
         # self.solver_type = "SecondOrder"
-        self.solver_type = cfgs['solver_type']
-        self.residual_mode = (
-            cfgs['residual_mode']
-        )
-        self.distance_loss_scale = cfgs['distance_loss_scale']
+        self.solver_type = cfgs["solver_type"]
+        self.residual_mode = cfgs["residual_mode"]
+        self.distance_loss_scale = cfgs["distance_loss_scale"]
         # self.optimize_lr = {"depth": 1e-4, "pose": 1e-4, "BA": 5e-5}  # Baseline
-        self.optimize_lr = cfgs['optimize_lr']
-        self.optim_procedure = cfgs['optim_procedure']
+        self.optimize_lr = cfgs["optimize_lr"]
+        self.optim_procedure = cfgs["optim_procedure"]
 
-        self.image_i_f_scale = cfgs['image_i_f_scale']
-        self.verbose = cfgs['verbose']
+        self.image_i_f_scale = cfgs["image_i_f_scale"]
+        self.verbose = cfgs["verbose"]
 
     @torch.enable_grad()
     def start_optimize(self):
@@ -63,7 +61,7 @@ class Optimizer(nn.Module):
                 num_workers=self.num_workers,
             )
 
-            for data_batch in tqdm(dataloader, total=len(dataloader)):
+            for data_batch in dataloader:
                 # Make padding mask:
                 batch_size, max_track_length = data_batch["intrinsic0"].shape[:2]
                 mask = []
@@ -94,7 +92,9 @@ class Optimizer(nn.Module):
                 for key, value in data.items():
                     if key not in aggregated_dict:
                         aggregated_dict[key] = []
-                    aggregated_dict[key].append(value.to(device) if isinstance(value, torch.Tensor) else value)
+                    aggregated_dict[key].append(
+                        value.to(device) if isinstance(value, torch.Tensor) else value
+                    )
 
         end_time = time.time()
         print(f"Consums: {end_time - start_time}")
@@ -159,22 +159,29 @@ class Optimizer(nn.Module):
         left_pose_idxs = torch.tensor(left_pose_idxs).to(device).long()
         right_pose_idxs = torch.tensor(right_pose_idxs).to(device).long()
 
-        # TODO: move img_i / img_f scale to global parameter
         aggregated_dict["scale0"] *= self.image_i_f_scale
         aggregated_dict["scale1"] *= self.image_i_f_scale
 
         # Prepare optimization data
         point_cloud_ids = aggregated_dict["point_cloud_id"].long()
 
+        logger.info("Refinement begin...")
+
         initial_residual = None
         final_residual = None
-        for i, procedure in tqdm(
-            enumerate(optimization_procedures), total=len(optimization_procedures)
-        ):
+
+        if self.verbose:
+            iter_obj = tqdm(
+                enumerate(optimization_procedures), total=len(optimization_procedures)
+            )
+        else:
+            iter_obj = enumerate(optimization_procedures)
+
+        for i, procedure in iter_obj:
             if procedure == "depth":
                 logger.info(
                     f"Only depth optimization, optimize: {aggregated_dict['depth'].shape[0]}, depth parameters"
-                )
+                ) if self.verbose else None
                 # only optimize depth, regard pose an constant
                 aggregated_dict["left_pose_indexed"] = aggregated_dict[
                     "angle_axis_to_world"
@@ -200,7 +207,7 @@ class Optimizer(nn.Module):
             elif procedure == "pose":
                 logger.info(
                     f"Only optimize pose, optimize: {aggregated_dict['angle_axis_to_world'].shape[0]}*6 parameters"
-                )
+                ) if self.verbose else None
                 # only optimize pose, regard depth as constant
                 aggregated_dict["depth_indexed"] = aggregated_dict["depth"][
                     depth_indices
@@ -223,7 +230,7 @@ class Optimizer(nn.Module):
             elif procedure == "BA":
                 logger.info(
                     f"BA optimization, optimize: pose {aggregated_dict['angle_axis_to_world'].shape[0]}*6 parameters, depth {aggregated_dict['depth'].shape[0]} parameters"
-                )
+                ) if self.verbose else None
                 variables_name = ["angle_axis_to_world", "depth"]
                 indices = {0: [left_pose_idxs, right_pose_idxs], 1: [depth_indices]}
                 constants_name = [
@@ -248,7 +255,10 @@ class Optimizer(nn.Module):
             ]
 
             # Refinement
-            partial_paras = {"distance_loss_scale": self.distance_loss_scale, "mode": self.residual_mode}
+            partial_paras = {
+                "distance_loss_scale": self.distance_loss_scale,
+                "mode": self.residual_mode,
+            }
             if self.solver_type == "SecondOrder":
                 if residual_format is pose_ba_residual:
                     # pose optimization and ba is not implement for second order solver
@@ -260,6 +270,7 @@ class Optimizer(nn.Module):
                     fn=partial(residual_format, **partial_paras),
                 )
             elif self.solver_type == "FirstOrder":
+                # TODO: move to out parameter
                 optimization_cfgs = {
                     "lr": self.optimize_lr[procedure],
                     "optimizer": "Adam",
@@ -313,7 +324,6 @@ class Optimizer(nn.Module):
             "depth": aggregated_dict["depth"].cpu().numpy(),  # [n_point_clouds]
             "point_cloud_ids": point_cloud_ids.cpu().numpy(),  # [n_point_clouds]
         }
-
 
     @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
     def start_optimize_ray_wrapper(self):

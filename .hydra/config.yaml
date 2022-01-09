@@ -56,15 +56,15 @@ output_base_dir: /nas/users/hexingyi/onepose_sfm
 match_type: softmax
 redo: true
 enable_loftr_post_refine: true
-overwrite_all: true
-overwrite_coarse: true
+overwrite_all: false
+overwrite_coarse: false
 overwrite_fine: true
-use_global_ray: true
+use_global_ray: false
 use_local_ray: true
 debug: true
 ray:
   slurm: false
-  n_workers: 3
+  n_workers: 1
   n_cpus_per_worker: 5
   n_gpus_per_worker: 1
   local_mode: false
@@ -75,7 +75,7 @@ dataset:
   top_k_obj: null
   num_seq: null
   ids:
-  - '0617'
+  - '0603'
   exception_obj_names:
   - null
   outputs_dir: ${output_base_dir}
@@ -90,4 +90,5 @@ sfm:
   track_length: 8
 post_process:
   filter_bbox_before_filter_track_length: true
+verbose: false
 disable_lightning_logs: true

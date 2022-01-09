@@ -25,7 +25,7 @@ cfgs = {
         "df": 8,
         "feature_track_assignment_strategy": "greedy",
         # "feature_track_assignment_strategy": "balance",
-        "verbose": True,
+        "verbose": False,
     },
     "fine_match_debug": True,
     "fine_matcher": {
@@ -90,7 +90,12 @@ def post_optimization(
     pre_sfm=False,
     visualize_dir=None,
     vis3d_pth=None,
+    verbose=True
 ):
+    # Overwrite some configs
+    cfgs["coarse_colmap_data"]['verbose'] = verbose
+    cfgs["optimizer"]['verbose'] = verbose
+
     # Construct scene data
     colmap_image_dataset = CoarseColmapDataset(
         cfgs["coarse_colmap_data"],
@@ -122,6 +127,7 @@ def post_optimization(
             matching_pairs_dataset,
             visualize_dir,
             use_ray=fine_match_use_ray,
+            verbose=verbose
         )
         save_obj(fine_match_results_dict, save_path)
     else:
@@ -150,6 +156,7 @@ def post_optimization(
             feature_out_pth=feature_out_pth,
             image_lists=image_lists,
             aggregation_method=cfgs["feature_aggregation_method"],
+            verbose=verbose
         )
 
     # TODO: refactor here

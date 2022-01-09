@@ -20,7 +20,7 @@ def convert_T2pose(T):
 def convert_pose2angleAxis(pose):
     # pose: [R: 3*3, t: 3]
     angle_axis_torch = transforms.so3_log_map(
-        torch.from_numpy(pose[0]).unsqueeze(0)
+        torch.from_numpy(np.copy(pose[0])).unsqueeze(0)
     )  # 1*3
     angle_axis = angle_axis_torch.squeeze().numpy()  # 3
     return np.concatenate([angle_axis[None], pose[1][None]], axis=1)  # 1*6
