@@ -69,11 +69,11 @@ def import_data(img_lists, do_ba=False):
         _, tvec, qvec = get_pose_from_txt(img_index, pose_dir)
 
         # read intrinsic
-        if img_type == 'color' or img_type == 'color_crop':
+        if img_type == 'color' or img_type == 'color':
             if do_ba:
                 intrin_dir = osp.join(base_dir, 'intrin')
             else:
-                intrin_dir = osp.join(base_dir, 'intrin_crop_ba')
+                intrin_dir = osp.join(base_dir, 'intrin_ba')
                 if not osp.exists(intrin_dir):
                     logger.warning(f"intrin dir :{intrin_dir} not exists, use 'intrin' instead!")
                     intrin_dir = osp.join(base_dir, 'intrin')

@@ -1,15 +1,32 @@
+from itertools import chain
 import h5py
+from ray.actor import ActorHandle
 from tqdm import tqdm
 import json
+import os
 import os.path as osp
 import numpy as np
 from tqdm import tqdm
 from loguru import logger
+import ray
+import math
 
 from collections import defaultdict
 from pathlib import Path
 
 from src.utils.colmap import read_write_model
+from src.utils.ray_utils import ProgressBar, chunks, chunk_index, split_dict
+
+cfgs = {
+    "ray": {
+        "slurm": False,
+        "n_workers": 4,
+        # "n_cpus_per_worker": 1,
+        "n_cpus_per_worker": 1,
+        "n_gpus_per_worker": 0.25,
+        "local_mode": False,
+    },
+}
 
 
 def get_box_path(img_path):
@@ -235,7 +252,7 @@ def average_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_di
     return kp3d_position, kp3d_descriptors, kp3d_scores 
 
 
-def gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim):
+def gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim, pba: ActorHandle=None):
     """ 
     Gather affiliated 2d points' positions, (mean/concated)descriptors and scores for each 3d points
     """
@@ -244,8 +261,13 @@ def gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim
     kp3d_position = np.empty(shape=(0, 3))
     idxs = []
 
-    logger.info('Gather 3D ann begin...')
-    for new_point_idx, old_points_idxs in tqdm(points_idxs.items()):
+    if pba is None:
+        logger.info('Gather 3D ann begin...')
+        points_idxs = tqdm(points_idxs.items())
+    else:
+        points_idxs = points_idxs.items()
+
+    for new_point_idx, old_points_idxs in points_idxs:
         descriptors = np.empty(shape=(0, feature_dim))
         scores = np.empty(shape=(0, 1))
         for old_point_idx in old_points_idxs:
@@ -256,9 +278,16 @@ def gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim
         kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0)
         kp3d_scores = np.append(kp3d_scores, scores, axis=0)
         idxs.append(descriptors.shape[0])
+
+        if pba is not None:
+            pba.update.remote(1)
+
     
     return kp3d_position, kp3d_descriptors, kp3d_scores, np.array(idxs)
 
+@ray.remote(num_cpus=1)
+def gather_3d_ann_ray_wrapper(*args, **kwargs):
+        return gather_3d_ann(*args, **kwargs)
 
 def save_3d_anno(xyzs, descriptors, scores, out_path):
     """ Save 3d anno for each object """
@@ -432,7 +461,7 @@ def mean_scores(scores, idxs):
 
 
 def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
-                points_idxs, xyzs, save_feature_for_each_image=True):
+                points_idxs, xyzs, save_feature_for_each_image=True, use_ray=False):
     """ Generate 3d point feature.
     @param xyzs: 3d points after filter(track length, 3d box and merge operation)
     @param points_idxs: {new_point_id: [old_point1_id, old_point2_id, ...]}.
@@ -466,8 +495,38 @@ def get_kpt_ann(cfg, img_lists, feature_file_path, outputs_dir,
     # NOTE: kp3d_id is original 3D id
 
     # step 2
-    filter_xyzs, filter_descriptors, filter_scores, idxs = gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs,
-                                                                        points_idxs, feature_dim)
+    if use_ray:
+        # Initial ray:
+        cfg_ray = cfgs["ray"]
+        if cfg_ray["slurm"]:
+            ray.init(address=os.environ["ip_head"])
+        else:
+            ray.init(
+                num_cpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_cpus_per_worker"]),
+                num_gpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_gpus_per_worker"]),
+                local_mode=cfg_ray["local_mode"],
+                ignore_reinit_error=True,
+            )
+        pb = ProgressBar(len(points_idxs), "Gather 3D annotations...")
+        points_idxs_chunked = split_dict(points_idxs, math.ceil(len(points_idxs) / cfg_ray["n_workers"]))
+
+        kp3d_id_feature_ = ray.put(kp3d_id_feature)
+        obj_refs = [
+            gather_3d_ann_ray_wrapper.remote(
+                kp3d_id_feature_, kp3d_id_score, xyzs, sub_points_ids, feature_dim, pb.actor
+            )
+            for sub_points_ids in points_idxs_chunked
+        ]
+        pb.print_until_done()
+        results = ray.get(obj_refs)
+        filter_xyzs = np.concatenate([k for k, _, _, _ in results], axis=0)
+        filter_descriptors = np.concatenate([k for _, k, _, _ in results], axis=0)
+        filter_scores = np.concatenate([k for _, _, k, _ in results], axis=0)
+        idxs = np.concatenate([k for _, _, _, k in results], axis=0)
+        logger.info("Gather 3D annotation finish!!")
+    else:
+        filter_xyzs, filter_descriptors, filter_scores, idxs = gather_3d_ann(kp3d_id_feature, kp3d_id_score, xyzs,
+                                                                            points_idxs, feature_dim)
     
     avg_descriptors, avg_scores = mean_descriptors(filter_descriptors, idxs), mean_scores(filter_scores, idxs)
 

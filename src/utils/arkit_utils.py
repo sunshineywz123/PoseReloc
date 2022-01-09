@@ -14,12 +14,12 @@ from pathlib import Path
 from transforms3d import affines, quaternions
 
 def get_gt_pose_path_by_color(color_path):
-    return color_path.replace('/color_crop/', '/poses_ba/').replace(
+    return color_path.replace('/color/', '/poses_ba/').replace(
         '.png', '.txt'
     )
 
 def get_intrin_path_by_color(color_path):
-    return color_path.replace('/color_crop/', '/intrin_crop_ba/').replace(
+    return color_path.replace('/color/', '/intrin_ba/').replace(
         '.png', '.txt'
     )
 

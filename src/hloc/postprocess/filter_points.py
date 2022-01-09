@@ -1,6 +1,8 @@
+from genericpath import exists
 import cv2
 import torch
 import numpy as np
+import os
 import os.path as osp
 from src.utils.colmap import read_write_model 
 
@@ -144,7 +146,71 @@ def filter_by_3d_box(points, points_idxs, box_path, trans_box_path=None):
     passed_inds = points_idxs[passed_inds]
     return filtered_xyzs, passed_inds
 
+def filter_bbox(model_path, model_updated_save_path, box_path, box_trans_path=None):
+    """ Filter 3d points by bbox, and save as colmap format """
+    from src.utils.colmap.read_write_model import read_model, write_model
+    cameras, images, points3D = read_model(model_path, ext='.bin')
 
+    # Get 3D bbox:
+    corner_in_cano, _ = get_3d_box(box_path)
+    if box_trans_path is not None:
+        corner_in_cano = trans_corner(corner_in_cano, box_trans_path)
+    
+    # Get pointcloud:
+    pointclouds = []
+    ids = []
+    for id, point3D in points3D.items():
+        pointclouds.append(point3D.xyz)
+        ids.append(id)
+    pointclouds = np.stack(pointclouds) # N*3
+    ids = np.array(ids) # N
+    
+    # Filter 3D points by bbox
+    def filter_(bbox_3d, points):
+        """
+        @param bbox_3d: corners (8, 3)
+        @param points: (n, 3)
+        """
+        v45 = bbox_3d[5] - bbox_3d[4]
+        v40 = bbox_3d[0] - bbox_3d[4]
+        v47 = bbox_3d[7] - bbox_3d[4]
+        
+        points = points - bbox_3d[4]
+        m0 = np.matmul(points, v45)
+        m1 = np.matmul(points, v40)
+        m2 = np.matmul(points, v47)
+        
+        cs = []
+        for m, v in zip([m0, m1, m2], [v45, v40, v47]):
+            c0 = 0 < m
+            c1 = m < np.matmul(v, v)
+            c = c0 & c1
+            cs.append(c)
+        cs = cs[0] & cs[1] & cs[2]
+        passed_inds = np.nonzero(cs)
+        num_passed = np.sum(cs)
+        return num_passed, passed_inds, cs
+    num_passed, passed_inds, keeped_mask = filter_(corner_in_cano, pointclouds)
+
+    passed_ids = ids[~keeped_mask].tolist()
+
+    # Update colmap model
+    points3D_keeped = {}
+    for id, point3D in points3D.items():
+        if id in passed_ids:
+            # Update images state!
+            for img_id, point2D_idx in zip(point3D.image_ids.tolist(), point3D.point2D_idxs.tolist()):
+                images[img_id].point3D_ids[point2D_idx] = -1
+        else:
+            # Keep!
+            points3D_keeped[id] = point3D
+    
+    # TODO: Save updated colmap model
+    if not osp.exists(model_updated_save_path):
+        os.makedirs(model_updated_save_path, exist_ok=True)
+    write_model(cameras, images, points3D_keeped, model_updated_save_path, ext='.bin')
+
+# NOTE: Function duplicate! Because of old repo
 def filter_3d(model_path, track_length, box_path, box_trans_path=None):
     """ Filter 3d points by tracke length and 3d box """
     points_model_path = osp.join(model_path, 'points3D.bin')
@@ -154,7 +220,23 @@ def filter_3d(model_path, track_length, box_path, box_trans_path=None):
     xyzs, points_idxs = filter_by_3d_box(xyzs, points_idxs, box_path, box_trans_path)
 
     return xyzs, points_idxs
-    
+
+def filter_track_length_and_bbox(model_path, track_length, box_path, box_trans_path=None):
+    """ Filter 3d points by tracke length and 3d box """
+    points_model_path = osp.join(model_path, 'points3D.bin')
+    points3D = read_write_model.read_points3d_binary(points_model_path)
+   
+    xyzs, points_idxs = filter_by_track_length(points3D, track_length)
+
+    return xyzs, points_idxs
+
+def filter_track_length(model_path, track_length):
+    """ Filter 3d points by track length """
+    points_model_path = osp.join(model_path, 'points3D.bin')
+    points3D = read_write_model.read_points3d_binary(points_model_path)
+   
+    xyzs, points_idxs = filter_by_track_length(points3D, track_length)
+    return xyzs, points_idxs
 
 def merge(xyzs, points_idxs, dist_threshold=1e-3):
     """ 

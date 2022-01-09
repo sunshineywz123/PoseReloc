@@ -66,7 +66,7 @@ def merge_val_core(
     test_seq_paths = get_test_seq_path(obj_root, last_n_seq_as_test=last_n_seq_as_test)
 
     for test_seq_path in test_seq_paths:
-        color_dir = osp.join(test_seq_path, "color_crop")
+        color_dir = osp.join(test_seq_path, "color")
         img_names = os.listdir(color_dir)
 
         for img_name in img_names[::downsample]:

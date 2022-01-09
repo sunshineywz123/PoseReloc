@@ -171,8 +171,10 @@ def sfm(cfg):
 
         if cfg.dataset.ids is not None:
             # Use data ids
-            id2full_name = {name[:4]: name for name in object_names if '-' in name}
-            object_names = [id2full_name[id] for id in cfg.dataset.ids if id in id2full_name]
+            id2full_name = {name[:4]: name for name in object_names if "-" in name}
+            object_names = [
+                id2full_name[id] for id in cfg.dataset.ids if id in id2full_name
+            ]
 
         for object_name in object_names:
             if "-" not in object_name:
@@ -218,7 +220,7 @@ def sfm(cfg):
 
 
 def sfm_worker(data_dirs, cfg, pba=None):
-    logger.info(f"Worker will process: {data_dirs}")
+    logger.info(f"Worker will process: {len(data_dirs)} objects!")
     data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")
@@ -228,7 +230,7 @@ def sfm_worker(data_dirs, cfg, pba=None):
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
             img_lists += glob.glob(
-                str(Path(seq_dir)) + "/color_crop/*.png", recursive=True
+                str(Path(seq_dir)) + "/color/*.png", recursive=True
             )
 
         # ------------------ downsample ------------------
@@ -258,9 +260,9 @@ def sfm_worker(data_dirs, cfg, pba=None):
     return None
 
 
-@ray.remote(num_cpus=1)  # release gpu after finishing
-def sfm_worker_ray_wrapper(data_dirs, cfg, pba=None):
-    return sfm_worker(data_dirs, cfg, pba)
+@ray.remote  # release gpu after finishing
+def sfm_worker_ray_wrapper(*args, **kwargs):
+    return sfm_worker(*args, **kwargs)
 
 
 def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
@@ -486,20 +488,46 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     deep_sfm_dir = osp.join(outputs_dir, "sfm_ws")
     model_path = osp.join(deep_sfm_dir, "model")
 
-    # select track length to limit the number of 3d points below thres.
-    track_length, points_count_list = filter_tkl.get_tkl(
-        model_path, thres=cfg.dataset.max_num_kp3d, show=False
-    )
-    tkl_file_path = filter_tkl.vis_tkl_filtered_pcds(
-        model_path, points_count_list, track_length, outputs_dir, vis3d_pth
-    )  # visualization only
+    # TODO: add filter bbox and then filter track length
+    if cfg.post_process.filter_bbox_before_filter_track_length:
+        model_filted_bbox_path = osp.join(deep_sfm_dir, "model_filted_bbox")
+        os.makedirs(model_filted_bbox_path, exist_ok=True)
+        filter_points.filter_bbox(
+            model_path, model_filted_bbox_path, bbox_path, box_trans_path=trans_box_path
+        )  # crop 3d points by 3d box and save as colmap format
 
-    xyzs, points_ids = filter_points.filter_3d(
-        model_path, track_length, bbox_path, box_trans_path=trans_box_path
-    )  # crop 3d points by 3d box and track length
+        # select track length to limit the number of 3d points below thres.
+        track_length, points_count_list = filter_tkl.get_tkl(
+            model_filted_bbox_path, thres=cfg.dataset.max_num_kp3d, show=False
+        )
+        tkl_file_path = filter_tkl.vis_tkl_filtered_pcds(
+            model_filted_bbox_path,
+            points_count_list,
+            track_length,
+            outputs_dir,
+            vis3d_pth,
+        )  # visualization only
+
+        xyzs, points_ids = filter_points.filter_track_length(
+            model_filted_bbox_path, track_length
+        )  # crop 3d points by 3d box and track length
+    else:
+        # select track length to limit the number of 3d points below thres.
+        track_length, points_count_list = filter_tkl.get_tkl(
+            model_path, thres=cfg.dataset.max_num_kp3d, show=False
+        )
+        tkl_file_path = filter_tkl.vis_tkl_filtered_pcds(
+            model_path, points_count_list, track_length, outputs_dir, vis3d_pth
+        )  # visualization only
+
+        xyzs, points_ids = filter_points.filter_3d(
+            model_path, track_length, bbox_path, box_trans_path=trans_box_path
+        )  # crop 3d points by 3d box and track length
+
     merge_xyzs, merge_idxs = filter_points.merge(
         xyzs, points_ids, dist_threshold=1e-3
     )  # merge 3d points by distance between points
+
     if cfg.debug:
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(merge_xyzs)
@@ -512,7 +540,6 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     feature_coarse_path = (
         osp.splitext(feature_out)[0] + "_coarse" + osp.splitext(feature_out)[1]
     )
-    # FIXME: bug here!
     feature_process.get_kpt_ann(
         cfg_dup,
         img_lists,
@@ -521,6 +548,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
+        use_ray=cfg.use_local_ray
     )
 
     feature_process.get_kpt_ann(
@@ -531,6 +559,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
+        use_ray=cfg.use_local_ray
     )
 
 

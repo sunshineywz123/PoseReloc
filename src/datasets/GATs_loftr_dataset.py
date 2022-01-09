@@ -208,14 +208,14 @@ class GATsLoFTRDataset(Dataset):
         return conf_matrix, fine_location_matrix
 
     def get_intrin_by_color_pth(self, img_path):
-        intrin_path = img_path.replace("/color_crop/", "/intrin_crop_ba/").replace(
+        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(
             ".png", ".txt"
         )
         K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K_crop
 
     def get_gt_pose_by_color_pth(self, img_path):
-        gt_pose_path = img_path.replace("/color_crop/", "/poses_ba/").replace(
+        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(
             ".png", ".txt"
         )
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
