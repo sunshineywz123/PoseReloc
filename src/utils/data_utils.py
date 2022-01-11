@@ -1,6 +1,6 @@
 import cv2
 from matplotlib.pyplot import axis
-from numpy.core.defchararray import lower
+from numpy.core.defchararray import index, lower
 import torch
 import numpy as np
 
@@ -121,7 +121,7 @@ def avg_scores(scores):
     return ret_scores
 
 
-def pad_keypoints3d_random(keypoints, n_target_kpts):
+def pad_keypoints3d_top_n(keypoints, n_target_kpts):
     """ Pad or truncate orig 3d keypoints to fixed size."""
     n_pad = n_target_kpts - keypoints.shape[0]
 
@@ -145,6 +145,7 @@ def pad_keypoints3d_random(keypoints, n_target_kpts):
                 keypoints = torch.cat([keypoints, kept_kpts], dim=0)
 
     return keypoints
+
 
 
 def pad_keypoints3d_according_to_assignmatrix(keypoints, n_target_kpts, assignmatrix):
@@ -209,7 +210,7 @@ def pad_keypoints3d_according_to_assignmatrix(keypoints, n_target_kpts, assignma
     return keypoints, assignmatrix, index_shuffled
 
 
-def pad_features3d_random(descriptors, scores, n_target_shape):
+def pad_features3d_top_n(descriptors, scores, n_target_shape):
     """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
     dim = descriptors.shape[0]
     n_pad = n_target_shape - descriptors.shape[1]
@@ -320,6 +321,53 @@ def pad_features3d_leaves_according_to_assignmatrix(
 
     return descriptors, scores
 
+def pad_keypoints3d_random(keypoints, n_target_kpts):
+    """ Pad or truncate orig 3d keypoints to fixed size."""
+    # NOTE: For val
+    n_pad = n_target_kpts - keypoints.shape[0]
+
+    if n_pad < 0:
+        selected_index = torch.randint(keypoints.shape[0], (n_target_kpts,))
+        keypoints = keypoints[selected_index]
+    else:
+        selected_index = torch.arange(keypoints.shape[0])
+
+    return keypoints, selected_index
+
+def pad_features3d_random(
+    descriptors, scores, n_target_shape, padding_index
+):
+    """ Pad or truncate orig 3d feature(descriptors and scores) to fixed size."""
+    # NOTE: For val
+    dim = descriptors.shape[0]
+    n_pad = n_target_shape - descriptors.shape[1]
+
+    if n_pad < 0:
+        descriptors = descriptors[:, padding_index]
+        scores = scores[padding_index, :]
+
+    return descriptors, scores
+
+def pad_features3d_leaves_random(
+    descriptors, scores, idxs, n_target_shape, num_leaf, padding_index
+):
+    """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
+    dim = descriptors.shape[0]
+    orig_num = idxs.shape[0]
+    n_pad = n_target_shape - orig_num
+
+    if n_pad < 0:
+        dim = descriptors.shape[0]
+        descriptors = descriptors.view(dim, -1, num_leaf)
+        scores = scores.view(-1, num_leaf, 1)
+
+        descriptors = descriptors[:, padding_index, :]
+        scores = scores[padding_index, :]
+
+        descriptors = descriptors.view(dim, -1)
+        scores = scores.view(-1, 1)
+
+    return descriptors, scores
 
 def pad_keypoints3d_random_v2(keypoints, features, scores, n_target_kpts, num_leaf):
     n_pad = n_target_kpts - keypoints.shape[0]

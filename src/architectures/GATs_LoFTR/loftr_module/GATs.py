@@ -6,7 +6,15 @@ import torch.nn.functional as F
 
 class GraphAttentionLayer(nn.Module):
     def __init__(
-        self, in_features, out_features, dropout, alpha, concat=True, include_self=True
+        self,
+        in_features,
+        out_features,
+        dropout,
+        alpha,
+        concat=True,
+        include_self=True,
+        enable_feed_forward=False,
+        feed_forward_norm_method="instancenorm",
     ):
         super(GraphAttentionLayer, self).__init__()
         self.dropout = dropout
@@ -15,6 +23,7 @@ class GraphAttentionLayer(nn.Module):
         self.alpha = alpha
         self.concat = concat
         self.include_self = include_self
+        self.enable_feed_forward = enable_feed_forward
 
         self.W = nn.Parameter(torch.empty(size=(in_features, out_features)))
         nn.init.xavier_normal_(self.W.data, gain=1.414)
@@ -23,10 +32,23 @@ class GraphAttentionLayer(nn.Module):
 
         self.leakyrelu = nn.LeakyReLU(self.alpha)
 
-        # if final_proj:
-        #     self.final_proj = nn.Linear(in_features, out_features, bias=True)
-        # else:
-        #     self.final_proj = None
+        if self.enable_feed_forward:
+            # feed-forward network
+            self.mlp = nn.Sequential(
+                nn.Linear(in_features * 2, in_features * 2, bias=False),
+                nn.ReLU(True),
+                nn.Linear(in_features * 2, in_features, bias=False),
+            )
+
+            # norm and dropout
+            if feed_forward_norm_method == "layernorm":
+                self.norm1 = nn.LayerNorm(in_features)
+            elif feed_forward_norm_method == "instancenorm":
+                self.norm1 = nn.InstanceNorm1d(in_features)
+            else:
+                raise NotImplementedError
+
+            self.dropout1 = nn.Dropout(dropout)
 
     def forward(self, h_2d, h_3d, adj):
         b, n1, dim = h_3d.shape
@@ -55,7 +77,12 @@ class GraphAttentionLayer(nn.Module):
 
         h_prime = F.elu(h_prime) if self.concat else h_prime  # [B,N,C]
 
-        return h_prime
+        if self.enable_feed_forward:
+            h_prime = self.dropout1(h_prime)
+            h_prime = self.mlp(torch.cat([h_3d, h_prime], dim=-1))
+            h_prime = self.norm1(h_prime)
+
+        return h_3d + h_prime
 
     def _prepare_attentional_mechanism_input(
         self, wh_2d, wh_3d, num_leaf, include_self=False

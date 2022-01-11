@@ -1,7 +1,4 @@
-import math
-import cv2
 from loguru import logger
-from numpy.core.defchararray import index
 
 try:
     import ujson as json
@@ -32,6 +29,10 @@ class GATsLoFTRDataset(Dataset):
         percent=1.0,
         split="train",
         load_pose_gt=False,
+        path_prefix_substitute_3D_source=None,
+        path_prefix_substitute_3D_aim=None,
+        path_prefix_substitute_2D_source=None,
+        path_prefix_substitute_2D_aim=None,
     ):
         super(Dataset, self).__init__()
 
@@ -56,6 +57,12 @@ class GATsLoFTRDataset(Dataset):
         self.img_resize = img_resize
         self.df = df
         self.coarse_scale = coarse_scale
+
+        # For data path substiture to use data generated at other clusters
+        self.path_prefix_substitute_3D_source=str(path_prefix_substitute_3D_source),
+        self.path_prefix_substitute_3D_aim=str(path_prefix_substitute_3D_aim),
+        self.path_prefix_substitute_2D_source=str(path_prefix_substitute_2D_source),
+        self.path_prefix_substitute_2D_aim=str(path_prefix_substitute_2D_aim),
 
     def read_anno2d(self, anno2d_file):
         """ Read (and pad) 2d info"""
@@ -96,24 +103,63 @@ class GATsLoFTRDataset(Dataset):
             clt_descriptors, clt_scores, idxs, num_leaf=self.num_leaf
         )
         if pad:
-            if assignmatrix is not None:
+            if self.split == 'train':
+                if assignmatrix is not None:
+                    (
+                        keypoints3d,
+                        assignmatrix,
+                        padding_index,
+                    ) = data_utils.pad_keypoints3d_according_to_assignmatrix(
+                        keypoints3d, self.shape3d, assignmatrix=assignmatrix
+                    )
+                    (
+                        avg_descriptors3d,
+                        avg_scores,
+                    ) = data_utils.pad_features3d_according_to_assignmatrix(
+                        avg_descriptors3d, avg_scores, self.shape3d, padding_index
+                    )
+                    (
+                        clt_descriptors,
+                        clt_scores,
+                    ) = data_utils.pad_features3d_leaves_according_to_assignmatrix(
+                        clt_descriptors,
+                        clt_scores,
+                        idxs,
+                        self.shape3d,
+                        num_leaf=self.num_leaf,
+                        padding_index=padding_index,
+                    )
+                else:
+                    keypoints3d = data_utils.pad_keypoints3d_random(
+                        keypoints3d, self.shape3d
+                    )
+                    avg_descriptors3d, avg_scores = data_utils.pad_features3d_random(
+                        avg_descriptors3d, avg_scores, self.shape3d
+                    )
+                    clt_descriptors, clt_scores = data_utils.pad_features3d_leaves(
+                        clt_descriptors,
+                        clt_scores,
+                        idxs,
+                        self.shape3d,
+                        num_leaf=self.num_leaf,
+                    )
+            else:
                 (
                     keypoints3d,
-                    assignmatrix,
                     padding_index,
-                ) = data_utils.pad_keypoints3d_according_to_assignmatrix(
-                    keypoints3d, self.shape3d, assignmatrix=assignmatrix
+                ) = data_utils.pad_keypoints3d_random(
+                    keypoints3d, self.shape3d
                 )
                 (
                     avg_descriptors3d,
                     avg_scores,
-                ) = data_utils.pad_features3d_according_to_assignmatrix(
+                ) = data_utils.pad_features3d_random(
                     avg_descriptors3d, avg_scores, self.shape3d, padding_index
                 )
                 (
                     clt_descriptors,
                     clt_scores,
-                ) = data_utils.pad_features3d_leaves_according_to_assignmatrix(
+                ) = data_utils.pad_features3d_leaves_random(
                     clt_descriptors,
                     clt_scores,
                     idxs,
@@ -121,20 +167,7 @@ class GATsLoFTRDataset(Dataset):
                     num_leaf=self.num_leaf,
                     padding_index=padding_index,
                 )
-            else:
-                keypoints3d = data_utils.pad_keypoints3d_random(
-                    keypoints3d, self.shape3d
-                )
-                avg_descriptors3d, avg_scores = data_utils.pad_features3d_random(
-                    avg_descriptors3d, avg_scores, self.shape3d
-                )
-                clt_descriptors, clt_scores = data_utils.pad_features3d_leaves(
-                    clt_descriptors,
-                    clt_scores,
-                    idxs,
-                    self.shape3d,
-                    num_leaf=self.num_leaf,
-                )
+
         return (
             keypoints3d,
             avg_descriptors3d,
@@ -230,6 +263,11 @@ class GATsLoFTRDataset(Dataset):
         anno = self.coco.loadAnns(ann_ids)[0]
 
         color_path = self.coco.loadImgs(int(img_id))[0]["img_file"]
+
+        if self.path_prefix_substitute_2D_source[0] is not None and self.path_prefix_substitute_2D_aim[0] is not None:
+            if self.path_prefix_substitute_2D_source[0] in color_path:
+                color_path = color_path.replace(self.path_prefix_substitute_2D_source[0], self.path_prefix_substitute_2D_aim[0])
+
         query_img, query_img_scale, query_img_mask = read_grayscale(
             color_path,
             resize=self.img_resize,
@@ -254,10 +292,15 @@ class GATsLoFTRDataset(Dataset):
         if self.split == "train":
             # For query image GT correspondences
             anno2d_file = anno["anno2d_file"]
+
+            if self.path_prefix_substitute_2D_source[0] is not None and self.path_prefix_substitute_2D_aim[0] is not None:
+                if self.path_prefix_substitute_2D_source[0] in anno2d_file:
+                    anno2d_file = anno2d_file.replace(self.path_prefix_substitute_2D_source[0], self.path_prefix_substitute_2D_aim[0])
+
             anno2d_coarse_file = anno2d_file.replace(
                 "/anno_loftr/", "/anno_loftr_coarse/"
             )
-            # FIXME: not an efficient solution: Load feature twice however no use! change sfm save keypoints' feature part
+            # TODO: not an efficient solution: Load feature twice however no use! change sfm save keypoints' feature part
             (
                 keypoints2d_coarse,
                 scores2d,
@@ -277,6 +320,13 @@ class GATsLoFTRDataset(Dataset):
         idxs_file = anno["idxs_file"]
         avg_anno3d_file = anno["avg_anno3d_file"]
         collect_anno3d_file = anno["collect_anno3d_file"]
+
+        if self.path_prefix_substitute_3D_source[0] is not None and self.path_prefix_substitute_3D_aim[0] is not None:
+            if self.path_prefix_substitute_3D_source[0] in idxs_file:
+                idxs_file = idxs_file.replace(self.path_prefix_substitute_3D_source[0], self.path_prefix_substitute_3D_aim[0])
+                avg_anno3d_file = avg_anno3d_file.replace(self.path_prefix_substitute_3D_source[0], self.path_prefix_substitute_3D_aim[0])
+                collect_anno3d_file = collect_anno3d_file.replace(self.path_prefix_substitute_3D_source[0], self.path_prefix_substitute_3D_aim[0])
+
         (
             keypoints3d,
             avg_descriptors3d,

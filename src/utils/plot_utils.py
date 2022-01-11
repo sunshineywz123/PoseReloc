@@ -444,10 +444,11 @@ def reproj(K, pose, pts_3d):
 
 
 def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
-    # TODO: add visualzie bbox
+    # TODO: add visualize bbox
     figures = {"evaluation": []}
 
     if visual_gt:
+        raise NotImplementedError
         # For gt debug
         # NOTE: only available for batch size = 1
         query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
@@ -504,6 +505,11 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
             text += [
                 f"Num of inliers: {inliers[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers[bs])}"
             ]
+
+        # Clip reprojected keypoints
+        # FIXME: bug exists here! a_max need to be original image size
+        mkpts3d_reprojed[:,0] = np.clip(mkpts3d_reprojed[:, 0], a_min=0, a_max=data['query_image'].shape[-1]) # x
+        mkpts3d_reprojed[:,1] = np.clip(mkpts3d_reprojed[:, 1], a_min=0, a_max=data['query_image'].shape[-2]) # y
 
         if visual_color_type == "conf":
             if mkpts3d_reprojed.shape[0] != 0:

@@ -28,12 +28,19 @@ class GATsLoFTRDataModule(LightningDataModule):
         # 3D part
         self.num_leaf = kwargs["num_leaf"]
         self.shape2d = kwargs["shape2d"]
-        self.shape3d = kwargs["shape3d"]
+        self.shape3d_train = kwargs["shape3d_train"]
+        self.shape3d_val = kwargs["shape3d_val"]
         # 2D part
         self.img_pad = kwargs["img_pad"]
         self.img_resize = kwargs["img_resize"]
         self.df = kwargs["df"]
         self.coarse_scale = kwargs["coarse_scale"]
+
+        # File path substitute:
+        self.path_prefix_substitute_3D_source = kwargs['path_prefix_substitute_3D_source']
+        self.path_prefix_substitute_3D_aim = kwargs['path_prefix_substitute_3D_aim']
+        self.path_prefix_substitute_2D_source = kwargs['path_prefix_substitute_2D_source']
+        self.path_prefix_substitute_2D_aim = kwargs['path_prefix_substitute_2D_aim']
 
         # Loader parameters:
         self.train_loader_params = {
@@ -68,27 +75,35 @@ class GATsLoFTRDataModule(LightningDataModule):
             coarse_scale=self.coarse_scale,
             df=self.df,
             shape2d=self.shape2d,
-            shape3d=self.shape3d,
+            shape3d=self.shape3d_train,
             percent=self.train_percent,
             split='train',
-            load_pose_gt=True
+            load_pose_gt=True,
+            path_prefix_substitute_3D_source=self.path_prefix_substitute_3D_source,
+            path_prefix_substitute_3D_aim=self.path_prefix_substitute_3D_aim,
+            path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
+            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim
         )
         print("=> Read train anno file: ", self.train_anno_file)
 
         val_set = GATsLoFTRDataset(
             anno_file=self.val_anno_file,
             # anno_file=self.train_anno_file,
-            pad=False, # FIXME: need to change to False
+            pad=True,
             num_leaf=self.num_leaf,
             img_pad=self.img_pad,
             img_resize=self.img_resize,
             coarse_scale=self.coarse_scale,
             df=self.df,
             shape2d=self.shape2d,
-            shape3d=self.shape3d,
+            shape3d=self.shape3d_val,
             percent=self.val_percent,
             split='val',
             load_pose_gt=True,
+            path_prefix_substitute_3D_source=self.path_prefix_substitute_3D_source,
+            path_prefix_substitute_3D_aim=self.path_prefix_substitute_3D_aim,
+            path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
+            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim
         )
 
         self.data_train = train_set
