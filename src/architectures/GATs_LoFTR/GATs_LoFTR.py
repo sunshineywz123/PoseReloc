@@ -222,7 +222,6 @@ class GATs_LoFTR(nn.Module):
             return
 
         # 4. fine-level refinement
-        # TODO: use descriptors3D after coarse?
         with self.profiler.record_function("LoFTR/fine-refinement"):
             (
                 desc3d_db_selected,

@@ -24,7 +24,7 @@ trainer:
   flush_logs_every_n_steps: 1
 model:
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: null
+  pretrained_ckpt: weight/test_inference_loftr_gats.ckpt
   loftr:
     loftr_backbone:
       type: ResNetFPN
@@ -64,7 +64,6 @@ model:
       d_ffm: 128
       nhead: 8
       layer_names:
-      - GATs
       - self
       - cross
       layer_iter_n: 4
@@ -83,7 +82,7 @@ model:
       GATs_feed_forward_norm_method: instancenorm
     coarse_matching:
       type: dual-softmax
-      thr: 0.4
+      thr: 0.2
       feat_norm_method: sqrt_feat_dim
       border_rm: 2
       spg_spvs: false
@@ -108,7 +107,7 @@ model:
       train:
         train_padding: true
         train_coarse_percent: 0.3
-        train_pad_num_gt_min: 150
+        train_pad_num_gt_min: 200
     loftr_fine:
       enable: true
       window_size: 9
@@ -121,10 +120,9 @@ model:
       d_model: 128
       nhead: 8
       layer_names:
-      - GATs
       - self
       - cross
-      layer_iter_n: 4
+      layer_iter_n: 1
       dropout: 0.0
       attention: linear
       norm_method: layernorm
@@ -149,7 +147,7 @@ model:
     coarse_type: focal
     coarse_weight: 1.0
     fine_type: l2_with_std
-    fine_weight: 1.0
+    fine_weight: 0.81
     focal_alpha: 0.5
     focal_gamma: 1.0
     pos_weight: 1.0
@@ -163,7 +161,7 @@ model:
     canonical_lr: 0.0005
     scaling: null
     world_size: null
-    n_val_pairs_to_plot: 32
+    n_val_pairs_to_plot: 50
     optimizer: adamw
     true_lr: null
     adam_decay: 0.0
@@ -171,10 +169,10 @@ model:
     scheduler: MultiStepLR
     scheduler_invervel: epoch
     mslr_milestones:
-    - 3
-    - 6
-    - 9
-    - 12
+    - 5
+    - 8
+    - 11
+    - 18
     mslr_gamma: 0.5
     cosa_tmax: 30
     elr_gamma: 0.999992
@@ -195,12 +193,12 @@ datamodule:
   batch_size: 1
   num_workers: 4
   pin_memory: true
-  train_percent: 1.0
-  val_percent: 0.4
-  num_leaf: 8
+  train_percent: 0.01
+  val_percent: 0.05
+  num_leaf: 6
   shape2d: 2000
-  shape3d_train: 10000
-  shape3d_val: 15000
+  shape3d_train: 9000
+  shape3d_val: 12000
   img_pad: false
   img_resize:
   - 512

@@ -5,7 +5,6 @@ os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 import pytorch_lightning as pl
 import torch
 import numpy as np
-from ray.actor import ActorHandle
 from tqdm import tqdm
 
 from src.utils.misc import lower_config

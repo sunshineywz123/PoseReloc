@@ -1,6 +1,7 @@
 from loguru import logger
 import matplotlib.pyplot as plt
 import matplotlib
+import torch
 import numpy as np
 import random
 import cv2
@@ -12,11 +13,25 @@ jet = cm.get_cmap("jet")  # "Reds"
 jet_colors = jet(np.arange(256))[:, :3]  # color list: normalized to [0,1]
 
 
-def plot_image_pair(imgs, dpi=100, size=6, pad=0.5):
+def error_colormap(x, alpha=1.0):
+    assert alpha <= 1.0 and alpha > 0, f"Invaid alpha value: {alpha}"
+    return np.clip(
+        np.stack([2 - x * 2, x * 2, np.zeros_like(x), np.ones_like(x) * alpha], -1),
+        0,
+        1,
+    )
+
+
+def plot_image_pair(imgs, dpi=100, size=6, pad=0.5, horizontal=False):
     n = len(imgs)
     assert n == 2, "number of images must be two"
-    figsize = (size * n, size) if size is not None else None
-    _, ax = plt.subplots(1, n, figsize=figsize, dpi=dpi)
+    if horizontal:
+        figsize = (size * n, size) if size is not None else None
+        _, ax = plt.subplots(1, n, figsize=figsize, dpi=dpi)
+    else:
+        figsize = (size, size * n) if size is not None else None
+        _, ax = plt.subplots(n, 1, figsize=figsize, dpi=dpi)
+
     for i in range(n):
         ax[i].imshow(imgs[i], cmap=plt.get_cmap("gray"), vmin=0, vmax=255)
         ax[i].get_yaxis().set_ticks([])
@@ -453,7 +468,7 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
         # NOTE: only available for batch size = 1
         query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
         if query_image.shape[0] != 1:
-            logger.warning('Not implement visual gt for batch size != 0')
+            logger.warning("Not implement visual gt for batch size != 0")
             return
 
         mkpts_3d = (
@@ -477,7 +492,6 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
     R_errs = data["R_errs"] if "R_errs" in data else None
     t_errs = data["t_errs"] if "t_errs" in data else None
     inliers = data["inliers"] if "inliers" in data else None
-
 
     for bs in range(data["query_image"].size(0)):
         mask = m_bids == bs
@@ -508,8 +522,12 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
 
         # Clip reprojected keypoints
         # FIXME: bug exists here! a_max need to be original image size
-        mkpts3d_reprojed[:,0] = np.clip(mkpts3d_reprojed[:, 0], a_min=0, a_max=data['query_image'].shape[-1]) # x
-        mkpts3d_reprojed[:,1] = np.clip(mkpts3d_reprojed[:, 1], a_min=0, a_max=data['query_image'].shape[-2]) # y
+        mkpts3d_reprojed[:, 0] = np.clip(
+            mkpts3d_reprojed[:, 0], a_min=0, a_max=data["query_image"].shape[-1]
+        )  # x
+        mkpts3d_reprojed[:, 1] = np.clip(
+            mkpts3d_reprojed[:, 1], a_min=0, a_max=data["query_image"].shape[-2]
+        )  # y
 
         if visual_color_type == "conf":
             if mkpts3d_reprojed.shape[0] != 0:
@@ -527,9 +545,14 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
             else:
                 color = np.array([])
 
-        elif visual_color_type == "epi_error":
-            # TODO: add color error map
-            raise NotImplementedError
+        elif visual_color_type == "distance_error":
+            color_thr = 5
+            reprojection_dictance = np.linalg.norm(
+                mkpts3d_reprojed - mkpts_query_masked, axis=-1
+            )
+
+            color = np.clip(reprojection_dictance / (color_thr), 0, 1)
+            color = error_colormap(1 - color, alpha=0.5)
         else:
             raise NotImplementedError
 

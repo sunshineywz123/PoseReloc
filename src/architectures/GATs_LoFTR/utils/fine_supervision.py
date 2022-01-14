@@ -24,7 +24,12 @@ def fine_supervision(data, config):
     ) # [M, 2]
 
     # `expec_f_gt` might exceed the window, i.e. abs(*) > 1
-    expec_f_gt = (data['fine_location_matrix_gt'][b_ids, i_ids, j_ids] - mkpts_query) / fine_scale / radius  # [M, 2]
+    gt_offset = data['fine_location_matrix_gt'][b_ids, i_ids, j_ids] - mkpts_query
+    expec_f_gt = (gt_offset) / fine_scale / radius  # [M, 2]
+
+    # #For test:
+    # gt_offset_mask = torch.linalg.norm(gt_offset, dim=-1) < 20
+    # gt_offset_masked = gt_offset[gt_offset_mask]
+    # coarse_fine_distance = torch.linalg.norm(data['mkpts_query_f'] - data['mkpts_query_c'], axis=-1)
     
-    #FIXME: check here!
     data.update({"expec_f_gt": expec_f_gt})
