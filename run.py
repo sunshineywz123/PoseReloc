@@ -87,15 +87,15 @@ def sfm(cfg):
         pb = ProgressBar(len(data_dirs), "SfM Mapping begin...")
         all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
         sfm_worker_results = [
-            sfm_worker_ray_wrapper.remote(subset_data_dirs, cfg, pba=pb.actor)
-            for subset_data_dirs in all_subsets
+            sfm_worker_ray_wrapper.remote(subset_data_dirs, cfg, worker_id=id, pba=pb.actor)
+            for id, subset_data_dirs in enumerate(all_subsets)
         ]
         pb.print_until_done()
         results = ray.get(sfm_worker_results)
 
 
-def sfm_worker(data_dirs, cfg, pba=None):
-    logger.info(f"Worker will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects")
+def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
+    logger.info(f"Worker: {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects")
     data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")

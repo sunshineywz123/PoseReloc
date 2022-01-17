@@ -2,6 +2,7 @@ import numpy as np
 import os
 import cv2
 import torch
+from loguru import logger
 from .colmap.read_write_model import qvec2rotmat, read_images_binary
 from .colmap.eval_helper import quaternion_from_matrix
 
@@ -185,7 +186,7 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1, pnp_reprojection_error=5):
 
 
 @torch.no_grad()
-def compute_query_pose_errors(data, configs):
+def compute_query_pose_errors(data, configs, use_reprojected_2d_points=False):
     """
     Update:
         data(dict):{
@@ -194,6 +195,8 @@ def compute_query_pose_errors(data, configs):
             "inliers": []
         }
     """
+    if use_reprojected_2d_points:
+        logger.warning('Now use gt reproject coarse mkpts3d to gt mkpts2d for test gt, this should not be open in real train!')
     m_bids = data["m_bids"].cpu().numpy()
     mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
     mkpts_query = data["mkpts_query_f"].cpu().numpy()
@@ -206,9 +209,27 @@ def compute_query_pose_errors(data, configs):
     for bs in range(query_K.shape[0]):
         mask = m_bids == bs
 
+        # FIXME: bug exists here!
+        # if not use_reprojected_2d_points:
+        #     print(mkpts_query.shape)
+        #     assert m_bids.shape[0] == mkpts_query.shape[0]
+        #     mkpts_query = mkpts_query[mask]
+        # else:
+        #     # NOTE: For test gt, need to check is close for normal training
+        #     real_mkpts_query = mkpts_query[mask]
+        #     # Reproj mkpts:
+        #     R = query_pose_gt[bs][:3,:3] # 3*3
+        #     t = query_pose_gt[bs][:3, [3]] # 3*1
+        #     mkpts_3d_cam = R @ mkpts_3d.T + t # 3*N
+        #     mkpts_proj = (query_K[bs] @ mkpts_3d_cam).T # N*3
+        #     mkpts_query = mkpts_proj[:, :2] / mkpts_proj[:, [2]]
+            
+        #     diff = mkpts_query - real_mkpts_query
+        #     diff = diff
+
         query_pose_pred, query_pose_pred_homo, inliers = ransac_PnP(
             query_K[bs],
-            mkpts_query[mask],
+            mkpts_query[mask], # FIXME: change to mkpts_query
             mkpts_3d[mask],
             scale=configs["point_cloud_rescale"],
             pnp_reprojection_error=configs["pnp_reprojection_error"],

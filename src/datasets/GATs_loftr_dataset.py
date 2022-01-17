@@ -288,6 +288,14 @@ class GATsLoFTRDataset(Dataset):
         self.n_query_coarse_grid = int(self.h_c * self.w_c)
 
         data = {}
+        if query_img_mask is not None:
+            data.update({"query_image_mask": query_img_mask})  # [h*w]
+
+        if self.load_pose_gt:
+            K_crop = self.get_intrin_by_color_pth(color_path)
+            pose_gt = self.get_gt_pose_by_color_pth(color_path)
+
+            data.update({"query_intrinsic": K_crop, "query_pose_gt": pose_gt})
 
         if self.split == "train":
             # For query image GT correspondences
@@ -300,7 +308,6 @@ class GATsLoFTRDataset(Dataset):
             anno2d_coarse_file = anno2d_file.replace(
                 "/anno_loftr/", "/anno_loftr_coarse/"
             )
-            # TODO: not an efficient solution: Load feature twice however no use! change sfm save keypoints' feature part
             (
                 keypoints2d_coarse,
                 scores2d,
@@ -308,12 +315,14 @@ class GATsLoFTRDataset(Dataset):
                 num_2d_orig,
             ) = self.read_anno2d(anno2d_coarse_file)
 
-            (
-                keypoints2d_fine,
-                scores2d,
-                assign_matrix,
-                num_2d_orig,
-            ) = self.read_anno2d(anno2d_file)
+            # NOTE: use 3d point cloud project to 2D to make fine match instead of feature track later
+            # (
+            #     keypoints2d_fine,
+            #     scores2d,
+            #     assign_matrix_fine,
+            #     num_2d_orig,
+            # ) = self.read_anno2d(anno2d_file)
+
         else:
             assign_matrix = None
 
@@ -356,7 +365,19 @@ class GATsLoFTRDataset(Dataset):
         )
 
         if self.split == "train":
+            assign_matrix = assign_matrix.long()
+            mkpts_3d = keypoints3d[assign_matrix[1,:]] # N*3
+            R = pose_gt[:3,:3].to(torch.float) # 3*3
+            t = pose_gt[:3, [3]].to(torch.float) # 3*1
+            K_crop = K_crop.to(torch.float)
+            keypoints2d_fine = torch.zeros((keypoints2d_coarse.shape[0],2), dtype=torch.float)
 
+            # Project 3D pointcloud to make fine GT
+            mkpts_3d_camera = R @ mkpts_3d.transpose(1,0) + t
+            mkpts_proj = (K_crop @ mkpts_3d_camera).transpose(1,0) # N*3
+            mkpts_proj = mkpts_proj[:, :2] / (mkpts_proj[:, [2]] + 1e-6)
+            keypoints2d_fine[assign_matrix[0,:]] = mkpts_proj
+            
             (conf_matrix, fine_location_matrix) = self.build_assignmatrix(
                 keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad
             )
@@ -369,14 +390,18 @@ class GATsLoFTRDataset(Dataset):
                 }
             )
 
-        if query_img_mask is not None:
-            data.update({"query_image_mask": query_img_mask})  # [h*w]
+        # mkpt fine check:
+        # # TODO: remove
+        # if self.split == 'train':
+        #     mkpts_2d_fine = keypoints2d_fine[assign_matrix[0,:]] # N*2
+        #     mkpts_3d = keypoints3d[assign_matrix[1,:]] # N*3
 
-        if self.load_pose_gt:
-            K_crop = self.get_intrin_by_color_pth(color_path)
-            pose_gt = self.get_gt_pose_by_color_pth(color_path)
-
-            data.update({"query_intrinsic": K_crop, "query_pose_gt": pose_gt})
+        #     mkpts_3d_camera = R @ mkpts_3d.transpose(1,0) + t
+        #     mkpts_proj = (K_crop @ mkpts_3d_camera).transpose(1,0) # N*3
+        #     mkpts_proj = mkpts_proj[:, :2] / (mkpts_proj[:, [2]] + 1e-4)
+        #     coarse_fine_offset = mkpts_2d_fine - keypoints2d_coarse[assign_matrix[0, :]]
+        #     diff = mkpts_proj - mkpts_2d_fine
+        #     diff =diff
         return data
 
     def __getitem__(self, index):

@@ -11,7 +11,7 @@ class GATsLoFTRDataModule(LightningDataModule):
 
         self.train_anno_file = kwargs["train_anno_file"]
         self.val_anno_file = kwargs["val_anno_file"]
-        assert osp.exists(self.train_anno_file)
+        assert osp.exists(self.train_anno_file), self.train_anno_file
         if not osp.exists(self.val_anno_file):
             logger.warning(
                 f"Val anno path: {self.val_anno_file} not exists! use train anno instead"

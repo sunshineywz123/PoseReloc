@@ -553,6 +553,9 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
 
             color = np.clip(reprojection_dictance / (color_thr), 0, 1)
             color = error_colormap(1 - color, alpha=0.5)
+        elif visual_color_type == 'true_or_false':
+            # NOTE: only available for train to visual whether coarse match is correct
+            pass
         else:
             raise NotImplementedError
 

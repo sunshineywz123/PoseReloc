@@ -5,9 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 from torch.utils.data import Dataset
-from .utils import (
-    read_grayscale,
-)
+from .utils import read_grayscale
 
 from ..colmap.read_write_model import (
     read_images_binary,
@@ -50,18 +48,20 @@ class CoarseColmapDataset(Dataset):
         self.colmap_refined_save_dir = save_dir
         self.vis_path = vis_path
 
-        self.img_resize = args['img_resize'] # 512
-        self.df = args['df'] # 8
-        self.feature_track_assignment_strategy = args['feature_track_assignment_strategy'] #"greedy"
-        self.verbose = args['verbose'] # True
+        self.img_resize = args["img_resize"]  # 512
+        self.df = args["df"]  # 8
+        self.feature_track_assignment_strategy = args[
+            "feature_track_assignment_strategy"
+        ]  # "greedy"
+        self.verbose = args["verbose"]  # True
         self.state = True
 
         if isinstance(covis_pairs, list):
             self.pair_list = covis_pairs
         else:
-            # Load pairs: 
-            with open(covis_pairs, 'r') as f:
-                self.pair_list = f.read().rstrip('\n').split('\n')
+            # Load pairs:
+            with open(covis_pairs, "r") as f:
+                self.pair_list = f.read().rstrip("\n").split("\n")
 
         self.frame_ids = list(range(len(self.img_list)))
 
@@ -100,7 +100,9 @@ class CoarseColmapDataset(Dataset):
         (
             self.frameId2colmapID_dict,
             self.colmapID2frameID_dict,
-        ) = self.get_frameID2colmapID(self.frame_ids, self.img_list, self.colmap_images, pre_sfm=pre_sfm)
+        ) = self.get_frameID2colmapID(
+            self.frame_ids, self.img_list, self.colmap_images, pre_sfm=pre_sfm
+        )
 
         # Verification:
         if (
@@ -113,14 +115,19 @@ class CoarseColmapDataset(Dataset):
         # Get keyframes and feature track(3D points) assignment
         logger.info("Building keyframes begin....")
         if self.feature_track_assignment_strategy == "greedy":
-            self.keyframe_dict, self.point_cloud_assigned_imgID_kptID = self.get_keyframes_greedy(
+            (
+                self.keyframe_dict,
+                self.point_cloud_assigned_imgID_kptID,
+            ) = self.get_keyframes_greedy(
                 self.colmap_images, self.colmap_3ds, verbose=self.verbose
             )
         elif self.feature_track_assignment_strategy == "balance":
             (
                 self.keyframe_dict,
                 self.point_cloud_assigned_imgID_kptID,
-            ) = self.get_keyframes_balance(self.colmap_images, self.colmap_3ds, verbose=self.verbose)
+            ) = self.get_keyframes_balance(
+                self.colmap_images, self.colmap_3ds, verbose=self.verbose
+            )
         else:
             raise NotImplementedError
 
@@ -222,7 +229,9 @@ class CoarseColmapDataset(Dataset):
                 }
             )
 
-    def get_frameID2colmapID(self, frame_IDs, frame_names, colmap_images, pre_sfm=False):
+    def get_frameID2colmapID(
+        self, frame_IDs, frame_names, colmap_images, pre_sfm=False
+    ):
         # frame_id equal to frame_idx
         frameID2colmapID_dict = {}
         colmapID2frameID_dict = {}
@@ -436,23 +445,15 @@ class CoarseColmapDataset(Dataset):
             "point_cloud_id": np.array n_point_clouds
         }
         """
-        # Save old point clouds
-        old_point_cloud = []
-        old_point_cloud_color = []
-        for id, pointcloud in self.colmap_3ds.items():
-            old_point_cloud.append(pointcloud.xyz)
-            old_point_cloud_color.append(pointcloud.rgb)
 
         # Save old camera pose:
         old_pose = []
         for id, image in self.colmap_images.items():
             old_pose.append(convert_pose2T(get_pose_from_colmap_image(image)))
 
-        # Update pose:
+        # Update pose and keypoints:
         R_all, t_all = results_dict["pose"]  # n_frame*3*3, n_frames*3
         T_all = []
-        point_cloud = []
-        point_cloud_color = []
         for i, colmap_frame_id in enumerate(results_dict["colmap_frame_ids"].tolist()):
             R = R_all[i]  # [3*3]
             t = t_all[i]  # [3]
@@ -461,6 +462,15 @@ class CoarseColmapDataset(Dataset):
                 colmap_frame_id
             ]._replace(qvec=qvec, tvec=t)
             T_all.append(convert_pose2T([R, t]))
+
+        # Save old point clouds
+        old_point_cloud = []
+        old_point_cloud_color = []
+        for id, pointcloud in self.colmap_3ds.items():
+            old_point_cloud.append(pointcloud.xyz)
+            old_point_cloud_color.append(pointcloud.rgb)
+        point_cloud = []
+        point_cloud_color = []
 
         # Convert depth to 3D points
         for i, point_cloud_id in enumerate(results_dict["point_cloud_ids"].tolist()):
@@ -498,6 +508,45 @@ class CoarseColmapDataset(Dataset):
 
             point_cloud.append(kpt_world.squeeze(-1))
             point_cloud_color.append(self.colmap_3ds[point_cloud_id].rgb)
+
+        # Update colmap image keypoints:
+        for colmap_frame_id, colmap_image in self.colmap_images.items():
+            keypoints = colmap_image.xys
+            point3D_ids = colmap_image.point3D_ids
+            registrated_mask = point3D_ids != -1
+
+            keypoints_masked = keypoints[registrated_mask]
+            point3D_ids_masked = point3D_ids[registrated_mask]
+
+            if point3D_ids_masked.shape[0] == 0:
+                # No keypoints registrated scenario
+                continue
+
+            # Get corresponding 3D coordinates
+            point3D_coords = []
+            for point3D_id in point3D_ids_masked.tolist():
+                point3D = self.colmap_3ds[point3D_id].xyz
+                point3D_coords.append(point3D)
+            point3D_coords = np.stack(point3D_coords, axis=0)  # N*3
+
+            # Get frame pose:
+            intrinsic = self.colmap_frame_dict[colmap_frame_id]["intrinsic"]
+            pose = [
+                qvec2rotmat(colmap_image.qvec),
+                colmap_image.tvec,
+            ]  # [R: 3*3, t: 3]
+
+            # Project 3D points to frame
+            kpts_cam = pose[0] @ point3D_coords.T + pose[1][:, None] # 3*N
+            kpts_frame_h = (intrinsic @ kpts_cam).T # N*3
+            projected_kpts = kpts_frame_h[:, :2] / (kpts_frame_h[:, [2]] + 1e-4) # N*2
+
+            # Check distance
+            offset = projected_kpts - keypoints_masked
+
+            # Update to colmap frames
+            keypoints[registrated_mask, :] = projected_kpts
+            self.colmap_images[colmap_frame_id] = colmap_image._replace(xys=keypoints)
 
         # Write results to colmap file format
         os.makedirs(self.colmap_refined_save_dir, exist_ok=True)
@@ -553,7 +602,7 @@ class CoarseColmapDataset(Dataset):
             old_point_cloud_color = np.stack(old_point_cloud_color)  # N*3
             old_pose = np.stack(old_pose)  # N*4*4
 
-            colmap_vis3d_dump_dir, name = self.vis_path.rsplit('/', 1)
+            colmap_vis3d_dump_dir, name = self.vis_path.rsplit("/", 1)
 
             vis_cameras_point_clouds(
                 T_all,
@@ -605,10 +654,7 @@ class CoarseColmapDataset(Dataset):
     def _get_single_item(self, idx):
         img_name = self.img_list[idx]
         img_scale = read_grayscale(
-            img_name,
-            (self.img_resize,),
-            df=self.df,
-            ret_scales=True,
+            img_name, (self.img_resize,), df=self.df, ret_scales=True,
         )
         img, scale = map(lambda x: x[None], img_scale)  # no dataloader operation
         data = {

@@ -24,7 +24,7 @@ trainer:
   flush_logs_every_n_steps: 1
 model:
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: weight/test_inference_loftr_gats.ckpt
+  pretrained_ckpt: null
   loftr:
     loftr_backbone:
       type: ResNetFPN

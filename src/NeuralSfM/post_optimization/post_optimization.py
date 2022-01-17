@@ -148,6 +148,15 @@ def post_optimization(
     else:
         results_dict = optimizer.start_optimize()
 
+    # TODO: refactor here
+    # Update colmap pose and pointcloud results
+    (
+        pose_error_before_refine,
+        pose_error_after_refine,
+    ) = colmap_image_dataset.update_optimize_results_to_colmap(
+        results_dict, visualize=cfgs["visualize"], evaluation=cfgs["evaluation"]
+    )
+
     # Update feature
     if feature_out_pth is not None:
         feature_aggregation_and_update(
@@ -159,14 +168,6 @@ def post_optimization(
             verbose=verbose
         )
 
-    # TODO: refactor here
-    # Update colmap pose and pointcloud results
-    (
-        pose_error_before_refine,
-        pose_error_after_refine,
-    ) = colmap_image_dataset.update_optimize_results_to_colmap(
-        results_dict, visualize=cfgs["visualize"], evaluation=cfgs["evaluation"]
-    )
 
     return state, pose_error_before_refine, pose_error_after_refine
 
