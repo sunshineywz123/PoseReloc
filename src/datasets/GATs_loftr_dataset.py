@@ -389,6 +389,13 @@ class GATsLoFTRDataset(Dataset):
                     "fine_location_matrix_gt": fine_location_matrix,  # [n_point_cloud, n_query_coarse_grid, 2] (x,y)
                 }
             )
+        
+            # # NOTE: For fine match debug TODO: remove
+            # gt_mkpts_3d = -1 * torch.ones((keypoints3d.shape[0],), dtype=torch.long) # Index to keypoints2d_fine
+            # gt_mkpts_3d[assign_matrix[1, :]] = assign_matrix[0, :]
+            # data.update(
+            #     {"gt_mkpts_3d_idx": gt_mkpts_3d, 'keypoints2d_fine_gt': keypoints2d_fine}
+            # )
 
         # mkpt fine check:
         # # TODO: remove

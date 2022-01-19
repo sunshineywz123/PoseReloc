@@ -114,8 +114,8 @@ class PL_GATsLoFTR(pl.LightningModule):
                         self.global_step,
                     )
             if self.hparams["trainer"]["enable_plotting"]:
-                compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"])
-                figures = draw_reprojection_pair(batch, visual_color_type="distance_error")
+                compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"], training=self.training,)
+                figures = draw_reprojection_pair(batch, visual_color_type="depth")
                 for k, v in figures.items():
                     self.logger.experiment[0].add_figure(
                         f"train_match/{k}", v, self.global_step
@@ -139,18 +139,25 @@ class PL_GATsLoFTR(pl.LightningModule):
         #     self.loss(batch)
 
         # Compute metrics
-        compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"])
+        compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"], training=self.training)
         metrics = {
             "R_errs": batch["R_errs"],
             "t_errs": batch["t_errs"],
             "inliers": batch["inliers"],
         }
 
+        if "R_errs_c" in batch:
+            metrics.update({
+                "R_errs_coarse": batch['R_errs_c'],
+                "t_errs_coarse": batch['t_errs_c'],
+                "inliers_coarse": batch['inliers_c']
+            })
+
         # Visualize match
         val_plot_invervel = max(self.trainer.num_val_batches[0] // self.n_vals_plot, 1)
         figures = {"evaluation": []}
         if batch_idx % val_plot_invervel == 0:
-            figures = draw_reprojection_pair(batch, visual_color_type="distance_error")
+            figures = draw_reprojection_pair(batch, visual_color_type="depth")
 
         return {
             # "loss_scalars": batch["loss_scalars"],

@@ -24,7 +24,7 @@ trainer:
   flush_logs_every_n_steps: 1
 model:
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: null
+  pretrained_ckpt: weight/last.ckpt
   loftr:
     loftr_backbone:
       type: ResNetFPN
@@ -42,7 +42,7 @@ model:
         - 3
         - 1
       pretrained: weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt
-      pretrained_fix: false
+      pretrained_fix: true
     use_fine_backbone_as_coarse: true
     interpol_type: bilinear
     keypoints_encoding:
@@ -62,7 +62,7 @@ model:
       type: LoFTR
       d_model: 128
       d_ffm: 128
-      nhead: 8
+      nhead: 4
       layer_names:
       - self
       - cross
@@ -82,7 +82,7 @@ model:
       GATs_feed_forward_norm_method: instancenorm
     coarse_matching:
       type: dual-softmax
-      thr: 0.2
+      thr: 0.4
       feat_norm_method: sqrt_feat_dim
       border_rm: 2
       spg_spvs: false
@@ -118,7 +118,7 @@ model:
       ms_feat_type: PROJ_MERGE
       type: LoFTR
       d_model: 128
-      nhead: 8
+      nhead: 4
       layer_names:
       - self
       - cross

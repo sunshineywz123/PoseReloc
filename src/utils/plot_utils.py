@@ -453,9 +453,11 @@ def reproj(K, pose, pts_3d):
     pts_3d_homo = pts_3d_homo.T
 
     reproj_points = K_homo @ pose_homo @ pts_3d_homo
+    depth = reproj_points[2] #[N]
     reproj_points = reproj_points[:] / reproj_points[2:]
     reproj_points = reproj_points[:2, :].T
-    return reproj_points  # [n, 2]
+
+    return reproj_points, depth  # [n, 2]
 
 
 def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
@@ -493,10 +495,18 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
     t_errs = data["t_errs"] if "t_errs" in data else None
     inliers = data["inliers"] if "inliers" in data else None
 
+    R_errs_c = data["R_errs_c"] if "R_errs_c" in data else None
+    t_errs_c = data["t_errs_c"] if "t_errs_c" in data else None
+    inliers_c = data["inliers_c"] if "inliers_c" in data else None
+
+    R_errs_gt = data["R_errs_gt"] if "R_errs_gt" in data else None
+    t_errs_gt = data["t_errs_gt"] if "t_errs_gt" in data else None
+    inliers_gt = data["inliers_gt"] if "inliers_gt" in data else None
+
     for bs in range(data["query_image"].size(0)):
         mask = m_bids == bs
 
-        mkpts3d_reprojed = reproj(query_K[bs], query_pose_gt[bs], mkpts_3d[mask])
+        mkpts3d_reprojed, depth = reproj(query_K[bs], query_pose_gt[bs], mkpts_3d[mask])
         mkpts_query_masked = mkpts_query[mask]
 
         if "query_image_scale" in data:
@@ -520,13 +530,32 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
                 f"Num of inliers: {inliers[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers[bs])}"
             ]
 
+        if R_errs_c is not None:
+            text += [f"R_err_coarse: {R_errs_c[bs]}"]
+        if t_errs_c is not None:
+            text += [f"t_err_coarse: {t_errs_c[bs]}"]
+        if inliers_c is not None:
+            text += [
+                f"Num of inliers coarse: {inliers_c[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers_c[bs])}"
+            ]
+
+        if R_errs_gt is not None:
+            text += [f"R_err_gt: {R_errs_gt[bs]}"]
+        if t_errs_gt is not None:
+            text += [f"t_err_gt: {t_errs_gt[bs]}"]
+        if inliers_gt is not None:
+            text += [
+                f"Num of inliers gt: {inliers_gt[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers_gt[bs])}"
+            ]
+        
+
         # Clip reprojected keypoints
         # FIXME: bug exists here! a_max need to be original image size
         mkpts3d_reprojed[:, 0] = np.clip(
-            mkpts3d_reprojed[:, 0], a_min=0, a_max=data["query_image"].shape[-1]
+            mkpts3d_reprojed[:, 0], a_min=0, a_max=data["query_image"].shape[-1]-1
         )  # x
         mkpts3d_reprojed[:, 1] = np.clip(
-            mkpts3d_reprojed[:, 1], a_min=0, a_max=data["query_image"].shape[-2]
+            mkpts3d_reprojed[:, 1], a_min=0, a_max=data["query_image"].shape[-2] -1
         )  # y
 
         if visual_color_type == "conf":
@@ -544,7 +573,6 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
                 ]
             else:
                 color = np.array([])
-
         elif visual_color_type == "distance_error":
             color_thr = 5
             reprojection_dictance = np.linalg.norm(
@@ -553,6 +581,15 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
 
             color = np.clip(reprojection_dictance / (color_thr), 0, 1)
             color = error_colormap(1 - color, alpha=0.5)
+        elif visual_color_type == 'depth':
+            if depth.shape[0] != 0:
+                depth_max = np.max(depth)
+                depth_min = np.min(depth)
+                depth_normalized = (depth - depth_min) / (depth_max - depth_min + 1e-4)
+                color = jet(depth_normalized)
+            else:
+                color = np.array([])
+
         elif visual_color_type == 'true_or_false':
             # NOTE: only available for train to visual whether coarse match is correct
             pass

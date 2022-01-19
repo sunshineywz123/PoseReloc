@@ -242,14 +242,3 @@ class GATs_LoFTR(nn.Module):
         # 5. match fine-level
         with self.profiler.record_function("LoFTR/fine-matching"):
             self.fine_matching(desc3d_db_selected, query_feat_f_unfolded, data)
-
-        # Pose regression
-        # TODO: remove to a independent function in future
-        # with self.profiler.record_function("SfM pose refinement"):
-        #     # data.update({"feats0":feats0, "feats1":feats1}) # backbone features ['coarse', 'fine']
-        #     # data.update({"feat_c0": feat_c0, "feat_c1": feat_c1}) # coarse feature after loftr feature coarse
-        #     # data.update({'feat_f0' : feat_f0, 'feat_f1' : feat_f1}) # fine feature backbone
-        #     data.update(
-        #         {"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold}
-        #     )
-        #     # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)

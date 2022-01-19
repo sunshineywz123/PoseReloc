@@ -95,13 +95,26 @@ def inference(cfg):
                 gathered_metrics[metric_name] = [metric]
             else:
                 gathered_metrics[metric_name].append(metric)
+        
+    # Dump metrics:
+    name2metrics_sorted = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['1cm@1degree'])}
+    os.makedirs(cfg.output.txt_dir, exist_ok=True)
+    with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'w') as f:
+        for name, metrics in name2metrics_sorted.items():
+            f.write(f'{name}: \n')
+            for metric_name, metric in metrics.items():
+                f.write(f"{metric_name}: {metric}  ")
+            f.write('\n ---------------- \n')
     
-    for metric_name, metric in gathered_metrics.items():
-        print(f'{metric_name}:')
-        metric_parsed = pd.DataFrame(metric)
-        print(metric_parsed.describe())
-        print('---------------------')
-        pass
+    with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'a') as f:
+        for metric_name, metric in gathered_metrics.items():
+            print(f'{metric_name}:')
+            metric_parsed = pd.DataFrame(metric)
+            print(metric_parsed.describe())
+            print('---------------------')
+
+            # f.write('Summary: \n')
+            # f.writelines(metric_parsed.describe())
         
 def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
     logger.info(

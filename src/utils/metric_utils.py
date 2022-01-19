@@ -186,7 +186,7 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1, pnp_reprojection_error=5):
 
 
 @torch.no_grad()
-def compute_query_pose_errors(data, configs, use_reprojected_2d_points=False):
+def compute_query_pose_errors(data, configs, compute_gt_proj_pose_error=True, training=False):
     """
     Update:
         data(dict):{
@@ -195,46 +195,49 @@ def compute_query_pose_errors(data, configs, use_reprojected_2d_points=False):
             "inliers": []
         }
     """
-    if use_reprojected_2d_points:
-        logger.warning('Now use gt reproject coarse mkpts3d to gt mkpts2d for test gt, this should not be open in real train!')
     m_bids = data["m_bids"].cpu().numpy()
     mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
     mkpts_query = data["mkpts_query_f"].cpu().numpy()
+    mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
     query_K = data["query_intrinsic"].cpu().numpy()
     query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
 
     data.update({"R_errs": [], "t_errs": [], "inliers": []})
+    data.update({"R_errs_c": [], "t_errs_c": [], "inliers_c": []})
 
     pose_pred = []
     for bs in range(query_K.shape[0]):
         mask = m_bids == bs
 
         # FIXME: bug exists here!
-        # if not use_reprojected_2d_points:
-        #     print(mkpts_query.shape)
-        #     assert m_bids.shape[0] == mkpts_query.shape[0]
-        #     mkpts_query = mkpts_query[mask]
-        # else:
-        #     # NOTE: For test gt, need to check is close for normal training
-        #     real_mkpts_query = mkpts_query[mask]
-        #     # Reproj mkpts:
-        #     R = query_pose_gt[bs][:3,:3] # 3*3
-        #     t = query_pose_gt[bs][:3, [3]] # 3*1
-        #     mkpts_3d_cam = R @ mkpts_3d.T + t # 3*N
-        #     mkpts_proj = (query_K[bs] @ mkpts_3d_cam).T # N*3
-        #     mkpts_query = mkpts_proj[:, :2] / mkpts_proj[:, [2]]
+        mkpts_query_f = mkpts_query[mask]
+        if compute_gt_proj_pose_error:
+            # Reproj mkpts:
+            R = query_pose_gt[bs][:3,:3] # 3*3
+            t = query_pose_gt[bs][:3, [3]] # 3*1
+            mkpts_3d_cam = R @ mkpts_3d[mask].T + t # 3*N
+            mkpts_proj = (query_K[bs] @ mkpts_3d_cam).T # N*3
+            mkpts_query_gt = mkpts_proj[:, :2] / mkpts_proj[:, [2]]
             
-        #     diff = mkpts_query - real_mkpts_query
-        #     diff = diff
+            diff = np.linalg.norm(mkpts_query_f - mkpts_query_gt, axis=-1)
+            mkpts_query_gt[diff > 6] = mkpts_query_f[diff > 6] # Use real pred to test real diff
 
         query_pose_pred, query_pose_pred_homo, inliers = ransac_PnP(
             query_K[bs],
-            mkpts_query[mask], # FIXME: change to mkpts_query
+            mkpts_query_f, # FIXME: change to mkpts_query
             mkpts_3d[mask],
             scale=configs["point_cloud_rescale"],
             pnp_reprojection_error=configs["pnp_reprojection_error"],
         )
         pose_pred.append(query_pose_pred_homo)
+
+        query_pose_pred_c, query_pose_pred_homo_c, inliers_c = ransac_PnP(
+            query_K[bs],
+            mkpts_query_c[mask], # FIXME: change to mkpts_query
+            mkpts_3d[mask],
+            scale=configs["point_cloud_rescale"],
+            pnp_reprojection_error=configs["pnp_reprojection_error"],
+        )
 
         if query_pose_pred is None:
             data["R_errs"].append(np.inf)
@@ -245,6 +248,36 @@ def compute_query_pose_errors(data, configs, use_reprojected_2d_points=False):
             data["R_errs"].append(R_err)
             data["t_errs"].append(t_err)
             data["inliers"].append(inliers)
+
+        if query_pose_pred_c is None:
+            data["R_errs_c"].append(np.inf)
+            data["t_errs_c"].append(np.inf)
+            data["inliers_c"].append(np.array([]).astype(np.bool))
+        else:
+            R_err, t_err = query_pose_error(query_pose_pred_c, query_pose_gt[bs])
+            data["R_errs_c"].append(R_err)
+            data["t_errs_c"].append(t_err)
+            data["inliers_c"].append(inliers_c)
+        
+        if compute_gt_proj_pose_error:
+            data.update({"R_errs_gt": [], "t_errs_gt": [], "inliers_gt": []})
+            query_pose_pred_gt, query_pose_pred_homo_gt, inliers_gt = ransac_PnP(
+                query_K[bs],
+                mkpts_query_gt, # FIXME: change to mkpts_query
+                mkpts_3d[mask],
+                scale=configs["point_cloud_rescale"],
+                pnp_reprojection_error=configs["pnp_reprojection_error"],
+            )
+
+            if query_pose_pred_gt is None:
+                data["R_errs_gt"].append(np.inf)
+                data["t_errs_gt"].append(np.inf)
+                data["inliers_gt"].append(np.array([]).astype(np.bool))
+            else:
+                R_err, t_err = query_pose_error(query_pose_pred_gt, query_pose_gt[bs])
+                data["R_errs_gt"].append(R_err)
+                data["t_errs_gt"].append(t_err)
+                data["inliers_gt"].append(inliers_gt)
     
     pose_pred = np.stack(pose_pred) # [B*4*4]
     data.update({'pose_pred': pose_pred})
@@ -269,4 +302,14 @@ def aggregate_metrics(metrics, thres=[1, 3, 5]):
         degree_distance_metric[f"{threshold}cm@{threshold}degree"] = np.mean(
             (np.array(R_errs) < threshold) & (np.array(t_errs) < threshold)
         )
+    
+    if "R_errs_coarse" in metrics:
+        R_errs_coarse = metrics["R_errs_coarse"]
+        t_errs_coarse = metrics["t_errs_coarse"]
+
+        for threshold in thres:
+            degree_distance_metric[f"{threshold}cm@{threshold}degree coarse"] = np.mean(
+                (np.array(R_errs_coarse) < threshold) & (np.array(t_errs_coarse) < threshold)
+            )
+
     return degree_distance_metric

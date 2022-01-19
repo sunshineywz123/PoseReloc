@@ -148,12 +148,12 @@ class FinePreprocess(nn.Module):
 
         # select only the predicted matches
         # TODO: can use nearby 3D feature for later attention
-        feat_3D = feat_3D[data['b_ids'], :, data['j_ids']].unsqueeze(-1) # N*C*1
+        feat_3D = feat_3D[data['b_ids'], :, data['i_ids']].unsqueeze(-1) # N*C*1
 
         b, dim, n = feat_2D_db.shape
         feat_2D_db = feat_2D_db.view(b, dim, -1, self.n_leaf)
         # FIXME: maybe problem here!
-        feat_2D_db = feat_2D_db[data['b_ids'],:, data['j_ids'], :].unsqueeze(-1) # N*c* (1*n_leaf)
+        feat_2D_db = feat_2D_db[data['b_ids'],:, data['i_ids'], :].unsqueeze(-1) # N*c* (1*n_leaf)
         feat_2D_db = feat_2D_db.view(feat_2D_db.shape[0], dim, -1)
         feat_query_f_unfold = feat_query_f_unfold[data['b_ids'], data['j_ids']] # N*WW*C
 

@@ -21,7 +21,7 @@ task_name='loftr_train'
 
 ulimit -u 1048576  # IMPORTANT
 conda activate 
-export PATH=~/miniconda3/envs/neuralsfm/bin:$PATH
+export PATH=/mnt/cache/hexingyi/miniconda3/envs/posereloc/bin:$PATH
 export PYTHONPATH=$PROJECT_DIR:$PYTHONPATH
 cd $PROJECT_DIR
 
