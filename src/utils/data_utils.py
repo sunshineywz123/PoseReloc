@@ -256,10 +256,13 @@ def build_features3d_leaves(descriptors, scores, idxs, num_leaf):
     # affilicate_idxs_ = [np.random.permutation(np.arange(start, end).tolist().append([dustbin_id] * (num_leaf - (end - start))))[:num_leaf]
     # for start, end in zip(lower_idxs, upper_idxs)]
     affilicate_idxs_ = []
+    all_track_length = []
     for start, end in zip(lower_idxs, upper_idxs):
+        feature_track_length = end - start
+        all_track_length.append(feature_track_length)
         if num_leaf > end - start:
             idxs = np.arange(start, end).tolist()
-            idxs += [dustbin_id] * (num_leaf - (end - start))
+            idxs += [dustbin_id] * (num_leaf - (end - start)) # Padding
             shuffle_idxs = np.random.permutation(np.array(idxs))
             affilicate_idxs_.append(shuffle_idxs)
         else:
@@ -267,6 +270,7 @@ def build_features3d_leaves(descriptors, scores, idxs, num_leaf):
             affilicate_idxs_.append(shuffle_idxs)
 
     affilicate_idxs = np.concatenate(affilicate_idxs_, axis=0)
+    track_length = np.array(all_track_length)
 
     assert affilicate_idxs.shape[0] == orig_num * num_leaf
     descriptors = descriptors_dustbin[:, affilicate_idxs]  # [dim, num_leaf * orig_num]

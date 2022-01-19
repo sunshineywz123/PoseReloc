@@ -10,6 +10,8 @@ import time
 
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset
+import open3d as o3d
+from scipy import stats
 from .utils import read_grayscale
 from src.utils import data_utils
 
@@ -59,10 +61,10 @@ class GATsLoFTRDataset(Dataset):
         self.coarse_scale = coarse_scale
 
         # For data path substiture to use data generated at other clusters
-        self.path_prefix_substitute_3D_source=str(path_prefix_substitute_3D_source),
-        self.path_prefix_substitute_3D_aim=str(path_prefix_substitute_3D_aim),
-        self.path_prefix_substitute_2D_source=str(path_prefix_substitute_2D_source),
-        self.path_prefix_substitute_2D_aim=str(path_prefix_substitute_2D_aim),
+        self.path_prefix_substitute_3D_source = (str(path_prefix_substitute_3D_source),)
+        self.path_prefix_substitute_3D_aim = (str(path_prefix_substitute_3D_aim),)
+        self.path_prefix_substitute_2D_source = (str(path_prefix_substitute_2D_source),)
+        self.path_prefix_substitute_2D_aim = (str(path_prefix_substitute_2D_aim),)
 
     def read_anno2d(self, anno2d_file):
         """ Read (and pad) 2d info"""
@@ -76,6 +78,35 @@ class GATsLoFTRDataset(Dataset):
         num_2d_orig = keypoints2d.shape[0]
 
         return keypoints2d, scores2d, assign_matrix, num_2d_orig
+
+    def voxel_filter(pts, scores, grid_size, use_3d=True, min_num_pts=4):
+        mins = pts.min(axis=0) - grid_size
+        maxs = pts.max(axis=0) + grid_size
+        bins = [np.arange(mins[i], maxs[i], grid_size) for i in range(len(mins))]
+
+        si = 2
+        if use_3d:
+            si = 3
+
+        counts, edges, binnumbers = stats.binned_statistic_dd(
+            pts[:, :si],
+            values=None,
+            statistic="count",
+            bins=bins[:si],
+            range=None,
+            expand_binnumbers=False,
+        )
+
+        ub = np.unique(binnumbers)
+        pts_ds = []
+        scores_ds = []
+        for b in ub:
+            if len(np.where(binnumbers == b)[0]) >= min_num_pts:
+                pts_ds.append(pts[np.where(binnumbers == b)[0]].mean(axis=0))
+                scores_ds.append(scores[np.where(binnumbers == b)[0]].mean())
+        pts_ds = np.vstack(pts_ds)
+        scores_ds = np.vstack(scores_ds).reshape(-1)
+        return pts_ds, scores_ds
 
     def read_anno3d(
         self, avg_anno3d_file, clt_anno3d_file, idxs_file, pad=True, assignmatrix=None
@@ -91,6 +122,18 @@ class GATsLoFTRDataset(Dataset):
 
         idxs = np.load(idxs_file)
 
+        # TODO: test voxel down sampling
+        keypoints3d = clt_data["keypoints3d"]  # [m,3]
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(keypoints3d)
+        down_pcd, index_matrix, index = pcd.voxel_down_sample_and_trace(
+            0.004, pcd.get_min_bound(), pcd.get_max_bound(), False
+        )
+        down_point3d = np.array(down_pcd.points)
+        total_num = 0
+        for ind in index:
+            total_num += np.array(ind).shape[0]
+
         keypoints3d = torch.Tensor(clt_data["keypoints3d"])  # [m, 3]
         avg_descriptors3d = torch.Tensor(avg_data["descriptors3d"])  # [dim, m]
         clt_descriptors = torch.Tensor(clt_data["descriptors3d"])  # [dim, k]
@@ -103,7 +146,7 @@ class GATsLoFTRDataset(Dataset):
             clt_descriptors, clt_scores, idxs, num_leaf=self.num_leaf
         )
         if pad:
-            if self.split == 'train':
+            if self.split == "train":
                 if assignmatrix is not None:
                     (
                         keypoints3d,
@@ -144,16 +187,10 @@ class GATsLoFTRDataset(Dataset):
                         num_leaf=self.num_leaf,
                     )
             else:
-                (
-                    keypoints3d,
-                    padding_index,
-                ) = data_utils.pad_keypoints3d_random(
+                (keypoints3d, padding_index,) = data_utils.pad_keypoints3d_random(
                     keypoints3d, self.shape3d
                 )
-                (
-                    avg_descriptors3d,
-                    avg_scores,
-                ) = data_utils.pad_features3d_random(
+                (avg_descriptors3d, avg_scores,) = data_utils.pad_features3d_random(
                     avg_descriptors3d, avg_scores, self.shape3d, padding_index
                 )
                 (
@@ -241,16 +278,12 @@ class GATsLoFTRDataset(Dataset):
         return conf_matrix, fine_location_matrix
 
     def get_intrin_by_color_pth(self, img_path):
-        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(
-            ".png", ".txt"
-        )
+        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(".png", ".txt")
         K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K_crop
 
     def get_gt_pose_by_color_pth(self, img_path):
-        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(
-            ".png", ".txt"
-        )
+        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(".png", ".txt")
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
 
@@ -264,9 +297,15 @@ class GATsLoFTRDataset(Dataset):
 
         color_path = self.coco.loadImgs(int(img_id))[0]["img_file"]
 
-        if self.path_prefix_substitute_2D_source[0] is not None and self.path_prefix_substitute_2D_aim[0] is not None:
+        if (
+            self.path_prefix_substitute_2D_source[0] is not None
+            and self.path_prefix_substitute_2D_aim[0] is not None
+        ):
             if self.path_prefix_substitute_2D_source[0] in color_path:
-                color_path = color_path.replace(self.path_prefix_substitute_2D_source[0], self.path_prefix_substitute_2D_aim[0])
+                color_path = color_path.replace(
+                    self.path_prefix_substitute_2D_source[0],
+                    self.path_prefix_substitute_2D_aim[0],
+                )
 
         query_img, query_img_scale, query_img_mask = read_grayscale(
             color_path,
@@ -301,9 +340,15 @@ class GATsLoFTRDataset(Dataset):
             # For query image GT correspondences
             anno2d_file = anno["anno2d_file"]
 
-            if self.path_prefix_substitute_2D_source[0] is not None and self.path_prefix_substitute_2D_aim[0] is not None:
+            if (
+                self.path_prefix_substitute_2D_source[0] is not None
+                and self.path_prefix_substitute_2D_aim[0] is not None
+            ):
                 if self.path_prefix_substitute_2D_source[0] in anno2d_file:
-                    anno2d_file = anno2d_file.replace(self.path_prefix_substitute_2D_source[0], self.path_prefix_substitute_2D_aim[0])
+                    anno2d_file = anno2d_file.replace(
+                        self.path_prefix_substitute_2D_source[0],
+                        self.path_prefix_substitute_2D_aim[0],
+                    )
 
             anno2d_coarse_file = anno2d_file.replace(
                 "/anno_loftr/", "/anno_loftr_coarse/"
@@ -330,11 +375,23 @@ class GATsLoFTRDataset(Dataset):
         avg_anno3d_file = anno["avg_anno3d_file"]
         collect_anno3d_file = anno["collect_anno3d_file"]
 
-        if self.path_prefix_substitute_3D_source[0] is not None and self.path_prefix_substitute_3D_aim[0] is not None:
+        if (
+            self.path_prefix_substitute_3D_source[0] is not None
+            and self.path_prefix_substitute_3D_aim[0] is not None
+        ):
             if self.path_prefix_substitute_3D_source[0] in idxs_file:
-                idxs_file = idxs_file.replace(self.path_prefix_substitute_3D_source[0], self.path_prefix_substitute_3D_aim[0])
-                avg_anno3d_file = avg_anno3d_file.replace(self.path_prefix_substitute_3D_source[0], self.path_prefix_substitute_3D_aim[0])
-                collect_anno3d_file = collect_anno3d_file.replace(self.path_prefix_substitute_3D_source[0], self.path_prefix_substitute_3D_aim[0])
+                idxs_file = idxs_file.replace(
+                    self.path_prefix_substitute_3D_source[0],
+                    self.path_prefix_substitute_3D_aim[0],
+                )
+                avg_anno3d_file = avg_anno3d_file.replace(
+                    self.path_prefix_substitute_3D_source[0],
+                    self.path_prefix_substitute_3D_aim[0],
+                )
+                collect_anno3d_file = collect_anno3d_file.replace(
+                    self.path_prefix_substitute_3D_source[0],
+                    self.path_prefix_substitute_3D_aim[0],
+                )
 
         (
             keypoints3d,
@@ -366,18 +423,20 @@ class GATsLoFTRDataset(Dataset):
 
         if self.split == "train":
             assign_matrix = assign_matrix.long()
-            mkpts_3d = keypoints3d[assign_matrix[1,:]] # N*3
-            R = pose_gt[:3,:3].to(torch.float) # 3*3
-            t = pose_gt[:3, [3]].to(torch.float) # 3*1
+            mkpts_3d = keypoints3d[assign_matrix[1, :]]  # N*3
+            R = pose_gt[:3, :3].to(torch.float)  # 3*3
+            t = pose_gt[:3, [3]].to(torch.float)  # 3*1
             K_crop = K_crop.to(torch.float)
-            keypoints2d_fine = torch.zeros((keypoints2d_coarse.shape[0],2), dtype=torch.float)
+            keypoints2d_fine = torch.zeros(
+                (keypoints2d_coarse.shape[0], 2), dtype=torch.float
+            )
 
             # Project 3D pointcloud to make fine GT
-            mkpts_3d_camera = R @ mkpts_3d.transpose(1,0) + t
-            mkpts_proj = (K_crop @ mkpts_3d_camera).transpose(1,0) # N*3
+            mkpts_3d_camera = R @ mkpts_3d.transpose(1, 0) + t
+            mkpts_proj = (K_crop @ mkpts_3d_camera).transpose(1, 0)  # N*3
             mkpts_proj = mkpts_proj[:, :2] / (mkpts_proj[:, [2]] + 1e-6)
-            keypoints2d_fine[assign_matrix[0,:]] = mkpts_proj
-            
+            keypoints2d_fine[assign_matrix[0, :]] = mkpts_proj
+
             (conf_matrix, fine_location_matrix) = self.build_assignmatrix(
                 keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad
             )
@@ -389,7 +448,7 @@ class GATsLoFTRDataset(Dataset):
                     "fine_location_matrix_gt": fine_location_matrix,  # [n_point_cloud, n_query_coarse_grid, 2] (x,y)
                 }
             )
-        
+
             # # NOTE: For fine match debug TODO: remove
             # gt_mkpts_3d = -1 * torch.ones((keypoints3d.shape[0],), dtype=torch.long) # Index to keypoints2d_fine
             # gt_mkpts_3d[assign_matrix[1, :]] = assign_matrix[0, :]
