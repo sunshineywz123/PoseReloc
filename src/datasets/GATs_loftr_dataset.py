@@ -35,6 +35,8 @@ class GATsLoFTRDataset(Dataset):
         path_prefix_substitute_3D_aim=None,
         path_prefix_substitute_2D_source=None,
         path_prefix_substitute_2D_aim=None,
+        downsample=False,
+        downsample_resolution=30
     ):
         super(Dataset, self).__init__()
 
@@ -59,6 +61,10 @@ class GATsLoFTRDataset(Dataset):
         self.img_resize = img_resize
         self.df = df
         self.coarse_scale = coarse_scale
+
+        # Downsample
+        self.downsample = downsample
+        self.downsample_resolution = downsample_resolution
 
         # For data path substiture to use data generated at other clusters
         self.path_prefix_substitute_3D_source = (str(path_prefix_substitute_3D_source),)
@@ -122,29 +128,68 @@ class GATsLoFTRDataset(Dataset):
 
         idxs = np.load(idxs_file)
 
-        # TODO: test voxel down sampling
-        keypoints3d = clt_data["keypoints3d"]  # [m,3]
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(keypoints3d)
-        down_pcd, index_matrix, index = pcd.voxel_down_sample_and_trace(
-            0.004, pcd.get_min_bound(), pcd.get_max_bound(), False
-        )
-        down_point3d = np.array(down_pcd.points)
-        total_num = 0
-        for ind in index:
-            total_num += np.array(ind).shape[0]
-
         keypoints3d = torch.Tensor(clt_data["keypoints3d"])  # [m, 3]
         avg_descriptors3d = torch.Tensor(avg_data["descriptors3d"])  # [dim, m]
         clt_descriptors = torch.Tensor(clt_data["descriptors3d"])  # [dim, k]
         avg_scores = torch.Tensor(avg_data["scores3d"])  # [m, 1]
         clt_scores = torch.Tensor(clt_data["scores3d"])  # [k, 1]
 
-        num_3d_orig = keypoints3d.shape[0]
 
         clt_descriptors, clt_scores = data_utils.build_features3d_leaves(
             clt_descriptors, clt_scores, idxs, num_leaf=self.num_leaf
         )
+
+        # Pointcloud downsampling use by voxel
+        if self.downsample:
+            pcd = o3d.geometry.PointCloud()
+            pcd.points = o3d.utility.Vector3dVector(keypoints3d.numpy())
+            bbox_size = pcd.get_max_bound() - pcd.get_min_bound()
+            down_pcd, index_matrix, index = pcd.voxel_down_sample_and_trace(
+                bbox_size.min() / self.downsample_resolution, pcd.get_min_bound(), pcd.get_max_bound(), False
+            )
+
+            # Downsample and average feature:
+            dim = clt_descriptors.shape[0]
+            clt_descriptors = clt_descriptors.view(dim, -1, self.num_leaf)
+            clt_scores = clt_scores.view(-1, self.num_leaf, 1)
+
+            avg_features3d_list = []
+            avg_scores_list = []
+            avg_clt_descriptors = []
+            avg_clt_scores = []
+            inverse_mapping = -1 * torch.ones((keypoints3d.shape[0],)) # All -1
+            for i, ind in enumerate(index):
+                ind = torch.from_numpy(np.array(ind)).to(torch.long)
+                feature = torch.mean(avg_descriptors3d[:, ind], dim=1, keepdim=False) # d
+                scores = torch.mean(avg_scores[ind, :], dim=0, keepdim=False) # d
+                avg_features3d_list.append(feature)
+                avg_scores_list.append(scores)
+
+                # FIXME: feature2d_db is not a good implementation, only select index 0 for GATs!
+                avg_clt_descriptors.append(clt_descriptors[:, ind[0], :]) # D*num_leaf
+                avg_clt_scores.append(clt_scores[ind[0],:]) # 
+
+                inverse_mapping[ind] = i
+
+            avg_descriptors3d = torch.stack(avg_features3d_list, dim=-1) # D*N
+            avg_scores = torch.stack(avg_scores_list, dim=0)
+            avg_clt_descriptors = torch.stack(avg_clt_descriptors, dim=1) # D*N*num_leaf
+            avg_clt_scores = torch.stack(avg_clt_scores, dim=0) # N*num_leaf*1
+
+            clt_descriptors = avg_clt_descriptors.view(dim, -1)
+            clt_scores = avg_clt_scores.view(-1, 1)
+            keypoints3d = torch.from_numpy(np.array(down_pcd.points)).to(torch.float)
+
+            if assignmatrix is not None:
+                # Remapping assignmatrix
+                assignmatrix = assignmatrix.long()
+                assignmatrix[1,:] = inverse_mapping[assignmatrix[1,:]]
+                unique, unique_index = np.unique(assignmatrix[1,:], return_index=True)
+                # unique, unique_index = torch.unique(assignmatrix[1,:], return_inverse=True)
+                assignmatrix = assignmatrix[:, unique_index]
+            
+        num_3d_orig = keypoints3d.shape[0]
+
         if pad:
             if self.split == "train":
                 if assignmatrix is not None:
@@ -167,19 +212,20 @@ class GATsLoFTRDataset(Dataset):
                     ) = data_utils.pad_features3d_leaves_according_to_assignmatrix(
                         clt_descriptors,
                         clt_scores,
-                        idxs,
+                        num_3d_orig,
                         self.shape3d,
                         num_leaf=self.num_leaf,
                         padding_index=padding_index,
                     )
+
                 else:
-                    keypoints3d = data_utils.pad_keypoints3d_random(
+                    keypoints3d = data_utils.pad_keypoints3d_top_n(
                         keypoints3d, self.shape3d
                     )
-                    avg_descriptors3d, avg_scores = data_utils.pad_features3d_random(
+                    avg_descriptors3d, avg_scores = data_utils.pad_features3d_top_n(
                         avg_descriptors3d, avg_scores, self.shape3d
                     )
-                    clt_descriptors, clt_scores = data_utils.pad_features3d_leaves(
+                    clt_descriptors, clt_scores = data_utils.pad_features3d_leaves_top_n(
                         clt_descriptors,
                         clt_scores,
                         idxs,
@@ -267,6 +313,12 @@ class GATsLoFTRDataset(Dataset):
             )
             j_ids = j_ids.long()
 
+            invalid_mask = j_ids > conf_matrix.shape[1]
+            j_ids = j_ids[~invalid_mask]
+            assign_matrix = assign_matrix[:, ~invalid_mask]
+            keypoints2D_fine_selected = keypoints2D_fine_selected[~invalid_mask]
+            # if invalid_mask.sum() != 0:
+            #     logger.warning(f"{invalid_mask.sum()} points locate outside frame")
             # x, y = j_ids % self.w_c, j_ids // self.w_c
 
             conf_matrix[assign_matrix[1], j_ids] = 1
@@ -415,7 +467,7 @@ class GATsLoFTRDataset(Dataset):
                 "descriptors3d_db": avg_descriptors3d,  # [dim, n2]
                 "descriptors2d_db": clt_descriptors2d,  # [dim, n2 * num_leaf]
                 "scores3d_db": avg_scores3d.squeeze(1),  # [n2]
-                "scores2d_db": clt_descriptors2d.squeeze(1),  # [n2 * num_leaf]
+                "scores2d_db": clt_scores2d.squeeze(1),  # [n2 * num_leaf]
                 "query_image": query_img,  # [1*h*w]
                 "query_image_scale": query_img_scale,  # [2]
             }
@@ -435,7 +487,25 @@ class GATsLoFTRDataset(Dataset):
             mkpts_3d_camera = R @ mkpts_3d.transpose(1, 0) + t
             mkpts_proj = (K_crop @ mkpts_3d_camera).transpose(1, 0)  # N*3
             mkpts_proj = mkpts_proj[:, :2] / (mkpts_proj[:, [2]] + 1e-6)
+
+            # if self.downsample:
+            mkpts_proj_rounded = (mkpts_proj / int(1/self.coarse_scale)).round() * int(1/self.coarse_scale)
+            invalid = (mkpts_proj_rounded[:,0] < 0) | (mkpts_proj_rounded[:, 0] > query_img.shape[-1] - 1) | (mkpts_proj_rounded[:, 1] < 0) | (mkpts_proj_rounded[:, 1] > query_img.shape[-2] - 1)
+            mkpts_proj_rounded = mkpts_proj_rounded[~invalid]
+            mkpts_proj = mkpts_proj[~invalid]
+            assign_matrix = assign_matrix[:, ~invalid]
+
+            keypoint2d_coarse_original = keypoints2d_coarse[assign_matrix[0,:]]
+            unique, index = np.unique(mkpts_proj_rounded, return_index=True, axis=0)
+
+            mkpts_proj_rounded = mkpts_proj_rounded[index]
+            mkpts_proj = mkpts_proj[index]
+            assign_matrix = assign_matrix[:, index]
+            keypoints2d_coarse[assign_matrix[0,:]] = mkpts_proj_rounded
+
+
             keypoints2d_fine[assign_matrix[0, :]] = mkpts_proj
+
 
             (conf_matrix, fine_location_matrix) = self.build_assignmatrix(
                 keypoints2d_coarse, keypoints2d_fine, assign_matrix, pad=self.pad

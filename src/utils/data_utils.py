@@ -236,8 +236,8 @@ def pad_features3d_according_to_assignmatrix(
         descriptors = descriptors[:, padding_index]
         scores = scores[padding_index, :]
     else:
-        descriptors = torch.cat([descriptors, torch.ones(dim, n_pad)], dim=-1)
-        scores = torch.cat([scores, torch.zeros(n_pad, 1)], dim=0)
+        descriptors = torch.cat([descriptors, torch.ones((dim, n_pad))], dim=-1)
+        scores = torch.cat([scores, torch.zeros((n_pad, 1))], dim=0)
 
     return descriptors, scores
 
@@ -279,7 +279,7 @@ def build_features3d_leaves(descriptors, scores, idxs, num_leaf):
     return descriptors, scores
 
 
-def pad_features3d_leaves(descriptors, scores, idxs, n_target_shape, num_leaf):
+def pad_features3d_leaves_top_n(descriptors, scores, idxs, n_target_shape, num_leaf):
     """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
     # assert idxs.min() > num_leaf, "The num of affilated 2d points of some 3d points is less than num_leaf."
 
@@ -300,12 +300,11 @@ def pad_features3d_leaves(descriptors, scores, idxs, n_target_shape, num_leaf):
 
 
 def pad_features3d_leaves_according_to_assignmatrix(
-    descriptors, scores, idxs, n_target_shape, num_leaf, padding_index
+    descriptors, scores, origin_num, n_target_shape, num_leaf, padding_index
 ):
     """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
     dim = descriptors.shape[0]
-    orig_num = idxs.shape[0]
-    n_pad = n_target_shape - orig_num
+    n_pad = n_target_shape - origin_num
 
     if n_pad < 0:
         dim = descriptors.shape[0]

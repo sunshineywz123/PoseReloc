@@ -193,12 +193,14 @@ datamodule:
   batch_size: 1
   num_workers: 4
   pin_memory: true
-  train_percent: 0.01
+  train_percent: 1
   val_percent: 0.05
   num_leaf: 6
   shape2d: 2000
-  shape3d_train: 9000
-  shape3d_val: 12000
+  shape3d_train: 8000
+  shape3d_val: 8000
+  downsample3d: true
+  downsample_resolution: 30
   img_pad: false
   img_resize:
   - 512

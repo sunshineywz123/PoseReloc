@@ -1,3 +1,4 @@
+from turtle import down
 from loguru import logger
 from pytorch_lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
@@ -35,6 +36,10 @@ class GATsLoFTRDataModule(LightningDataModule):
         self.img_resize = kwargs["img_resize"]
         self.df = kwargs["df"]
         self.coarse_scale = kwargs["coarse_scale"]
+
+        # Downsample
+        self.downsample = kwargs['downsample3d']
+        self.downsample_resolution = kwargs['downsample_resolution']
 
         # File path substitute:
         self.path_prefix_substitute_3D_source = kwargs['path_prefix_substitute_3D_source']
@@ -82,7 +87,9 @@ class GATsLoFTRDataModule(LightningDataModule):
             path_prefix_substitute_3D_source=self.path_prefix_substitute_3D_source,
             path_prefix_substitute_3D_aim=self.path_prefix_substitute_3D_aim,
             path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
-            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim
+            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
+            downsample=self.downsample,
+            downsample_resolution=self.downsample_resolution
         )
         print("=> Read train anno file: ", self.train_anno_file)
 
@@ -103,7 +110,9 @@ class GATsLoFTRDataModule(LightningDataModule):
             path_prefix_substitute_3D_source=self.path_prefix_substitute_3D_source,
             path_prefix_substitute_3D_aim=self.path_prefix_substitute_3D_aim,
             path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
-            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim
+            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
+            downsample=self.downsample,
+            downsample_resolution=self.downsample_resolution
         )
 
         self.data_train = train_set
