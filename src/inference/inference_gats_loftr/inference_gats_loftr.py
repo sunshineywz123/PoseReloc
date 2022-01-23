@@ -5,15 +5,18 @@ import math
 import numpy as np
 from loguru import logger
 import torch
+import os.path as osp
 
 from src.datasets.GATs_loftr_inference_dataset import GATs_loftr_inference_dataset
 from src.utils.ray_utils import ProgressBar, chunks, chunk_index, split_dict
 from src.architectures.GATs_LoFTR.GATs_LoFTR import GATs_LoFTR
+from src.utils.metric_utils import aggregate_metrics
+from src.utils.visualize.dump_vis3d import dump_obj
+
 from .inference_gats_loftr_worker import (
     inference_gats_loftr_worker,
     inference_gats_loftr_worker_ray_wrapper,
 )
-from src.utils.metric_utils import aggregate_metrics
 
 args = {
     "ray": {
@@ -38,7 +41,7 @@ def build_model(model_configs, ckpt_path):
     return match_model
 
 def inference_gats_loftr(
-    sfm_results_dir, all_image_paths, cfg, use_ray=True, verbose=True
+    sfm_results_dir, all_image_paths, cfg, use_ray=True, verbose=True, vis3d_pth=None
 ):
     """
     Inference for one object
@@ -55,6 +58,7 @@ def inference_gats_loftr(
         df=cfg.datamodule.df,
         pad=True,
         load_pose_gt=True,
+        n_images=None
     )
     match_model = build_model(cfg['model']["loftr"], cfg['model']['pretrained_ckpt'])
 
@@ -96,15 +100,24 @@ def inference_gats_loftr(
         pb.print_until_done() if pb is not None else None
         results = ray.get(obj_refs)
 
-        R_errs = list(chain(* [k for k, _, _, _ in results]))
-        t_errs = list(chain(* [k for _, k, _, _ in results]))
-        inliers = list(chain(* [k for _, _, k, _ in results]))
-        poses_pred = list(chain(* [k for _, _, _, k in results]))
+        results = list(chain(*results))
         logger.info("Matcher finish!")
     else:
         all_ids = np.arange(0, len(dataset))
-        R_errs, t_errs, inliers, pose_pred = inference_gats_loftr_worker(dataset, match_model, all_ids, cfg['model'], verbose=verbose)
+        results = inference_gats_loftr_worker(dataset, match_model, all_ids, cfg['model'], verbose=verbose)
         logger.info("Match and compute pose error finish!")
+    
+    # Parse results:
+    R_errs = []
+    t_errs = []
+    for result in results:
+        R_errs.append(result['R_errs'])
+        t_errs.append(result['t_errs'])
+    
+    # Write results to vis3d
+    if vis3d_pth is not None:
+        vis3d_dir, name = vis3d_pth.rsplit('/',1)
+        dump_obj(results, vis3d_dir, name)
 
     # Aggregate metrics: 
     pose_errs = {'R_errs': R_errs, "t_errs": t_errs}

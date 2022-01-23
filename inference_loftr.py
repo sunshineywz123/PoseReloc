@@ -97,7 +97,7 @@ def inference(cfg):
                 gathered_metrics[metric_name].append(metric)
         
     # Dump metrics:
-    name2metrics_sorted = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['1cm@1degree'])}
+    name2metrics_sorted = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['5cm@5degree'])}
     os.makedirs(cfg.output.txt_dir, exist_ok=True)
     with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'w') as f:
         for name, metrics in name2metrics_sorted.items():
@@ -155,7 +155,14 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
             + cfg.network.matching,
             obj_name,
         )
-        metrics = inference_gats_loftr(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose)
+
+        if cfg.output.visual_vis3d:
+            os.makedirs(cfg.output.vis_dir, exist_ok=True)
+            vis3d_pth = osp.join(cfg.output.vis_dir, obj_name)
+        else:
+            None
+
+        metrics = inference_gats_loftr(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose, vis3d_pth=vis3d_pth)
         obj_name2metrics[obj_name] = metrics
         if pba is not None:
             pba.update.remote(1)

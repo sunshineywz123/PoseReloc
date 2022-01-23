@@ -176,8 +176,9 @@ class LocalFeatureTransformer(nn.Module):
                     layer(desc3d_db, src1),
                 )
             elif name == "cross":
-                # FIXME: Check problem here!
                 src0, src1 = desc3d_db, desc2d_query  # [N, L, C], [N, P, C]
+                # desc2d_query = layer(desc2d_query, src0, x_mask=query_mask)
+                # desc3d_db = layer(desc3d_db, src1, source_mask=query_mask)
                 desc2d_query, desc3d_db = (
                     layer(desc2d_query, src0, x_mask=query_mask),
                     layer(desc3d_db, src1, source_mask=query_mask),

@@ -419,7 +419,12 @@ if __name__ == "__main__":
         # '0608-greenteapot-others', '0609-blackteapot-others', '0610-lecreusetcup-others', '0611-bosecolumnaudio-others'
         # "0612-insta-others", '0613-batterycharger-others', '0614-hhkbhandrest-others', '0615-logimouse-others', '0616-sensezong-others', '0617-miehuoqixiang-others'
         # "0618-huangjinyatea-others", 
-        '0619-blueyellowbox-box', '0620-shuixiantea-others','0621-headphonecontainer-others', '0622-ugreenbox-others', '0623-camera-others', '0624-weishengsubox-others', '0625-dogairpods-others'
+        # '0619-blueyellowbox-box', '0620-shuixiantea-others','0621-headphonecontainer-others', '0622-ugreenbox-others', '0623-camera-others', '0624-weishengsubox-others', '0625-dogairpods-others'
+        # "0626-sensecup-others", '0627-shiningscan-box', '0628-sensenut-box'
+        # '0629-guihuatea-others', 
+        '0630-blackcolumcontainer-others', 
+        # '0631-whitesonycontainer-others', 
+        # '0632-whitechair-others'
     ]
     deal_first = True
     deal_last = True

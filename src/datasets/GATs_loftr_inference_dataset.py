@@ -28,7 +28,7 @@ class GATs_loftr_inference_dataset(Dataset):
         self.shape3d = shape3d
         self.num_leaf = num_leaf
         self.pad = pad
-        self.image_paths = image_paths[:n_images]
+        self.image_paths = image_paths[::int(len(image_paths) / n_images)] if n_images is not None else image_paths
         self.img_pad =img_pad
         self.img_resize= img_resize
         self.df = df
@@ -153,6 +153,7 @@ class GATs_loftr_inference_dataset(Dataset):
                 "scores2d_db": self.clt_descriptors2d.squeeze(1)[None],  # [n2 * num_leaf]
                 "query_image": query_img[None],  # [1*h*w]
                 "query_image_scale": query_img_scale[None],  # [2]
+                'query_image_path': image_path
             }
         )
 

@@ -68,6 +68,6 @@ class KeypointEncoding(nn.Module):
         self.encoder = MLP([inp_dim] + list(layers) + [feature_dim], norm_method)
         nn.init.constant_(self.encoder[-1].bias, 0.0)
     
-    def forward(self, kpts, scores, descriptors):
-        inputs = [kpts.transpose(1, 2), scores.unsqueeze(1)]
-        return  descriptors + self.encoder(torch.cat(inputs, dim=1))
+    def forward(self, kpts, descriptors):
+        inputs = kpts.transpose(1, 2)
+        return  descriptors + self.encoder(inputs)

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import torch
+import numpy as np
 from torch.cuda import amp
 import pytorch_lightning as pl
 from loguru import logger
@@ -225,13 +226,13 @@ class PL_GATsLoFTR(pl.LightningModule):
                             close=True,
                         )
 
-                multi_val_metrics.append(val_metrics_4tb["5cm@5degree"])
+                multi_val_metrics.append(val_metrics_4tb["3cm@3degree"])
             plt.close("all")
 
         if self.trainer.global_rank == 0:
             # FIXME: bug exists here, lead to the stuck of train
             # avg_multi_val_metrics = np.mean(multi_val_metrics)
-            # self.log('5cm@5degree', avg_multi_val_metrics)  # ckpt monitors on this
+            # self.log('cm3degree3', torch.tensor(avg_multi_val_metrics))  # ckpt monitors on this
             pass
 
     def configure_optimizers(self):

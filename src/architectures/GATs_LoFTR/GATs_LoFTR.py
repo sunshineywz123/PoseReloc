@@ -47,7 +47,7 @@ class GATs_LoFTR(nn.Module):
         if self.config["keypoints_encoding"]["enable"]:
             # NOTE: from Gats part
             self.kpt_3d_pos_encoding = KeypointEncoding(
-                inp_dim=4,
+                inp_dim=3,
                 feature_dim=self.config["keypoints_encoding"]["descriptor_dim"],
                 layers=self.config["keypoints_encoding"]["keypoints_encoder"],
                 norm_method=self.config["keypoints_encoding"]["norm_method"],
@@ -191,7 +191,7 @@ class GATs_LoFTR(nn.Module):
             kpts3d = normalize_3d_keypoints(data["keypoints3d"])
             desc3d_db = (
                 self.kpt_3d_pos_encoding(
-                    kpts3d, data["scores3d_db"], data["descriptors3d_db"]
+                    kpts3d, data["descriptors3d_db"]
                 )
                 if self.kpt_3d_pos_encoding is not None
                 else data["descriptors3d_db"]

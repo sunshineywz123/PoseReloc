@@ -1,9 +1,11 @@
+from unittest import result
 from loguru import logger
 import ray
 import torch
 from tqdm import tqdm
 from time import time
 from src.utils.metric_utils import compute_query_pose_errors
+
 
 @torch.no_grad()
 def extract_matches(data, match_model, metrics_configs):
@@ -21,15 +23,30 @@ def extract_matches(data, match_model, metrics_configs):
     inliers = data["inliers"]
     pose_pred = [data["pose_pred"][0]]
 
+    result_data = {
+        "mkpts3d": data['mkpts_3d_db'].cpu().numpy(),
+        "mkpts_query": data['mkpts_query_f'].cpu().numpy(),
+        "mconf": data['mconf'].cpu().numpy(),
+        "R_errs": R_errs,
+        "t_errs": t_errs,
+        "inliers": inliers,
+        "pose_pred": pose_pred,
+        "pose_gt": data['query_pose_gt'][0].cpu().numpy(),
+        "intrinsic": data['query_intrinsic'][0].cpu().numpy(),
+        'image_path': data['query_image_path']
+    }
+
     del data
     torch.cuda.empty_cache()
 
-    return R_errs, t_errs, inliers, pose_pred
+    return result_data
 
 
-def inference_gats_loftr_worker(dataset, match_model, subset_ids, cfgs, pba=None, verbose=True):
+def inference_gats_loftr_worker(
+    dataset, match_model, subset_ids, cfgs, pba=None, verbose=True
+):
     match_model.cuda()
-    R_errs_all, t_errs_all, inliers_all, pose_pred_all = [], [], [], []
+    results = []
 
     if verbose:
         subset_ids = tqdm(subset_ids) if pba is None else subset_ids
@@ -43,19 +60,16 @@ def inference_gats_loftr_worker(dataset, match_model, subset_ids, cfgs, pba=None
             k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in data.items()
         }
 
-        R_errs, t_errs, inliers, pose_pred = extract_matches(
+        result = extract_matches(
             data_c, match_model, metrics_configs=cfgs["eval_metrics"]
         )
 
-        R_errs_all += R_errs
-        t_errs_all += t_errs
-        inliers_all += inliers
-        pose_pred_all += pose_pred
+        results += [result]
 
         if pba is not None:
             pba.update.remote(1)
 
-    return R_errs_all, t_errs_all, inliers_all, pose_pred_all
+    return results
 
 
 @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
