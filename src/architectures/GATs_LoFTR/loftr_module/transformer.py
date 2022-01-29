@@ -122,16 +122,25 @@ class LocalFeatureTransformer(nn.Module):
         module_list = []
         for layer_name in self.layer_names:
             if layer_name == "GATs":
-                module_list.append(
-                    GraphAttentionLayer(
-                        config["d_db_feat"],
-                        config["d_model"],
-                        config["GATs_dropout"],
-                        config["GATs_alpha"],
-                        config["GATs_enable_feed_forward"],
-                        config["GATs_feed_forward_norm_method"]
+                self.gats_type = config['GATs_type']
+                if self.gats_type == 'origin_gats':
+                    module_list.append(
+                        GraphAttentionLayer(
+                            config["d_db_feat"],
+                            config["d_model"],
+                            config["GATs_dropout"],
+                            config["GATs_alpha"],
+                            config["GATs_enable_feed_forward"],
+                            config["GATs_feed_forward_norm_method"],
+                            include_self=config['GATs_include_self']
+                        )
                     )
-                )
+                elif self.gats_type == 'loftr_attention':
+                    self.gats_include_self = config['GATs_include_self']
+                    self.gats_feat2d_db_update = config['GATs_feat2d_db_update']
+                    module_list.append(copy.deepcopy(encoder_layer))
+                else:
+                    raise NotImplementedError
             elif layer_name in ["self", "cross"]:
                 module_list.append(copy.deepcopy(encoder_layer))
             else:
@@ -166,9 +175,31 @@ class LocalFeatureTransformer(nn.Module):
 
         for i, (layer, name) in enumerate(zip(self.layers, self.layer_names)):
             if name == "GATs":
-                desc3d_db_ = layer(desc2d_db, desc3d_db, adj_matrix)
-                # desc3d_db = torch.einsum('bnd->bdn', desc3d_db_) # [N, C, L]
-                desc3d_db = desc3d_db_  # [N, L, C]
+                if self.gats_type == 'origin_gats':
+                    desc3d_db = layer(desc2d_db, desc3d_db, adj_matrix)
+                elif self.gats_type == 'loftr_attention':
+                    # Change data format
+                    b, n1, dim = desc3d_db.shape
+                    b, n2, dim = desc2d_db.shape
+                    num_leaf = int(n2 / n1)
+                    desc2d_db = desc2d_db.reshape(-1, num_leaf, dim) # [(B*N2), n_leaf, dim]
+                    desc3d_db = desc3d_db.reshape(-1, 1, dim) # [(B*N1), 1, dim]
+                    if self.gats_include_self:
+                        raise NotImplementedError
+                        desc2d_db = torch.cat([desc3d_db, desc2d_db], dim=-2) # [(B*N1), 1+num_leaf, dim]
+                    
+                    src0, src1 = desc3d_db, desc2d_db
+                    
+                    # Forward
+                    desc3d_db = layer(desc3d_db, src1)
+                    if self.gats_feat2d_db_update:
+                        desc2d_db = layer(desc2d_db, src0)
+
+                    # Reformat
+                    desc3d_db = desc3d_db.view(b, n1, dim)
+                    desc2d_db = desc2d_db.view(b, n2, dim)
+                else:
+                    raise NotImplementedError
             elif name == "self":
                 src0, src1 = desc2d_query, desc3d_db
                 desc2d_query, desc3d_db = (

@@ -109,11 +109,10 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +preprocess=align_xy
-    - redo=True
+    - +experiment=test_gats_loftr
   job:
-    name: verify
-    override_dirname: +preprocess=align_xy,redo=True
+    name: inference_loftr
+    override_dirname: +experiment=test_gats_loftr
     id: ???
     num: ???
     config_name: config.yaml
@@ -138,7 +137,7 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      preprocess: align_xy
+      experiment: test_gats_loftr
       logger: null
       callbacks: default_callbacks.yaml
       datamodule: mnist_datamodule.yaml

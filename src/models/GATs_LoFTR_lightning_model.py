@@ -232,7 +232,7 @@ class PL_GATsLoFTR(pl.LightningModule):
         if self.trainer.global_rank == 0:
             # FIXME: bug exists here, lead to the stuck of train
             # avg_multi_val_metrics = np.mean(multi_val_metrics)
-            # self.log('cm3degree3', torch.tensor(avg_multi_val_metrics))  # ckpt monitors on this
+            # self.log_dict({'cm3degree3': 1})  # ckpt monitors on this
             pass
 
     def configure_optimizers(self):

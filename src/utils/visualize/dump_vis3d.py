@@ -1,6 +1,13 @@
+import cv2
+from loguru import logger
 from vis3d.vis3d import Vis3D
 from PIL import Image
 import numpy as np
+import os
+import os.path as osp
+from src.utils.objScanner_utils import get_refine_box, parse_K
+from src.utils.vis_utils import reproj as reproj_
+from src.utils.vis_utils import draw_3d_box
 from ..plot_utils import reproj
 
 
@@ -14,12 +21,12 @@ def dump_obj(results_dict, vis3d_pth, vis3d_name):
         R_errs = result_dict["R_errs"]
         t_errs = result_dict["t_errs"]
         inliers = result_dict["inliers"]
-        pose_pred = result_dict["pose_pred"]
+        pose_pred = result_dict["pose_pred"][0]
         pose_gt = result_dict["pose_gt"]
         intrinsic = result_dict["intrinsic"]
         image_path = result_dict["image_path"]
-        image0 = Image.open(image_path).convert('LA')
-        image1 = Image.open(image_path).convert('LA')
+        image0 = Image.open(image_path)
+        image1 = Image.open(image_path)
 
         # Project 3D points to 2D query image
         mkpts3d_reprojed, depth = reproj(intrinsic, pose_gt, mkpts3d)
@@ -52,3 +59,32 @@ def dump_obj(results_dict, vis3d_pth, vis3d_name):
             meta={'R_errs': R_errs, 't_errs': t_errs},
             name="matches from reprojected 3D keypoints"
         )
+    
+        # Get draw bbox needed data:
+        seq_base_path = image_path.rsplit('/color/',1)[0]
+        obj_base_path = seq_base_path.rsplit('/', 1)[0]
+        all_seq_name = sorted(os.listdir(obj_base_path))
+        all_seq_name = [seq_name for seq_name in all_seq_name if '-' in seq_name]
+
+        box_trans_path = osp.join(obj_base_path, all_seq_name[0], 'Box_trans.txt')
+        box_path = osp.join(obj_base_path, all_seq_name[0], 'Box.txt')
+        
+        intrin_full_path = osp.join(seq_base_path, 'intrinsics.txt')
+        image_full_path = image_path.replace('/color/', '/color_full/')
+
+        if osp.exists(image_full_path):
+            box3d = get_refine_box(box_path, box_trans_path)
+            K_full, K_full_homo = parse_K(intrin_full_path)
+            image_full = cv2.imread(image_full_path)
+
+            # Draw gt 3d bbox
+            reproj_box_2d_gt = reproj_(K_full, pose_gt, box3d.T)
+            image_full = draw_3d_box(image_full, reproj_box_2d_gt, color='y')
+
+            # Draw pred 3d box
+            if pose_pred is not None:
+                reproj_box_2d_pred = reproj_(K_full, pose_pred, box3d.T)
+                image_full = draw_3d_box(image_full, reproj_box_2d_pred, color='g')
+
+            image_full_pil = Image.fromarray(cv2.cvtColor(image_full, cv2.COLOR_BGR2RGB))
+            vis3d.add_image(image_full_pil, name='results_bbox')

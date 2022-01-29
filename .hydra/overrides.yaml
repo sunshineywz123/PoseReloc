@@ -1,2 +1,1 @@
-- +preprocess=align_xy
-- redo=True
+- +experiment=test_gats_loftr

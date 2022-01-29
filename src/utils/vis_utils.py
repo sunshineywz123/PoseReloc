@@ -1,6 +1,5 @@
 import cv2
 import numpy as np
-from numpy.core.numerictypes import sctype2char
 from vis3d.vis3d import Vis3D
 
 def make_matching_plot_fast(image0, image1, kpts0, kpts1,
@@ -148,7 +147,7 @@ def draw_3d_box(image, corners_2d, linewidth=3, color='g'):
     """
     lines = np.array([
         [0, 1, 5, 4, 2, 3, 7, 6, 0, 1, 5, 4],
-        [1, 5, 4, 0, 3, 7, 6, 2, 2, 3, 7, 6]
+        [1, 5, 4, 0, 3, 7, 6, 2, 3, 2, 6, 7]
     ]).T
 
     colors = {
@@ -164,7 +163,9 @@ def draw_3d_box(image, corners_2d, linewidth=3, color='g'):
     for id, line in enumerate(lines):
         pt1 = corners_2d[line[0]].astype(int)
         pt2 = corners_2d[line[1]].astype(int)
-        cv2.line(image, tuple(pt1), tuple(pt2), color, linewidth)
+        image = cv2.line(image, tuple(pt1), tuple(pt2), color, linewidth)
+    
+    return image
 
 
 def draw_2d_box(image, corners_2d, linewidth=3):
