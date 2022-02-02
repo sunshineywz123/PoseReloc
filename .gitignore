@@ -236,6 +236,6 @@ temp/
 src/third_party/sensemap
 visual/
 .hydra
-*.yaml
+# *.yaml
 weight
 models

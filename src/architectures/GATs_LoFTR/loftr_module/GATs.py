@@ -50,7 +50,7 @@ class GraphAttentionLayer(nn.Module):
 
             self.dropout1 = nn.Dropout(dropout)
 
-    def forward(self, h_2d, h_3d, adj):
+    def forward(self, h_2d, h_3d):
         b, n1, dim = h_3d.shape
         b, n2, dim = h_2d.shape
         num_leaf = int(n2 / n1)

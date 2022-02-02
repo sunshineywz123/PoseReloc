@@ -174,6 +174,7 @@ class GATs_LoFTR(nn.Module):
                 query_feat_f,
                 size=query_feat_b_c.shape[2:],
                 mode=self.config["interpol_type"],
+                align_corners=False
             )
         else:
             raise NotImplementedError

@@ -130,9 +130,9 @@ class LocalFeatureTransformer(nn.Module):
                             config["d_model"],
                             config["GATs_dropout"],
                             config["GATs_alpha"],
+                            config['GATs_include_self'],
                             config["GATs_enable_feed_forward"],
                             config["GATs_feed_forward_norm_method"],
-                            include_self=config['GATs_include_self']
                         )
                     )
                 elif self.gats_type == 'loftr_attention':
@@ -168,7 +168,7 @@ class LocalFeatureTransformer(nn.Module):
         self.device = desc3d_db.device
         num_3d_db = desc3d_db.shape[-1]  # [b, dim, n2]
         num_2d_query = desc2d_db.shape[-1]  # [b, dim, n1]
-        adj_matrix = self.buildAdjMatrix(num_2d_query, num_3d_db)
+        # adj_matrix = self.buildAdjMatrix(num_2d_query, num_3d_db)
 
         desc3d_db = torch.einsum("bdn->bnd", desc3d_db)  # [N, L, C]
         desc2d_db = torch.einsum("bdn->bnd", desc2d_db)  # [N, M, C]
@@ -176,7 +176,7 @@ class LocalFeatureTransformer(nn.Module):
         for i, (layer, name) in enumerate(zip(self.layers, self.layer_names)):
             if name == "GATs":
                 if self.gats_type == 'origin_gats':
-                    desc3d_db = layer(desc2d_db, desc3d_db, adj_matrix)
+                    desc3d_db = layer(desc2d_db, desc3d_db)
                 elif self.gats_type == 'loftr_attention':
                     # Change data format
                     b, n1, dim = desc3d_db.shape
