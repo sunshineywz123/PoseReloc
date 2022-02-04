@@ -6,11 +6,28 @@ import numpy as np
 import random
 import cv2
 import matplotlib.cm as cm
+import math
+from kornia.utils.grid import create_meshgrid
+from einops import repeat
+from PIL import Image
 
 matplotlib.use("Agg")
 
 jet = cm.get_cmap("jet")  # "Reds"
 jet_colors = jet(np.arange(256))[:, :3]  # color list: normalized to [0,1]
+
+
+def blend_img_heatmap(img, heatmap, alpha=0.5):  # (H, W, *)  # (H, W, 3)
+    h, w = heatmap.shape[:2]
+    img = cv2.resize(img, (w, h), interpolation=cv2.INTER_LINEAR)
+    if img.ndim == 2:
+        img = repeat(img, "h w -> h w c", c=3)
+    img = np.uint8(img)
+    heatmap = np.uint8(heatmap * 255)
+    blended = np.asarray(
+        Image.blend(Image.fromarray(img), Image.fromarray(heatmap), alpha)
+    )
+    return blended
 
 
 def error_colormap(x, alpha=1.0):
@@ -39,6 +56,20 @@ def plot_image_pair(imgs, dpi=100, size=6, pad=0.5, horizontal=False):
         for spine in ax[i].spines.values():  # remove frame
             spine.set_visible(False)
     plt.tight_layout(pad=pad)
+
+
+def plot_single_image(img, dpi=100, size=6, pad=0.5):
+    figsize = (size, size) if size is not None else None
+    _, ax = plt.subplots(1, 1, figsize=figsize, dpi=dpi)
+
+    ax.imshow(img)
+    ax.get_yaxis().set_ticks([])
+    ax.get_xaxis().set_ticks([])
+    for spine in ax.spines.values():  # remove frame
+        spine.set_visible(False)
+    plt.tight_layout(pad=pad)
+    fig = plt.gcf()
+    return fig
 
 
 def plot_keypoints(kpts0, kpts1, color="w", ps=2):
@@ -453,16 +484,18 @@ def reproj(K, pose, pts_3d):
     pts_3d_homo = pts_3d_homo.T
 
     reproj_points = K_homo @ pose_homo @ pts_3d_homo
-    depth = reproj_points[2] #[N]
+    depth = reproj_points[2]  # [N]
     reproj_points = reproj_points[:] / reproj_points[2:]
     reproj_points = reproj_points[:2, :].T
 
     return reproj_points, depth  # [n, 2]
 
 
-def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
-    # TODO: add visualize bbox
-    figures = {"evaluation": []}
+@torch.no_grad()
+def draw_reprojection_pair(
+    data, visual_color_type="conf", visual_gt=False, visual_heatmap=False
+):
+    figures = {"evaluation": [], "heatmap":[]}
 
     if visual_gt:
         raise NotImplementedError
@@ -486,10 +519,12 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
         m_bids = data["m_bids"].cpu().numpy()
         query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
+        mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
         mkpts_query = data["mkpts_query_f"].cpu().numpy()
         query_K = data["query_intrinsic"].cpu().numpy()
         query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
         m_conf = data["mconf"].cpu().numpy()
+        gt_mask = data['gt_mask'].cpu().numpy()
 
     R_errs = data["R_errs"] if "R_errs" in data else None
     t_errs = data["t_errs"] if "t_errs" in data else None
@@ -502,6 +537,27 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
     R_errs_gt = data["R_errs_gt"] if "R_errs_gt" in data else None
     t_errs_gt = data["t_errs_gt"] if "t_errs_gt" in data else None
     inliers_gt = data["inliers_gt"] if "inliers_gt" in data else None
+
+    if visual_heatmap:
+        feat3d = data["desc3d_db_selected"]
+        feat2d_unfold_f = data["query_feat_f_unfolded"]
+        M, WW, C = feat2d_unfold_f.shape
+        W = int(math.sqrt(WW))
+        sim_matrix = torch.linalg.norm(feat3d - feat2d_unfold_f, dim=-1)
+        sim_matrix = sim_matrix.cpu().numpy()
+
+        sim_matrix_max = np.max(sim_matrix, axis=-1, keepdims=True)
+        sim_matrix_min = np.min(sim_matrix, axis=-1, keepdims=True)
+        sim_matrix_normalized = (sim_matrix - sim_matrix_min) / (
+            sim_matrix_max - sim_matrix_min + 1e-4
+        )
+        sim_matrix_normalized = np.reshape(sim_matrix_normalized, (-1, W, W))
+
+        grid = (
+            (create_meshgrid(W, W, normalized_coordinates=False,) - W // 2)
+            .cpu()
+            .numpy()
+        )
 
     for bs in range(data["query_image"].size(0)):
         mask = m_bids == bs
@@ -547,15 +603,14 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
             text += [
                 f"Num of inliers gt: {inliers_gt[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers_gt[bs])}"
             ]
-        
 
         # Clip reprojected keypoints
         # FIXME: bug exists here! a_max need to be original image size
         mkpts3d_reprojed[:, 0] = np.clip(
-            mkpts3d_reprojed[:, 0], a_min=0, a_max=data["query_image"].shape[-1]-1
+            mkpts3d_reprojed[:, 0], a_min=0, a_max=data["query_image"].shape[-1] - 1
         )  # x
         mkpts3d_reprojed[:, 1] = np.clip(
-            mkpts3d_reprojed[:, 1], a_min=0, a_max=data["query_image"].shape[-2] -1
+            mkpts3d_reprojed[:, 1], a_min=0, a_max=data["query_image"].shape[-2] - 1
         )  # y
 
         if visual_color_type == "conf":
@@ -578,10 +633,9 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
             reprojection_dictance = np.linalg.norm(
                 mkpts3d_reprojed - mkpts_query_masked, axis=-1
             )
-
             color = np.clip(reprojection_dictance / (color_thr), 0, 1)
             color = error_colormap(1 - color, alpha=0.5)
-        elif visual_color_type == 'depth':
+        elif visual_color_type == "depth":
             if depth.shape[0] != 0:
                 depth_max = np.max(depth)
                 depth_min = np.min(depth)
@@ -590,7 +644,7 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
             else:
                 color = np.array([])
 
-        elif visual_color_type == 'true_or_false':
+        elif visual_color_type == "true_or_false":
             # NOTE: only available for train to visual whether coarse match is correct
             pass
         else:
@@ -606,8 +660,26 @@ def draw_reprojection_pair(data, visual_color_type="conf", visual_gt=False):
             color=color,
             text=text,
         )
-
         figures["evaluation"].append(figure)
+
+        if visual_heatmap:
+            sim_matrix_normalized_masked = sim_matrix_normalized[~gt_mask][mask]
+            coordinate_grid = (mkpts_query_c[:, None, None, :] + grid).astype(
+                np.int
+            )  # L*W*W*2
+            h, w = query_image[bs][0].shape[:2]
+
+            response_map = np.zeros((h, w))
+            response_map[
+                coordinate_grid[..., 1], coordinate_grid[..., 0]
+            ] = sim_matrix_normalized_masked  # h*w
+            response_map = np.uint8(255 * response_map)
+            colored_response_map = jet_colors[response_map]  # h*w*3
+            img_blend_with_heatmap = blend_img_heatmap(
+                query_image[bs][0], colored_response_map, alpha=0.5
+            )
+            fig = plot_single_image(img_blend_with_heatmap, dpi=300, size=6)
+            figures["heatmap"].append(fig)
 
         return figures
 

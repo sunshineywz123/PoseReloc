@@ -160,7 +160,7 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
             os.makedirs(cfg.output.vis_dir, exist_ok=True)
             vis3d_pth = osp.join(cfg.output.vis_dir, obj_name)
         else:
-            None
+            vis3d_pth = None
 
         metrics = inference_gats_loftr(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose, vis3d_pth=vis3d_pth)
         obj_name2metrics[obj_name] = metrics

@@ -150,6 +150,8 @@ class LoFTR_SfM(nn.Module):
                     "hw1_f": feat_f1.shape[2:],
                 }
             )
+            feat_c0_backbone = feat_b_c0.clone()
+            feat_c1_backbone = feat_b_c1.clone()
             feat_f0_backbone = feat_f0.clone()
             feat_f1_backbone = feat_f1.clone()
 
@@ -271,6 +273,12 @@ class LoFTR_SfM(nn.Module):
             # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)
         
         # Extract fine_feature (optional):
+        if 'extract_coarse_feature' in kwargs:
+            if kwargs['extract_coarse_feature']:
+                #NOTE: Use mkpts0/1_f is not a bug, try to use their nearest coarse feature
+                feat_coarse_b_0 = sample_feature_from_featuremap(feat_c0_backbone, data['mkpts0_f'], imghw=data['scale0'].squeeze(0) * torch.tensor(data['hw0_i']).to(data['scale0']), sample_mode='nearest')
+                feat_coarse_b_1 = sample_feature_from_featuremap(feat_c1_backbone, data['mkpts1_f'], imghw=data['scale1'].squeeze(0) * torch.tensor(data['hw1_i']).to(data['scale1']), sample_mode='nearest')
+                data.update({'feat_coarse_b_0': feat_coarse_b_0, 'feat_coarse_b_1': feat_coarse_b_1})
         if 'extract_fine_feature' in kwargs:
             if kwargs['extract_fine_feature']:
                 feat_ext0 = sample_feature_from_featuremap(feat_f0_backbone, data['mkpts0_f'], imghw=data['scale0'].squeeze(0) * torch.tensor(data['hw0_i']).to(data['scale0']))

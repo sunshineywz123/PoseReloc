@@ -27,7 +27,7 @@ trainer:
   gpus:
     # - 0
     - 1
-    - 2
+    # - 2
     # - 3
   num_nodes: 1
   accelerator: "ddp"
@@ -47,8 +47,8 @@ trainer:
 model:
   # _target_: src.models.spg_model.LitModelSPG
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  # pretrained_ckpt: weight/last.ckpt
-  pretrained_ckpt: null
+  pretrained_ckpt: weight/test_inference_loftr_gats.ckpt
+  # pretrained_ckpt: null
 
   loftr:
     loftr_backbone:
@@ -82,8 +82,8 @@ model:
       d_ffm: 128
       nhead: 4
       # nhead: 8
-      layer_names: ['GATs', 'self', 'cross']
-      # layer_names: ["self", "cross"]
+      # layer_names: ['GATs', 'self', 'cross']
+      layer_names: ["self", "cross"]
       layer_iter_n: 4
       dropout: 0.
       attention: "linear"
@@ -97,11 +97,6 @@ model:
       final_proj: False
 
       # GATs part
-      GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
-      GATs_include_self: False
-      # useful for loftr_attention
-      GATs_feat2d_db_update: True
-      # useful for origin_gats
       d_db_feat: 128 # The input dim of database feature
       GATs_dropout: 0.6
       GATs_alpha: 0.2
@@ -111,7 +106,7 @@ model:
     coarse_matching:
       type: "dual-softmax"
       # type: 'sinkhorn'
-      thr: 0.4
+      thr: 0.2
       feat_norm_method: "sqrt_feat_dim"
       border_rm: 2
       spg_spvs: False
@@ -130,7 +125,7 @@ model:
           mapping_dim: 4096
 
       dual_softmax:
-        temperature: 0.1
+        temperature: 0.08
         temperature_learnable: False
         range: # may be log range or exp range?
           - 0.03 # min
@@ -143,7 +138,7 @@ model:
         train_pad_num_gt_min: 200 # avoid deadlock; better convergence
 
     loftr_fine:
-      enable: True
+      enable: False
       # Fine preprocess:
       window_size: 5
       concat_coarse_feat: False

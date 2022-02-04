@@ -141,6 +141,7 @@ class GATsLoFTRDataset(Dataset):
 
         # Pointcloud downsampling use by voxel
         if self.downsample:
+            raise NotImplementedError
             pcd = o3d.geometry.PointCloud()
             pcd.points = o3d.utility.Vector3dVector(keypoints3d.numpy())
             bbox_size = pcd.get_max_bound() - pcd.get_min_bound()

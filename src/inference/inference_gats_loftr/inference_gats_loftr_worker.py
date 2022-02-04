@@ -72,6 +72,6 @@ def inference_gats_loftr_worker(
     return results
 
 
-@ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+@ray.remote(num_cpus=1, num_gpus=0.5)  # release gpu after finishing
 def inference_gats_loftr_worker_ray_wrapper(*args, **kwargs):
     return inference_gats_loftr_worker(*args, **kwargs)

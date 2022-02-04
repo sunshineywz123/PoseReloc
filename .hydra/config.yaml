@@ -80,7 +80,7 @@ model:
       GATs_feed_forward_norm_method: instancenorm
     coarse_matching:
       type: dual-softmax
-      thr: 0.12
+      thr: 0.2
       feat_norm_method: sqrt_feat_dim
       border_rm: 2
       spg_spvs: false
@@ -97,7 +97,7 @@ model:
           mapping: favor
           mapping_dim: 4096
       dual_softmax:
-        temperature: 0.1
+        temperature: 0.08
         temperature_learnable: false
         range:
         - 0.03
@@ -108,7 +108,7 @@ model:
         train_pad_num_gt_min: 200
     loftr_fine:
       enable: true
-      window_size: 9
+      window_size: 5
       concat_coarse_feat: false
       concat_coarse_feat_type: nearest
       coarse_layer_norm: false
@@ -199,8 +199,8 @@ datamodule:
   val_percent: 0.2
   num_leaf: 1
   shape2d: 2000
-  shape3d_train: 12000
-  shape3d_val: 10000
+  shape3d_train: 7000
+  shape3d_val: 7000
   img_pad: false
   img_resize:
   - 512
@@ -233,14 +233,14 @@ type: inference
 data_base_dir: /nas/users/hexingyi/arscan_data
 sfm_base_dir: /nas/users/hexingyi/onepose_sfm_v2
 match_type: softmax
-task_name: null
+task_name: test_loftr_easy_0.2_7000_3d_temp_0.8
 suffix: ''
 feature_method: average
-use_global_ray: false
-use_local_ray: false
+use_global_ray: true
+use_local_ray: true
 ray:
   slurm: false
-  n_workers: 2
+  n_workers: 3
   n_cpus_per_worker: 5
   n_gpus_per_worker: 1
   local_mode: false
@@ -250,15 +250,92 @@ network:
 top_k_obj: null
 num_val_seq: 1
 ids:
-- '0448'
-- '0461'
-- '0462'
-- '0463'
-- '0464'
+- '0408'
+- '0409'
+- '0419'
+- '0422'
+- '0423'
+- '0424'
+- '0447'
+- '0450'
+- '0452'
+- '0455'
+- '0456'
+- '0458'
+- '0459'
+- '0466'
+- '0468'
+- '0469'
+- '0470'
+- '0471'
+- '0472'
+- '0473'
+- '0474'
+- '0476'
+- '0480'
+- '0483'
+- '0486'
+- '0487'
+- '0488'
+- '0489'
+- '0490'
+- '0492'
+- '0493'
+- '0494'
+- '0495'
+- '0496'
+- '0497'
+- '0498'
+- '0500'
+- '0501'
+- '0502'
+- '0503'
+- '0504'
+- '0508'
+- '0510'
+- '0511'
+- '0517'
+- '0518'
+- '0519'
+- '0520'
+- '0521'
+- '0522'
+- '0523'
+- '0525'
+- '0526'
+- '0527'
+- '0534'
+- '0535'
+- '0537'
+- '0539'
+- '0543'
+- '0547'
+- '0548'
+- '0550'
+- '0551'
+- '0552'
+- '0557'
+- '0558'
+- '0559'
+- '0560'
+- '0564'
+- '0565'
+- '0568'
+- '0570'
+- '0576'
+- '0577'
+- '0578'
+- '0579'
+- '0580'
+- '0582'
+- '0583'
+- '0593'
+- '0594'
+- '0595'
 exception_obj_names:
 - null
 verbose: false
 output:
   txt_dir: /nas/users/hexingyi/onepose_test/${task_name}
-  visual_vis3d: true
+  visual_vis3d: false
   vis_dir: /nas/users/hexingyi/onepose_test/${task_name}/vis3d

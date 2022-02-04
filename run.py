@@ -9,7 +9,6 @@ import hydra
 import math
 import ray
 
-import open3d as o3d
 import os.path as osp
 from tqdm import tqdm
 
@@ -410,6 +409,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     )  # merge 3d points by distance between points
 
     if cfg.debug:
+        import open3d as o3d
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(merge_xyzs)
         out_file = osp.join(outputs_dir, "box_filter.ply")
@@ -429,10 +429,12 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
+        feat_3d_name_suffix="_coarse",
         use_ray=cfg.use_local_ray,
         verbose=cfg.verbose
     )
 
+    # Save loftr fine keypoints and features:
     feature_process.get_kpt_ann(
         cfg,
         img_lists,

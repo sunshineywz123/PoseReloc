@@ -443,5 +443,5 @@ verbose: False
 
 output:
   txt_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_test/${task_name}'
-  visual_vis3d: True # NOTE: will be slow
+  visual_vis3d: False # NOTE: will be slow
   vis_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_test/${task_name}/vis3d'

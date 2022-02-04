@@ -102,6 +102,12 @@ def extract_preds(data, extract_feature_method=None):
     else:
         raise NotImplementedError
 
+    if "feat_coarse_b_0" in data:
+        feature_c0 = data['feat_coarse_b_0'].cpu().numpy()
+        feature_c1 = data['feat_coarse_b_1'].cpu().numpy()
+    else:
+        feature_c0, feature_c1 = None, None
+
     return (
         mkpts0_c,
         mkpts1_c,
@@ -111,6 +117,8 @@ def extract_preds(data, extract_feature_method=None):
         mkpts0_idx,
         scale0,
         scale1,
+        feature_c0,
+        feature_c1,
         feature0,
         feature1,
     )
@@ -127,9 +135,9 @@ def extract_results(
     # 1. inference
     detector(data)
     if extract_feature_method == "fine_match_backbone":
-        matcher(data, extract_fine_feature=True)
+        matcher(data, extract_coarse_feature=True, extract_fine_feature=True)
     else:
-        matcher(data)
+        matcher(data, extract_coarse_feature=True)
     refiner(data, **refine_args) if refiner is not None else None
     # 2. extract match and refined poses
     (
@@ -141,6 +149,8 @@ def extract_results(
         mkpts0_idx,
         scale0,
         scale1,
+        feature_c0,
+        feature_c1,
         feature0,
         feature1,
     ) = extract_preds(data, extract_feature_method=extract_feature_method)
@@ -155,6 +165,8 @@ def extract_results(
         mkpts0_idx,
         scale0,
         scale1,
+        feature_c0,
+        feature_c1,
         feature0,
         feature1,
     )
@@ -202,6 +214,8 @@ def matchWorker(
             mkpts0_idx,
             scale0,
             scale1,
+            feature_c0,
+            feature_c1,
             feature0,
             feature1,
         ) = extract_results(
@@ -222,10 +236,11 @@ def matchWorker(
             "distance_map": distance_map,  # N*WW*1
             "scale0": scale0,  # 1*2
             "scale1": scale1,
+            "feature_c0": feature_c0,
+            "feature_c1": feature_c1,
             "feature0": feature0,
             "feature1": feature1,
         }
-        # TODO: add feature0, feature1
         if pba is not None:
             pba.update.remote(1)
 

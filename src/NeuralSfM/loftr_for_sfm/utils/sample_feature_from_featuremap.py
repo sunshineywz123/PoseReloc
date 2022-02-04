@@ -26,10 +26,10 @@ def coord_normalization(keypoints, h, w, scale=1):
 
 
 def sample_feature_from_featuremap(
-    feature_map, kpts, imghw, norm_feature=False, patch_feature_size=None
+    feature_map, kpts, imghw, norm_feature=False, patch_feature_size=None, sample_mode="bilinear"
 ):
     """
-    Sample feature from whold feature map
+    Sample feature from the whole feature map
     Parameters:
     -------------
     feature_map : torch.tensor C*H*W or 1*C*H*W
@@ -67,7 +67,7 @@ def sample_feature_from_featuremap(
     feature = F.grid_sample(
         feature_map.unsqueeze(0) if len(feature_map.shape) == 3 else feature_map,  # 1*C*H*W
         grid_n.float(),
-        mode="bilinear",
+        mode=sample_mode,
         align_corners=True,
     )  # 1*C*L*WW or 1*C*L*1
     feature = (

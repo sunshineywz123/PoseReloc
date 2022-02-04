@@ -129,7 +129,7 @@ class GATs_LoFTR(nn.Module):
         #     ):
         #         param.requires_grad = False
 
-    def forward(self, data):
+    def forward(self, data, return_fine_unfold_feat=False):
         """ 
         Update:
             data (dict): {
@@ -236,9 +236,14 @@ class GATs_LoFTR(nn.Module):
                 query_feat_f_unfolded.size(0) != 0
                 and self.config["loftr_fine"]["enable"]
             ):
-                desc3d_db_selected, desc2d_db_selected = self.loftr_fine(
+                desc3d_db_selected, query_feat_f_unfolded = self.loftr_fine(
                     desc3d_db_selected, desc2d_db_selected, query_feat_f_unfolded
                 )
+            else:
+                desc3d_db_selected = torch.einsum("bdn->bnd", desc3d_db_selected)  # [N, L, C]
+
+        if return_fine_unfold_feat:
+            data.update({'desc3d_db_selected': desc3d_db_selected, 'query_feat_f_unfolded': query_feat_f_unfolded})
 
         # 5. match fine-level
         with self.profiler.record_function("LoFTR/fine-matching"):

@@ -16,7 +16,7 @@ defaults:
 
 seed: 12345
 task_name: null
-exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_fine_bug_fix
+exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_tmp_0.08
 
 # data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/scan_data'
 # sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm'
@@ -127,7 +127,7 @@ model:
           mapping_dim: 4096
 
       dual_softmax:
-        temperature: 0.1
+        temperature: 0.08
         temperature_learnable: False
         range: # may be log range or exp range?
           - 0.03 # min

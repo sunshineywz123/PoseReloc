@@ -215,9 +215,8 @@ def loftr_coarse_matching(
                 grp = feature_file.create_group(image_name)
                 grp.create_dataset("keypoints", data=keypoints)
 
-                # FIXME: change to real features in fine
                 # Fake features:
-                dim = 128
+                dim = 256
                 descriptors = np.zeros((dim, keypoints.shape[0]))
                 grp.create_dataset("descriptors", data=descriptors)
 

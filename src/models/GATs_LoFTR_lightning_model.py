@@ -53,7 +53,13 @@ class PL_GATsLoFTR(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
 
-        self.matcher(batch)
+        if (
+            self.trainer.global_rank == 0
+            and self.global_step % self.trainer.log_every_n_steps == 0
+        ):
+            self.matcher(batch, return_fine_unfold_feat=True)
+        else:
+            self.matcher(batch)
 
         fine_supervision(batch, self.hparams)
 
@@ -116,7 +122,7 @@ class PL_GATsLoFTR(pl.LightningModule):
                     )
             if self.hparams["trainer"]["enable_plotting"]:
                 compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"], training=self.training,)
-                figures = draw_reprojection_pair(batch, visual_color_type="distance_error")
+                figures = draw_reprojection_pair(batch, visual_color_type="distance_error", visual_heatmap=True)
                 for k, v in figures.items():
                     self.logger.experiment[0].add_figure(
                         f"train_match/{k}", v, self.global_step
@@ -132,7 +138,7 @@ class PL_GATsLoFTR(pl.LightningModule):
             )
 
     def validation_step(self, batch, batch_idx):
-        self.matcher(batch)
+        self.matcher(batch, return_fine_unfold_feat=True)
 
         # # NOTE: GT not exists in validation stage
         # fine_supervision(batch, self.hparams)
@@ -156,9 +162,9 @@ class PL_GATsLoFTR(pl.LightningModule):
 
         # Visualize match
         val_plot_invervel = max(self.trainer.num_val_batches[0] // self.n_vals_plot, 1)
-        figures = {"evaluation": []}
+        figures = {"evaluation": [], "heatmap":[]}
         if batch_idx % val_plot_invervel == 0:
-            figures = draw_reprojection_pair(batch, visual_color_type="distance_error")
+            figures = draw_reprojection_pair(batch, visual_color_type="distance_error", visual_heatmap=True)
 
         return {
             # "loss_scalars": batch["loss_scalars"],

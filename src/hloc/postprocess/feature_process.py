@@ -590,6 +590,7 @@ def get_kpt_ann(
     xyzs,
     save_feature_for_each_image=True,
     use_ray=False,
+    feat_3d_name_suffix="",
     verbose=True,
 ):
     """ Generate 3d point feature.
@@ -693,8 +694,8 @@ def get_kpt_ann(
         verbose=verbose
     )
 
-    avg_anno3d_out_path = osp.join(anno_out_dir, "anno_3d_average.npz")
-    collect_anno3d_out_path = osp.join(anno_out_dir, "anno_3d_collect.npz")
+    avg_anno3d_out_path = osp.join(anno_out_dir, "anno_3d_average" + feat_3d_name_suffix + ".npz")
+    collect_anno3d_out_path = osp.join(anno_out_dir, "anno_3d_collect" + feat_3d_name_suffix + ".npz")
     save_3d_anno(filter_xyzs, avg_descriptors, avg_scores, avg_anno3d_out_path)
     save_3d_anno(
         filter_xyzs, filter_descriptors, filter_scores, collect_anno3d_out_path
