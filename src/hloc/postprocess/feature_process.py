@@ -300,14 +300,13 @@ def gather_3d_ann(
     kp3d_id_score,
     xyzs,
     points_idxs,
-    feature_dim,
     pba: ActorHandle = None,
     verbose=True
 ):
     """ 
     Gather affiliated 2d points' positions, (mean/concated)descriptors and scores for each 3d points
     """
-    kp3d_descriptors = np.empty(shape=(0, feature_dim))
+    kp3d_descriptors = None
     kp3d_scores = np.empty(shape=(0, 1))
     kp3d_position = np.empty(shape=(0, 3))
     idxs = []
@@ -323,10 +322,10 @@ def gather_3d_ann(
         points_idxs = points_idxs.items()
 
     for new_point_idx, old_points_idxs in points_idxs:
-        descriptors = np.empty(shape=(0, feature_dim))
+        descriptors = None
         scores = np.empty(shape=(0, 1))
         for old_point_idx in old_points_idxs:
-            descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0)
+            descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0) if descriptors is not None else kp3d_id_feature[old_point_idx]
             scores = np.append(
                 scores, kp3d_id_score[old_point_idx].reshape(-1, 1), axis=0
             )
@@ -334,9 +333,9 @@ def gather_3d_ann(
         kp3d_position = np.append(
             kp3d_position, xyzs[new_point_idx].reshape(1, 3), axis=0
         )
-        kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0)
+        kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0) if kp3d_descriptors is not None else descriptors
         kp3d_scores = np.append(kp3d_scores, scores, axis=0)
-        idxs.append(descriptors.shape[0])
+        idxs.append(descriptors.shape[0] if descriptors is not None else 0)
 
         if pba is not None:
             pba.update.remote(1)
@@ -658,7 +657,6 @@ def get_kpt_ann(
                 kp3d_id_score,
                 xyzs,
                 sub_points_ids,
-                feature_dim,
                 pb.actor if pb is not None else None,
                 verbose=verbose
             )
@@ -673,7 +671,7 @@ def get_kpt_ann(
         logger.info("Gather 3D annotation finish!!")
     else:
         filter_xyzs, filter_descriptors, filter_scores, idxs = gather_3d_ann(
-            kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, feature_dim, verbose=verbose
+            kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, verbose=verbose
         )
 
     avg_descriptors, avg_scores = (

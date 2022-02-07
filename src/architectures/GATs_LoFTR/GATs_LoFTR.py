@@ -16,7 +16,7 @@ from .backbone import (
     _split_backbone_feats,
     _get_feat_dims,
 )
-from .utils.normalize import normalize_2d_keypoints, normalize_3d_keypoints
+from .utils.normalize import normalize_3d_keypoints
 from .loftr_module import LocalFeatureTransformer, FinePreprocess
 from .utils.position_encoding import PositionEncodingSine, KeypointEncoding
 from .utils.coarse_matching import CoarseMatching
@@ -176,8 +176,6 @@ class GATs_LoFTR(nn.Module):
                 mode=self.config["interpol_type"],
                 align_corners=False
             )
-        else:
-            raise NotImplementedError
 
         # 2. coarse-level loftr module
         with self.profiler.record_function("LoFTR/coarse-loftr"):
@@ -192,12 +190,12 @@ class GATs_LoFTR(nn.Module):
             kpts3d = normalize_3d_keypoints(data["keypoints3d"])
             desc3d_db = (
                 self.kpt_3d_pos_encoding(
-                    kpts3d, data["descriptors3d_db"]
+                    kpts3d, data["descriptors3d_db"] if "descriptors3d_coarse_db" not in data else data['descriptors3d_coarse_db']
                 )
                 if self.kpt_3d_pos_encoding is not None
-                else data["descriptors3d_db"]
+                else data["descriptors3d_db"] if "descriptors3d_coarse_db" not in data else data['descriptors3d_coarse_db']
             )
-            desc2d_db = data["descriptors2d_db"]
+            desc2d_db = data["descriptors2d_db"] if 'descriptors2d_coarse_db' not in data else data['descriptors2d_coarse_db']
 
             query_mask = None
             if "query_image_mask" in data:
@@ -229,7 +227,7 @@ class GATs_LoFTR(nn.Module):
                 desc2d_db_selected,
                 query_feat_f_unfolded,
             ) = self.fine_preprocess(
-                data, data["descriptors3d_db"], data["descriptors2d_db"], query_feat_f
+                data, data["descriptors3d_db"], data["descriptors2d_db"], query_feat_f, feat_3D_c=desc3d_db, feat_query_c=query_feat_c
             )
             # at least one coarse level predicted
             if (

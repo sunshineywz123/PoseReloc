@@ -3,6 +3,7 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning import loggers
 from pytorch_lightning.core import datamodule
 from pytorch_lightning.loggers import LightningLoggerBase
+from pytorch_lightning.plugins import DDPPlugin
 import math
 import torch
 
@@ -66,6 +67,7 @@ def train(config: DictConfig):
 
     # Init PyTorch Lightning trainer ⚡
     trainer: Trainer = hydra.utils.instantiate(
+        # config["trainer"], callbacks=callbacks, logger=logger, plugins=DDPPlugin(find_unused_parameters=False)
         config["trainer"], callbacks=callbacks, logger=logger
     )
 

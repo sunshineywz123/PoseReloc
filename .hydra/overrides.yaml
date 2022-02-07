@@ -1,1 +1,3 @@
-- +experiment=test_gats_loftr
+- +experiment=train_GATs_loftr
+- task_name=loftr_debug_train
+- exp_name=loftr_train

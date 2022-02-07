@@ -46,20 +46,26 @@ class FinePreprocess(nn.Module):
         self.ms_feat_type = config['ms_feat_type']
         
         if self.cat_c_feat:
-            if self.cat_c_type == 'nearest':
-                _down_proj_layers = [nn.Linear(d_c_model, config['d_model'], bias=True)]
-                if config['coarse_layer_norm']:
-                    _down_proj_layers = [nn.LayerNorm(d_c_model), *_down_proj_layers]
-                self.down_proj = nn.Sequential(*_down_proj_layers)
-                
-                self.merge_feat = nn.Linear(2*config['d_model'], config['d_model'], bias=True)
-            elif self.cat_c_type == 'bilinear':
-                _down_proj_layers = [nn.Conv2d(d_c_model, config['d_model'], 3, 1, 1)]
-                if config['coarse_layer_norm']:
-                    _down_proj_layers = [nn.LayerNorm(d_c_model, self.W, self.W), *_down_proj_layers]
-                self.down_proj = nn.Sequential(*_down_proj_layers)
+            _down_proj_layers_3d = [nn.Linear(d_c_model, config['d_model'], bias=True)]
+            if config['coarse_layer_norm']:
+                _down_proj_layers_3d = [nn.LayerNorm(d_c_model), *_down_proj_layers_3d]
+            self.down_proj_3d = nn.Sequential(*_down_proj_layers_3d)
+            self.merge_feat_3d = nn.Linear(2*config['d_model'], config['d_model'], bias=True)
 
-                self.merge_feat = nn.Conv2d(2*config['d_model'], config['d_model'], 3, 1, 1)
+            if self.cat_c_type == 'nearest':
+                _down_proj_layers_query = [nn.Linear(d_c_model, config['d_model'], bias=True)]
+                if config['coarse_layer_norm']:
+                    _down_proj_layers_query = [nn.LayerNorm(d_c_model), *_down_proj_layers_query]
+                self.down_proj_query = nn.Sequential(*_down_proj_layers_query)
+                
+                self.merge_feat_query = nn.Linear(2*config['d_model'], config['d_model'], bias=True)
+            elif self.cat_c_type == 'bilinear':
+                _down_proj_layers_query = [nn.Conv2d(d_c_model, config['d_model'], 3, 1, 1)]
+                if config['coarse_layer_norm']:
+                    _down_proj_layers_query = [nn.LayerNorm(d_c_model, self.W, self.W), *_down_proj_layers_query]
+                self.down_proj_query = nn.Sequential(*_down_proj_layers_query)
+                self.merge_feat_query = nn.Conv2d(2*config['d_model'], config['d_model'], 3, 1, 1)
+
            
         # TODO: Refactor net init and change window-size to image scale
         self.coarse_id, self.fine_id = [int(log(r, 2)) for r in cf_res]  # coarse, fine resolutions
@@ -130,17 +136,16 @@ class FinePreprocess(nn.Module):
         stride = data['q_hw_f'][0] // data['q_hw_c'][0]
         # if use bilinear upsample, upsample feat_coarse first
         # TODO: No need to convolve on the full feature map?
+        feat_3D = feat_3D.permute(0,2,1) # B*N*C
+        if self.cat_c_feat:
+            feat_3D_c = self.down_proj_3d(feat_3D_c)
+            feat_3D = self.merge_feat_3d(torch.cat([feat_3D, feat_3D_c], dim=-1))
         if self.cat_c_feat and (self.cat_c_type == 'bilinear'):
-            raise NotImplementedError
-            feat_c0 = rearrange(feat_c0, 'n (h w) c -> n c h w', h=data['hw0_c'][0], w=data['hw0_c'][1])
-            feat_c1 = rearrange(feat_c1, 'n (h w) c -> n c h w', h=data['hw1_c'][0], w=data['hw1_c'][1])
+            feat_query_c = rearrange(feat_query_c, 'n (h w) c -> n c h w', h=data['q_hw_c'][0], w=data['q_hw_c'][1])
 
-            feat_c0 = F.upsample(feat_c0, scale_factor=stride, mode='bilinear', align_corners=False)
-            feat_c1 = F.upsample(feat_c1, scale_factor=stride, mode='bilinear', align_corners=False)
-            feat_c0 = self.down_proj(feat_c0)
-            feat_c1 = self.down_proj(feat_c1)
-            feat_f0 = self.merge_feat(torch.cat([feat_f0, feat_c0], dim=1))
-            feat_f1 = self.merge_feat(torch.cat([feat_f1, feat_c1], dim=1))
+            feat_query_c = F.upsample(feat_query_c, scale_factor=stride, mode='bilinear', align_corners=False)
+            feat_query_c = self.down_proj_query(feat_query_c)
+            feat_query_f = self.merge_feat_query(torch.cat([feat_query_f, feat_query_c], dim=1))
             
         # unfold(crop) all local windows
         feat_query_f_unfold = F.unfold(feat_query_f, kernel_size=(W, W), stride=stride, padding=W//2)
@@ -148,11 +153,10 @@ class FinePreprocess(nn.Module):
 
         # select only the predicted matches
         # TODO: can use nearby 3D feature for later attention
-        feat_3D = feat_3D[data['b_ids'], :, data['i_ids']].unsqueeze(-1) # N*C*1
+        feat_3D = feat_3D[data['b_ids'], data['i_ids'], :].unsqueeze(-1) # N*C*1
 
         b, dim, n = feat_2D_db.shape
         feat_2D_db = feat_2D_db.view(b, dim, -1, self.n_leaf)
-        # FIXME: maybe problem here!
         feat_2D_db = feat_2D_db[data['b_ids'],:, data['i_ids'], :].unsqueeze(-1) # N*c* (1*n_leaf)
         feat_2D_db = feat_2D_db.view(feat_2D_db.shape[0], dim, -1)
         feat_query_f_unfold = feat_query_f_unfold[data['b_ids'], data['j_ids']] # N*WW*C
@@ -160,15 +164,10 @@ class FinePreprocess(nn.Module):
         # optional: concat coarse-level loftr feature as context
         # if use nearest coarse ctx
         if self.cat_c_feat and (self.cat_c_type == 'nearest'):
-            raise NotImplementedError
-            feat_c_win = self.down_proj(torch.cat([feat_c0[data['b_ids'], data['i_ids']], 
-                                                   feat_c1[data['b_ids'], data['j_ids']]], 0))  # (2n, c)
-            feat_cf_win = self.merge_feat(torch.cat([
-                    torch.cat([feat_f0_unfold, feat_f1_unfold], 0),  # (2n, ww, cf)
-                    repeat(feat_c_win, 'n c -> n ww c', ww=W**2),  # (2n, ww, cf)
-                ], -1))
+            feat_query_c_win = self.down_proj_query(feat_query_c[data['b_ids'], data['j_ids']])  # (n, c)
+            feat_query_c_win_cat = torch.cat([feat_query_f_unfold, repeat(feat_query_c_win,'n c -> n ww c', ww=W**2)], -1)
+            feat_query_f_unfold = self.merge_feat_query(feat_query_c_win_cat)
             # TODO: add a residual connection?
-            feat_f0_unfold, feat_f1_unfold = torch.chunk(feat_cf_win, 2, dim=0)
         return feat_3D, feat_2D_db, feat_query_f_unfold
     
     def _forward_multi_scale(self, feats0, feats1, data):

@@ -224,7 +224,7 @@ def compute_query_pose_errors(data, configs, compute_gt_proj_pose_error=True, tr
 
         query_pose_pred, query_pose_pred_homo, inliers = ransac_PnP(
             query_K[bs],
-            mkpts_query_f, # FIXME: change to mkpts_query
+            mkpts_query_f,
             mkpts_3d[mask],
             scale=configs["point_cloud_rescale"],
             pnp_reprojection_error=configs["pnp_reprojection_error"],
@@ -233,7 +233,7 @@ def compute_query_pose_errors(data, configs, compute_gt_proj_pose_error=True, tr
 
         query_pose_pred_c, query_pose_pred_homo_c, inliers_c = ransac_PnP(
             query_K[bs],
-            mkpts_query_c[mask], # FIXME: change to mkpts_query
+            mkpts_query_c[mask],
             mkpts_3d[mask],
             scale=configs["point_cloud_rescale"],
             pnp_reprojection_error=configs["pnp_reprojection_error"],

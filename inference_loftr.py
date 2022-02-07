@@ -109,12 +109,15 @@ def inference(cfg):
     with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'a') as f:
         for metric_name, metric in gathered_metrics.items():
             print(f'{metric_name}:')
-            metric_parsed = pd.DataFrame(metric)
-            print(metric_parsed.describe())
+            # metric_parsed = pd.DataFrame(metric)
+            # print(metric_parsed.describe())
+            metric_np = np.array(metric)
+            metric_mean = np.mean(metric)
+            print(metric_mean)
             print('---------------------')
 
-            # f.write('Summary: \n')
-            # f.writelines(metric_parsed.describe())
+            f.write('Summary: \n')
+            f.writelines(str(metric_mean))
         
 def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
     logger.info(

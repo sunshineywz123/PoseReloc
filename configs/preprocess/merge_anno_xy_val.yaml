@@ -7,12 +7,12 @@ split: 'val'
 
 # data_base_dir: '/nas/users/hexingyi/arscan_data_val'
 data_base_dir: '/nas/users/hexingyi/arscan_data'
-sfm_dir: '/nas/users/hexingyi/onepose_sfm_v2'
+sfm_dir: '/nas/users/hexingyi/onepose_sfm_v3'
 merge_output_dir: '/nas/users/hexingyi/onepose_merged'
 
 names:
     # val set
-    - '0624'
+    - '0408'
     # - '0618'
     # - '0616'
     # - '0456'

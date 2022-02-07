@@ -495,7 +495,8 @@ def reproj(K, pose, pts_3d):
 def draw_reprojection_pair(
     data, visual_color_type="conf", visual_gt=False, visual_heatmap=False
 ):
-    figures = {"evaluation": [], "heatmap":[]}
+    figures = {"evaluation": []}
+    # figures = {"evaluation": [], "heatmap":[]}
 
     if visual_gt:
         raise NotImplementedError

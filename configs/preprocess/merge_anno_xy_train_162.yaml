@@ -5,9 +5,9 @@ task_name: gats_loftr
 match_type: 'softmax'
 split: 'train'
 
-data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
-sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3'
-merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
+data_base_dir: '/raid/zihao/arscan_aligned_temp/arscan_data'
+sfm_dir: '/raid/hexingyi/onepose_sfm_v3'
+merge_output_dir: '/raid/hexingyi/onepose_merged'
 
 # names: 
 #     - '0410-huiyuan-box'

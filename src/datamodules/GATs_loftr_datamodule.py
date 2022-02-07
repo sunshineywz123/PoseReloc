@@ -31,6 +31,7 @@ class GATsLoFTRDataModule(LightningDataModule):
         self.shape2d = kwargs["shape2d"]
         self.shape3d_train = kwargs["shape3d_train"]
         self.shape3d_val = kwargs["shape3d_val"]
+        self.load_3d_coarse = kwargs["load_3d_coarse"]
         # 2D part
         self.img_pad = kwargs["img_pad"]
         self.img_resize = kwargs["img_resize"]
@@ -89,7 +90,8 @@ class GATsLoFTRDataModule(LightningDataModule):
             path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
             path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
             downsample=self.downsample,
-            downsample_resolution=self.downsample_resolution
+            downsample_resolution=self.downsample_resolution,
+            load_3d_coarse_feature=self.load_3d_coarse
         )
         print("=> Read train anno file: ", self.train_anno_file)
 
@@ -112,7 +114,8 @@ class GATsLoFTRDataModule(LightningDataModule):
             path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
             path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
             downsample=self.downsample,
-            downsample_resolution=self.downsample_resolution
+            downsample_resolution=self.downsample_resolution,
+            load_3d_coarse_feature=self.load_3d_coarse
         )
 
         self.data_train = train_set
