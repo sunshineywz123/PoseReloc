@@ -16,11 +16,11 @@ defaults:
 
 seed: 12345
 task_name: null
-exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_tmp_0.08_use_coarse
+exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_tmp_0.08_use_coarse_no_fix_backbone_loftr_cov
 
 # data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/scan_data'
 # sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm'
-merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
+merge_output_dir: '/raid/hexingyi/onepose_merged'
 
 trainer:
     _target_: pytorch_lightning.Trainer
@@ -64,7 +64,7 @@ model:
         output_layers: [3, 1]
 
       pretrained: "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt"
-      pretrained_fix: True
+      pretrained_fix: False
 
     use_fine_backbone_as_coarse: False
     interpol_type: "bilinear" # ['nearest', 'bilinear']
@@ -79,8 +79,8 @@ model:
       enable: True
       pos_emb_shape: [256, 256]
     loftr_coarse:
-      type: "LoFTR"
-      # type: 'LoFTR-Conv1d'
+      # type: "LoFTR"
+      type: 'LoFTR-Conv1d'
       d_model: 256
       d_ffm: 128
       nhead: 4
@@ -100,11 +100,6 @@ model:
       final_proj: False
 
       # GATs part
-      GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
-      GATs_include_self: False
-      # useful for loftr_attention
-      GATs_feat2d_db_update: True
-      # useful for origin_gats
       d_db_feat: 256 # The input dim of database feature
       GATs_dropout: 0.6
       GATs_alpha: 0.2
@@ -133,7 +128,7 @@ model:
           mapping_dim: 4096
 
       dual_softmax:
-        temperature: 0.1
+        temperature: 0.08
         temperature_learnable: False
         range: # may be log range or exp range?
           - 0.03 # min
@@ -156,7 +151,8 @@ model:
       ms_feat_type: 'PROJ_MERGE'
 
       # Fine module
-      type: "LoFTR"
+      # type: "LoFTR"
+      type: 'LoFTR-Conv1d'
       d_model: 128
       nhead: 4
       layer_names: ["self", "cross"]
@@ -172,11 +168,6 @@ model:
       final_proj: False
 
       # GATs part
-      GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
-      GATs_include_self: False
-      # useful for loftr_attention
-      GATs_feat2d_db_update: True
-      # useful for origin_gats
       d_db_feat: 128 # The input dim of database feature
       GATs_dropout: 0.6
       GATs_alpha: 0.2
@@ -235,6 +226,7 @@ model:
     point_cloud_rescale: 1000
     pnp_reprojection_error: 5
     pose_thresholds: [1, 3, 5]
+    enable_post_optimization: False
 
   match_type: "softmax"
 
@@ -245,12 +237,12 @@ datamodule:
     train_anno_file: ${merge_output_dir}/${task_name}/train.json
     val_anno_file: ${merge_output_dir}/${task_name}/val.json
 
-    batch_size: 3
-    num_workers: 8
+    batch_size: 1
+    num_workers: 4
     pin_memory: True
 
     train_percent: 1.0 # For debug
-    val_percent: 0.2
+    val_percent: 0.4
 
     # TODO: move to a template
     # 3D part
@@ -272,8 +264,8 @@ datamodule:
     # File path substitute:
     path_prefix_substitute_3D_source: null
     path_prefix_substitute_3D_aim: null
-    path_prefix_substitute_2D_source: '/raid/zihao/arscan_aligned_temp/arscan_data'
-    path_prefix_substitute_2D_aim: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
+    path_prefix_substitute_2D_source: null
+    path_prefix_substitute_2D_aim: null
 
 callbacks:
     model_checkpoint:

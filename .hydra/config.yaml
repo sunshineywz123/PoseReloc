@@ -1,30 +1,28 @@
-work_dir: ${hydra:runtime.cwd}
-data_dir: ${work_dir}/data
-print_config: true
-seed: 12345
-task_name: loftr_debug_train
-exp_name: loftr_train
-data_base_dir: /nas/users/hexingyi/arscan_data
-sfm_dir: /nas/users/hexingyi/onepose_sfm_v3
-merge_output_dir: /nas/users/hexingyi/onepose_merged
 trainer:
   _target_: pytorch_lightning.Trainer
-  gpus:
-  - 1
-  num_nodes: 1
-  accelerator: ddp
+  gpus: 0
   min_epochs: 1
-  max_epochs: 15
+  max_epochs: 10
   gradient_clip_val: 0.5
-  accumulate_grad_batches: 2
+  num_sanity_val_steps: 3
+  progress_bar_refresh_rate: 20
   weights_summary: null
-  num_sanity_val_steps: 2
-  check_val_every_n_epoch: 1
-  log_every_n_steps: 70
-  flush_logs_every_n_steps: 1
+  default_root_dir: lightning_logs/
 model:
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: null
+  optimizer: adam
+  lr: 0.001
+  weight_decay: 5.0e-05
+  architecture: SimpleDenseNet
+  input_size: 784
+  lin1_size: 256
+  dropout1: 0.3
+  lin2_size: 256
+  dropout2: 0.25
+  lin3_size: 128
+  dropout3: 0.2
+  output_size: 10
+  pretrained_ckpt: weight/test_inference_loftr_gats.ckpt
   loftr:
     loftr_backbone:
       type: ResNetFPN
@@ -43,28 +41,27 @@ model:
         - 1
       pretrained: weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt
       pretrained_fix: true
-    use_fine_backbone_as_coarse: false
+    use_fine_backbone_as_coarse: true
     interpol_type: bilinear
     keypoints_encoding:
-      enable: false
-      descriptor_dim: 256
+      enable: true
+      descriptor_dim: 128
       keypoints_encoder:
       - 32
       - 64
       - 128
       norm_method: instancenorm
     positional_encoding:
-      enable: false
+      enable: true
       pos_emb_shape:
       - 256
       - 256
     loftr_coarse:
       type: LoFTR
-      d_model: 256
+      d_model: 128
       d_ffm: 128
       nhead: 4
       layer_names:
-      - GATs
       - self
       - cross
       layer_iter_n: 4
@@ -76,17 +73,14 @@ model:
       redraw_interval: 2
       rezero: null
       final_proj: false
-      GATs_type: origin_gats
-      GATs_include_self: false
-      GATs_feat2d_db_update: true
-      d_db_feat: 256
+      d_db_feat: 128
       GATs_dropout: 0.6
       GATs_alpha: 0.2
       GATs_enable_feed_forward: false
       GATs_feed_forward_norm_method: instancenorm
     coarse_matching:
       type: dual-softmax
-      thr: 0.4
+      thr: 0.12
       feat_norm_method: sqrt_feat_dim
       border_rm: 2
       spg_spvs: false
@@ -103,7 +97,7 @@ model:
           mapping: favor
           mapping_dim: 4096
       dual_softmax:
-        temperature: 0.08
+        temperature: 0.1
         temperature_learnable: false
         range:
         - 0.03
@@ -113,8 +107,8 @@ model:
         train_coarse_percent: 0.3
         train_pad_num_gt_min: 200
     loftr_fine:
-      enable: false
-      window_size: 5
+      enable: true
+      window_size: 9
       concat_coarse_feat: false
       concat_coarse_feat_type: nearest
       coarse_layer_norm: false
@@ -124,7 +118,6 @@ model:
       d_model: 128
       nhead: 4
       layer_names:
-      - GATs
       - self
       - cross
       layer_iter_n: 1
@@ -136,9 +129,6 @@ model:
       redraw_interval: 2
       rezero: null
       final_proj: false
-      GATs_type: origin_gats
-      GATs_include_self: false
-      GATs_feat2d_db_update: true
       d_db_feat: 128
       GATs_dropout: 0.6
       GATs_alpha: 0.2
@@ -191,56 +181,95 @@ model:
     - 1
     - 3
     - 5
+    enable_post_optimization: true
+    post_optimization_configs:
+      residual_mode: geometry_error
+      solver_type: FirstOrder
+      distance_loss_scale: 80
+      optimize_lr: 0.0005
+      max_steps: 100
+      image_i_f_scale: 2
+      verbose: true
   match_type: softmax
 datamodule:
   _target_: src.datamodules.GATs_loftr_datamodule.GATsLoFTRDataModule
-  data_dirs: ${sfm_dir}
+  data_dir: ${data_dir}
+  batch_size: 3
+  train_val_test_split:
+  - 55000
+  - 5000
+  - 10000
+  num_workers: 4
+  pin_memory: true
   anno_dirs: outputs_${model.match_type}/anno
   train_anno_file: ${merge_output_dir}/${task_name}/train.json
   val_anno_file: ${merge_output_dir}/${task_name}/val.json
-  batch_size: 1
-  num_workers: 4
-  pin_memory: true
-  train_percent: 1
-  val_percent: 0.3
-  num_leaf: 6
-  load_3d_coarse: true
+  train_percent: 1.0
+  val_percent: 0.2
+  pad3D: true
+  load_3d_coarse: false
+  num_leaf: 1
   shape2d: 2000
-  shape3d_train: 7000
-  shape3d_val: 7000
-  downsample3d: false
-  downsample_resolution: 30
+  shape3d_train: 12000
+  shape3d_val: 10000
   img_pad: false
   img_resize:
   - 512
   - 512
   df: 8
   coarse_scale: 0.125
-  path_prefix_substitute_3D_source: /cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v2
-  path_prefix_substitute_3D_aim: /nas/users/hexingyi/onepose_sfm_v2
-  path_prefix_substitute_2D_source: /raid/zihao/arscan_aligned_temp/arscan_data
-  path_prefix_substitute_2D_aim: /nas/users/hexingyi/arscan_data
+  path_prefix_substitute_3D_source: null
+  path_prefix_substitute_3D_aim: null
+  path_prefix_substitute_2D_source: null
+  path_prefix_substitute_2D_aim: null
 callbacks:
   model_checkpoint:
     _target_: pytorch_lightning.callbacks.ModelCheckpoint
-    monitor: null
-    save_top_k: -1
+    monitor: val/acc
+    save_top_k: 2
     save_last: true
     mode: max
-    dirpath: ${work_dir}/models/checkpoints/${exp_name}
-    filename: '{epoch}'
-    every_n_epochs: 1
-  lr_monitor:
-    _target_: pytorch_lightning.callbacks.LearningRateMonitor
-    logging_interval: step
-logger:
-  tensorboard:
-    _target_: pytorch_lightning.loggers.TensorBoardLogger
-    save_dir: ${work_dir}/logs
-    name: ${exp_name}
-    default_hp_metric: false
-  neptune:
-    tags:
-    - best_model
-  csv_logger:
-    save_dir: .
+    dirpath: checkpoints/
+    filename: '{epoch:02d}'
+  early_stopping:
+    _target_: pytorch_lightning.callbacks.EarlyStopping
+    monitor: val/acc
+    patience: 100
+    mode: max
+    min_delta: 0.0
+work_dir: ${hydra:runtime.cwd}
+data_dir: ${data_base_dir}
+print_config: true
+type: inference
+data_base_dir: /nas/users/hexingyi/arscan_data
+sfm_base_dir: /nas/users/hexingyi/onepose_sfm_v3
+match_type: softmax
+task_name: null
+suffix: ''
+feature_method: average
+use_global_ray: false
+use_local_ray: false
+ray:
+  slurm: false
+  n_workers: 2
+  n_cpus_per_worker: 5
+  n_gpus_per_worker: 1
+  local_mode: false
+network:
+  detection: loftr
+  matching: loftr
+top_k_obj: null
+num_val_seq: 1
+ids:
+- '0448'
+- '0461'
+- '0462'
+- '0463'
+- '0464'
+exception_obj_names:
+- null
+verbose: false
+output:
+  txt_dir: /nas/users/hexingyi/onepose_test/${task_name}
+  visual_vis3d: true
+  vis_dir: /nas/users/hexingyi/onepose_test/${task_name}/vis3d

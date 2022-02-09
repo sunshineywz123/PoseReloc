@@ -52,12 +52,13 @@ def inference_gats_loftr(
     dataset = GATs_loftr_inference_dataset(
         sfm_results_dir,
         all_image_paths,
+        load_3d_coarse=cfg.datamodule.load_3d_coarse,
         shape3d=cfg.datamodule.shape3d_val,
         num_leaf=cfg.datamodule.num_leaf,
         img_pad=cfg.datamodule.img_pad,
         img_resize=cfg.datamodule.img_resize,
         df=cfg.datamodule.df,
-        pad=True,
+        pad=cfg.datamodule.pad3D,
         load_pose_gt=True,
         n_images=None
     )

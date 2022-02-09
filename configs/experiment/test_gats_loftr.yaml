@@ -3,7 +3,7 @@
 type: inference
 
 data_base_dir: "/nas/users/hexingyi/arscan_data"
-sfm_base_dir: "/nas/users/hexingyi/onepose_sfm_v2"
+sfm_base_dir: "/nas/users/hexingyi/onepose_sfm_v3"
 
 match_type: softmax
 task_name: test_loftr_easy_0.2_7000_3d_temp_0.8

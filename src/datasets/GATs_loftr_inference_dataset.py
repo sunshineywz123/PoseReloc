@@ -16,6 +16,7 @@ class GATs_loftr_inference_dataset(Dataset):
         image_paths,
         shape3d,
         num_leaf,
+        load_3d_coarse=True,
         img_pad=False,
         img_resize=512,
         df=8,
@@ -51,7 +52,7 @@ class GATs_loftr_inference_dataset(Dataset):
             self.clt_scores2d,
             self.num_3d_orig,
         ) = self.read_anno3d(
-            avg_anno_3d_path, clt_anno_3d_path, idxs_path, pad=self.pad,
+            avg_anno_3d_path, clt_anno_3d_path, idxs_path, pad=self.pad, load_3d_coarse=load_3d_coarse
         )
 
     def get_default_paths(self, sfm_model_dir):

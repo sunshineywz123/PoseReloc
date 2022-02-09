@@ -16,7 +16,7 @@ defaults:
 
 seed: 12345
 task_name: null
-exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_tmp_0.08_use_coarse
+exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_tmp_0.08_use_coarse_gats_origin
 
 # data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/scan_data'
 # sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm'
@@ -85,8 +85,8 @@ model:
       d_ffm: 128
       nhead: 4
       # nhead: 8
-      # layer_names: ['GATs', 'self', 'cross']
-      layer_names: ["self", "cross"]
+      layer_names: ['GATs', 'self', 'cross']
+      # layer_names: ["self", "cross"]
       layer_iter_n: 4
       dropout: 0.
       attention: "linear"
@@ -100,7 +100,7 @@ model:
       final_proj: False
 
       # GATs part
-      GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
+      GATs_type: 'origin_gats' # ["origin_gats", 'loftr_attention']
       GATs_include_self: False
       # useful for loftr_attention
       GATs_feat2d_db_update: True
@@ -133,7 +133,7 @@ model:
           mapping_dim: 4096
 
       dual_softmax:
-        temperature: 0.1
+        temperature: 0.08
         temperature_learnable: False
         range: # may be log range or exp range?
           - 0.03 # min
@@ -155,11 +155,12 @@ model:
       ms_feat: False
       ms_feat_type: 'PROJ_MERGE'
 
-      # Fine module
+# Fine module
       type: "LoFTR"
       d_model: 128
       nhead: 4
-      layer_names: ["self", "cross"]
+      # layer_names: ["self", "cross"]
+      layer_names: ["GATs", "self", "cross"]
       layer_iter_n: 1
       dropout: 0.0
       attention: "linear"
@@ -172,7 +173,7 @@ model:
       final_proj: False
 
       # GATs part
-      GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
+      GATs_type: 'origin_gats' # ["origin_gats", 'loftr_attention']
       GATs_include_self: False
       # useful for loftr_attention
       GATs_feat2d_db_update: True
@@ -236,6 +237,8 @@ model:
     pnp_reprojection_error: 5
     pose_thresholds: [1, 3, 5]
 
+    enable_post_optimization: False
+
   match_type: "softmax"
 
 datamodule:
@@ -245,16 +248,16 @@ datamodule:
     train_anno_file: ${merge_output_dir}/${task_name}/train.json
     val_anno_file: ${merge_output_dir}/${task_name}/val.json
 
-    batch_size: 3
+    batch_size: 2
     num_workers: 8
     pin_memory: True
 
     train_percent: 1.0 # For debug
-    val_percent: 0.2
+    val_percent: 0.4
 
     # TODO: move to a template
     # 3D part
-    num_leaf: 1
+    num_leaf: 8
     load_3d_coarse: True
     shape2d: 2000 # Not used
     shape3d_train: 7000 # NOTE: Changed from 11000 to 12000

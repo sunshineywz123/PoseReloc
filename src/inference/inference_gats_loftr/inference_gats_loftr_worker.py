@@ -11,7 +11,7 @@ from src.utils.metric_utils import compute_query_pose_errors
 def extract_matches(data, match_model, metrics_configs):
     # 1. Run inference
     start_time = time()
-    match_model(data)
+    match_model(data, return_fine_unfold_feat=True)
     end_time = time()
     # logger.info(f"consume: {end_time - start_time}")
 
