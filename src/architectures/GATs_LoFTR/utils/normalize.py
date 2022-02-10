@@ -14,7 +14,7 @@ def normalize_2d_keypoints(kpts, image_shape):
 
 
 def normalize_3d_keypoints(kpts):
-    """ Normalize 3d keypoints locations based on the tight box FIXME: tight box?
+    """ Normalize 3d keypoints locations based on the tight box
     kpts: [b, n, 3]
     """
     width, height, length = kpts[0].max(dim=0).values - kpts[0].min(dim=0).values

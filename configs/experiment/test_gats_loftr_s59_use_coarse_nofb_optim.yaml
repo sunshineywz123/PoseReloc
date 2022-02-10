@@ -44,6 +44,7 @@ model:
 
     keypoints_encoding:
       enable: True
+      type: mlp_cov1d # ['mlp_cov1d', 'mlp_linear']
       descriptor_dim: 256
       keypoints_encoder: [32, 64, 128]
       norm_method: "instancenorm"
@@ -216,7 +217,7 @@ model:
       distance_loss_scale: 80
       # optimize_lr: 1e-4
       optimize_lr: 8e-4
-      max_steps: 100
+      max_steps: 200
       image_i_f_scale: 2
       verbose: False
 

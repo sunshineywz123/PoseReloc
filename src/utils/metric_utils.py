@@ -251,12 +251,15 @@ def compute_query_pose_errors(
 
         if configs["enable_post_optimization"] and state is not False and not training:
             from src.NeuralSfM.loc.optimizer import Optimizer
-
             optimizer = Optimizer(configs["post_optimization_configs"])
             scale = data["query_image_scale"][bs].cpu().numpy()[None] # [1*2]
-            initial_pose = query_pose_pred  # [3*4]
             inliers_mask = np.full((mkpts_3d[mask].shape[0],), 0, dtype=np.bool) # All False
-            inliers_mask[inliers] = True
+            if configs['post_optimization_configs']['use_fine_pose_as_init']:
+                initial_pose = query_pose_pred  # [3*4]
+                inliers_mask[inliers] = True
+            else:
+                initial_pose = query_pose_pred_c  # [3*4]
+                inliers_mask[inliers_c] = True
             mkpts_3d_inlier = mkpts_3d[mask][inliers_mask]
             mkpts_2d_c_inlier = mkpts_query_c[mask][inliers_mask]
             mkpts_2d_f_inlier = mkpts_query_f[mask][inliers_mask]
@@ -278,14 +281,14 @@ def compute_query_pose_errors(
             )
             query_pose_pred = query_pose_pred_refined
 
-            # # For debug:
-            # R_err_before, t_err_before = query_pose_error(initial_pose, query_pose_gt[bs])
-            # R_err_after, t_err_after = query_pose_error(query_pose_pred_refined, query_pose_gt[bs])
-            # R_err_decrease = R_err_before - R_err_after
-            # t_err_decrease = t_err_before - t_err_after
+            # For debug:
+            R_err_before, t_err_before = query_pose_error(initial_pose, query_pose_gt[bs])
+            R_err_after, t_err_after = query_pose_error(query_pose_pred_refined, query_pose_gt[bs])
+            R_err_decrease = R_err_before - R_err_after
+            t_err_decrease = t_err_before - t_err_after
 
-            # if R_err_decrease < 0 or t_err_decrease < 0:
-            #     R_err_decrease = R_err_decrease
+            if R_err_decrease < 0 or t_err_decrease < 0:
+                R_err_decrease = R_err_decrease
 
 
         if query_pose_pred is None:

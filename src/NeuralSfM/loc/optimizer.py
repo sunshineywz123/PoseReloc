@@ -42,6 +42,7 @@ class Optimizer(nn.Module):
         feature_3d,
         feature_2d_window,
         device,
+        feature_distance_map_temperature=0.1,
         point_cloud_scale=1000
     ):
         """
@@ -62,6 +63,7 @@ class Optimizer(nn.Module):
         feature_distance_map = torch.linalg.norm(
             feature_3d - feature_2d_window, dim=-1, keepdim=True
         ).to(device)  # L*WW*1
+        feature_distance_map /= feature_distance_map_temperature
 
         # Construct poses and poses indexs
         angleAxis_pose = convert_pose2angleAxis(initial_pose)

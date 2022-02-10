@@ -148,7 +148,7 @@ def sample_feature_from_unfold_featuremap(
 
         if verbose:
             if out_of_grid_mask.sum() !=0:
-                if out_of_grid_mask.sum() > 200:
+                if out_of_grid_mask.sum() > 10:
                     logger.warning(
                         f"Fine-level Window size is not big enough: w={W}, {out_of_grid_mask.sum()} points locate outside window, total {out_of_grid_mask.shape[0]} points"
                     )

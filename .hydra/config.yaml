@@ -45,6 +45,7 @@ model:
     interpol_type: bilinear
     keypoints_encoding:
       enable: true
+      type: mlp_cov1d
       descriptor_dim: 128
       keypoints_encoder:
       - 32
@@ -183,10 +184,11 @@ model:
     - 5
     enable_post_optimization: true
     post_optimization_configs:
-      residual_mode: geometry_error
+      residual_mode: feature_metric_error
+      use_fine_pose_as_init: false
       solver_type: FirstOrder
       distance_loss_scale: 80
-      optimize_lr: 0.0005
+      optimize_lr: 0.0001
       max_steps: 100
       image_i_f_scale: 2
       verbose: true

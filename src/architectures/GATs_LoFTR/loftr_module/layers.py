@@ -1,8 +1,10 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from einops.einops import rearrange
 from .linear_attention import LinearAttention, FullAttention
-
+from ..utils.position_encoding import KeypointEncoding, KeypointEncoding_linear, PositionEncodingSine
 
 class TransformerEncoderLayer(nn.Module):
     def __init__(self,
@@ -179,8 +181,8 @@ class LoFTREncoderLayerConv1d(nn.Module):
         )
 
         # norm and dropout
-        self.norm1 = nn.BatchNorm1d(d_model)
-        self.norm2 = nn.BatchNorm1d(d_model)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         
@@ -208,15 +210,15 @@ class LoFTREncoderLayerConv1d(nn.Module):
         value = self.v_proj(value).permute(0, 2, 1).view(bs, -1, self.nhead, self.dim)
         message = self.attention(query, key, value, q_mask=x_mask, kv_mask=source_mask)  # [N, L, H, D]
         message = self.dropout1(message)
-        message = self.merge(message.view(bs, -1, self.nhead*self.dim).permute(0, 2, 1))  # [N, C, L]
+        message = self.merge(message.view(bs, -1, self.nhead*self.dim).permute(0, 2, 1)).permute(0, 2, 1)  # [N, L, C]
         message = self.norm1(message)
 
         # feed-forward network
         message = self.dropout2(message)
-        message = self.mlp(torch.cat([x, message], dim=1))
-        message = self.norm2(message)
+        message = self.mlp(torch.cat([x.permute(0, 2, 1), message], dim=2).permute(0,2,1))
+        message = self.norm2(message.permute(0,2,1))
 
-        return (x + message).permute(0, 2, 1) if not self.rezero else (x + self.res_weight * message).permute(0, 2, 1)
+        return (x.permute(0, 2, 1) + message) if not self.rezero else (x + self.res_weight * message)
     
         
 def _get_activation_fn(activation):
@@ -229,10 +231,33 @@ def _get_activation_fn(activation):
         return F.glu
     raise RuntimeError(F"activation should be relu/gelu, not {activation}.")
 
+class PositionalEncodingLayer(nn.Module):
+    def __init__(self, d_model_2D, max_shape_2D, inp_dim_3D, feature_dim_3D, layers_3D, norm_method_3D='instancenorm', encoding_type_3D='mlp_cov'):
+        super().__init__()
+        if encoding_type_3D == "mlp_cov":
+            self.keypoint3D_encoder = KeypointEncoding(inp_dim_3D, feature_dim_3D, layers_3D, norm_method_3D)
+        elif encoding_type_3D == "mlp_linear":
+            self.keypoint3D_encoder = KeypointEncoding_linear(inp_dim_3D, feature_dim_3D, layers_3D, norm_method_3D)
+        else:
+            raise NotImplementedError
         
-        
-        
+        self.sine_encoder = PositionEncodingSine(d_model_2D, max_shape_2D)
+    
+    def forward(self, keypoints3D, feature3D, feature2D, data):
+        """
+        Parameters:
+        --------------
+        keypoints3D: B*L*3
+        feature3D: B*L*D
+        feature2D: B*N*D
+        """
+        # 3D position encoding
+        feature3D = self.keypoint3D_encoder(keypoints3D, feature3D.transpose(1,2)).transpose(1,2) # B*L*D
 
-        
-        
-        
+        # 2D position encoding
+        h, w = data["q_hw_c"]
+        feature_map = rearrange(feature2D, "n (h w) c -> n c h w", h=h, w=w)
+        feature_map = self.sine_encoder(feature_map)
+        feature2D = rearrange(feature_map, "n c h w -> n (h w) c")
+
+        return feature3D, feature2D

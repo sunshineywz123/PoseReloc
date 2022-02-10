@@ -5,7 +5,7 @@ from torch.nn.modules import module
 
 from .GATs import GraphAttentionLayer
 from .linear_attention import LinearAttention, FullAttention
-from .layers import TransformerEncoderLayer, RZTXEncoderLayer, LoFTREncoderLayerConv1d
+from .layers import TransformerEncoderLayer, RZTXEncoderLayer, LoFTREncoderLayerConv1d, PositionalEncodingLayer
 
 
 class LoFTREncoderLayer(nn.Module):
@@ -143,6 +143,19 @@ class LocalFeatureTransformer(nn.Module):
                     raise NotImplementedError
             elif layer_name in ["self", "cross"]:
                 module_list.append(copy.deepcopy(encoder_layer))
+            elif layer_name == "Pe":
+                module_list.append(
+                    PositionalEncodingLayer(
+                        config['d_model_2D'],
+                        config['max_shape_2D'],
+                        inp_dim_3D=3,
+                        feature_dim_3D=config['feature_dim_3D'],
+                        layers_3D=config['keypoints_encoder_3D'],
+                        norm_method_3D=config['norm_method_3D'],
+                        encoding_type_3D=config['encoding_type_3D']
+                    )
+                )
+
             else:
                 raise NotImplementedError
         self.layers = nn.ModuleList(module_list)
@@ -157,18 +170,16 @@ class LocalFeatureTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, desc3d_db, desc2d_db, desc2d_query, query_mask=None):
+    def forward(self, desc3d_db, desc2d_db, desc2d_query, data, query_mask=None, keypoints3D=None):
         """
         Args:
            desc3d_db (torch.Tensor): [N, C, L] 
            desc2d_db (torch.Tensor): [N, C, M]
            desc2d_query (torch.Tensor): [N, P, C]
            query_mask (torch.Tensor): [N, P]
+           keypoints3D (torch.Tensor): [N, L, 3]
         """
         self.device = desc3d_db.device
-        num_3d_db = desc3d_db.shape[-1]  # [b, dim, n2]
-        num_2d_query = desc2d_db.shape[-1]  # [b, dim, n1]
-        # adj_matrix = self.buildAdjMatrix(num_2d_query, num_3d_db)
 
         desc3d_db = torch.einsum("bdn->bnd", desc3d_db)  # [N, L, C]
         desc2d_db = torch.einsum("bdn->bnd", desc2d_db)  # [N, M, C]
@@ -200,6 +211,9 @@ class LocalFeatureTransformer(nn.Module):
                     desc2d_db = desc2d_db.view(b, n2, dim)
                 else:
                     raise NotImplementedError
+            elif name == "Pe":
+                if keypoints3D is not None:
+                    desc3d_db, desc2d_query = layer(keypoints3D, desc3d_db, desc2d_query, data)
             elif name == "self":
                 src0, src1 = desc2d_query, desc3d_db
                 desc2d_query, desc3d_db = (

@@ -68,6 +68,7 @@ model:
 
     keypoints_encoding:
       enable: False
+      type: mlp_linear # ['mlp_cov1d', 'mlp_linear']
       descriptor_dim: 256
       keypoints_encoder: [32, 64, 128]
       norm_method: "instancenorm"
@@ -83,7 +84,8 @@ model:
       nhead: 4
       # nhead: 8
       # layer_names: ['GATs', 'self', 'cross']
-      layer_names: ["self", "cross"]
+      # layer_names: ["self", "cross"]
+      layer_names: ["Pe", "self", "cross"]
       layer_iter_n: 4
       dropout: 0.
       attention: "linear"
@@ -107,6 +109,14 @@ model:
       GATs_alpha: 0.2
       GATs_enable_feed_forward: False
       GATs_feed_forward_norm_method: 'instancenorm'
+
+      # Pe part:
+      d_model_2D: 256
+      max_shape_2D: [256, 256]
+      feature_dim_3D: 256
+      keypoints_encoder_3D: [32, 64, 128]
+      norm_method_3D: "instancenorm"
+      encoding_type_3D: mlp_linear # ['mlp_cov1d', 'mlp_linear']
 
     coarse_matching:
       type: "dual-softmax"
@@ -143,7 +153,6 @@ model:
         train_pad_num_gt_min: 200 # avoid deadlock; better convergence
 
     loftr_fine:
-      enable: False
       # Fine preprocess:
       window_size: 5
       concat_coarse_feat: False
@@ -153,6 +162,7 @@ model:
       ms_feat_type: 'PROJ_MERGE'
 
       # Fine module
+      enable: False
       # type: "LoFTR"
       type: 'LoFTR-Conv1d'
       d_model: 128
