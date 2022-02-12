@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops.einops import rearrange
 from .linear_attention import LinearAttention, FullAttention
-from ..utils.position_encoding import KeypointEncoding, KeypointEncoding_linear, PositionEncodingSine
+from ..utils.position_encoding import KeypointEncoding, KeypointEncoding_linear, PositionEncodingSine, PositionEncodingSine3D
 
 class TransformerEncoderLayer(nn.Module):
     def __init__(self,
@@ -238,6 +238,8 @@ class PositionalEncodingLayer(nn.Module):
             self.keypoint3D_encoder = KeypointEncoding(inp_dim_3D, feature_dim_3D, layers_3D, norm_method_3D)
         elif encoding_type_3D == "mlp_linear":
             self.keypoint3D_encoder = KeypointEncoding_linear(inp_dim_3D, feature_dim_3D, layers_3D, norm_method_3D)
+        elif encoding_type_3D == "sine": 
+            self.keypoint3D_encoder = PositionEncodingSine3D(feature_dim=feature_dim_3D)
         else:
             raise NotImplementedError
         

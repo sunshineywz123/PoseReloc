@@ -109,10 +109,12 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +experiment=test_gats_loftr_debug
+    - +experiment=train_GATs_loftr
+    - task_name=loftr_debug_train
+    - exp_name=loftr_train
   job:
-    name: inference_loftr
-    override_dirname: +experiment=test_gats_loftr_debug
+    name: train_gats_loftr
+    override_dirname: +experiment=train_GATs_loftr,exp_name=loftr_train,task_name=loftr_debug_train
     id: ???
     num: ???
     config_name: config.yaml
@@ -137,12 +139,12 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      experiment: test_gats_loftr_debug
+      experiment: train_GATs_loftr
       logger: null
-      callbacks: default_callbacks.yaml
-      datamodule: mnist_datamodule.yaml
-      model: mnist_model.yaml
-      trainer: default_trainer.yaml
+      callbacks: null
+      datamodule: null
+      model: null
+      trainer: null
       hydra/env: default
       hydra/callbacks: null
       hydra/job_logging: default

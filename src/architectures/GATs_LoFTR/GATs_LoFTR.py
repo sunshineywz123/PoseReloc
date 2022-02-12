@@ -18,7 +18,7 @@ from .backbone import (
 )
 from .utils.normalize import normalize_3d_keypoints
 from .loftr_module import LocalFeatureTransformer, FinePreprocess
-from .utils.position_encoding import PositionEncodingSine, KeypointEncoding, KeypointEncoding_linear
+from .utils.position_encoding import PositionEncodingSine, KeypointEncoding, KeypointEncoding_linear, PositionEncodingSine3D
 from .utils.coarse_matching import CoarseMatching
 from .utils.fine_matching import FineMatching
 
@@ -50,6 +50,8 @@ class GATs_LoFTR(nn.Module):
                 encoding_func = KeypointEncoding
             elif config['keypoints_encoding']['type'] == "mlp_linear": 
                 encoding_func = KeypointEncoding_linear
+            elif config['keypoints_encoding']['type'] == "sine": 
+                encoding_func = PositionEncodingSine3D
             else:
                 raise NotImplementedError
 

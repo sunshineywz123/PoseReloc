@@ -1,6 +1,7 @@
 import math
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 # Position encoding for query image
@@ -117,3 +118,47 @@ class KeypointEncoding_linear(nn.Module):
                     # layers.append(nn.GroupNorm(channels[i], channels[i])) # group norm
                 layers.append(nn.ReLU())
         return nn.Sequential(*layers)
+
+class PositionEncodingSine3D(nn.Module):
+    """
+    This is a sinusoidal position encoding that generalized to 2-dimensional images
+    """
+
+    def __init__(self, feature_dim, max_shape=[128, 128, 128], **kwargs):
+        """
+        Args:
+        """
+        super().__init__()
+
+        max_shape = tuple(max_shape)
+        pe = torch.zeros((feature_dim, *max_shape))
+        x_position = torch.ones(max_shape).cumsum(0).float().unsqueeze(0)
+        y_position = torch.ones(max_shape).cumsum(1).float().unsqueeze(0)
+        z_position = torch.ones(max_shape).cumsum(2).float().unsqueeze(0)
+        div_term = torch.exp(
+            torch.arange(0, (feature_dim // 6) * 2, 2).float()
+            * (-math.log(10000.0) / feature_dim // 2)
+        )
+        div_term = div_term[:, None, None, None]  # [C//6, 1, 1, 1]
+        pe[:div_term.shape[0]*6][0::6, :, :, :] = torch.sin(x_position * div_term)
+        pe[:div_term.shape[0]*6][1::6, :, :, :] = torch.cos(x_position * div_term)
+        pe[:div_term.shape[0]*6][2::6, :, :, :] = torch.sin(y_position * div_term)
+        pe[:div_term.shape[0]*6][3::6, :, :, :] = torch.cos(y_position * div_term)
+        pe[:div_term.shape[0]*6][4::6, :, :, :] = torch.sin(z_position * div_term)
+        pe[:div_term.shape[0]*6][5::6, :, :, :] = torch.cos(z_position * div_term)
+
+        self.register_buffer("pe", pe.unsqueeze(0), persistent=False)  # [1,C, D, H, W]
+
+    def forward(self, kpts3D, descriptors):
+        """
+        Args:
+        kpts: B*L*3 or B*L*4
+        descriptors: B*C*L
+        """
+        B = kpts3D.shape[0]
+        pe = self.pe.expand(*[B,*(self.pe.shape[1:])]) # [B, C, D, H, W]
+        if kpts3D.shape[-1] == 4:
+            kpts3D = kpts3D[:,:,:3] # B*L*3
+        kpts3D = kpts3D[:,:, None, None, :] # B*L*1*1*3
+        pe_feature = F.grid_sample(pe, kpts3D, mode='bilinear') # B*D*L*1*1
+        return descriptors + pe_feature.squeeze(-1).squeeze(-1) # B*D*L

@@ -17,9 +17,16 @@ def normalize_3d_keypoints(kpts):
     """ Normalize 3d keypoints locations based on the tight box
     kpts: [b, n, 3]
     """
+    # width, height, length = kpts[0].max(dim=0).values - kpts[0].min(dim=0).values
+    # one = kpts.new_tensor(1)
+    # size = torch.stack([one*width, one*height, one*length])[None]
+    # center = size / 2
+    # scaling = size.max(1, keepdim=True).values * 0.7
+
     width, height, length = kpts[0].max(dim=0).values - kpts[0].min(dim=0).values
+    center = torch.mean(kpts, dim=-2) # B*3
     one = kpts.new_tensor(1)
     size = torch.stack([one*width, one*height, one*length])[None]
-    center = size / 2
-    scaling = size.max(1, keepdim=True).values * 0.7
-    return (kpts - center[:, None, :]) / scaling[:, None, :]
+    scaling = size.max(1, keepdim=True).values * 0.6
+    kpts_rescaled = (kpts - center[:, None, :]) / scaling[:, None, :]
+    return kpts_rescaled
