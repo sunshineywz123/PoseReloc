@@ -301,7 +301,7 @@ def gather_3d_ann(
     xyzs,
     points_idxs,
     pba: ActorHandle = None,
-    verbose=True
+    verbose=True,
 ):
     """ 
     Gather affiliated 2d points' positions, (mean/concated)descriptors and scores for each 3d points
@@ -325,7 +325,11 @@ def gather_3d_ann(
         descriptors = None
         scores = np.empty(shape=(0, 1))
         for old_point_idx in old_points_idxs:
-            descriptors = np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0) if descriptors is not None else kp3d_id_feature[old_point_idx]
+            descriptors = (
+                np.append(descriptors, kp3d_id_feature[old_point_idx], axis=0)
+                if descriptors is not None
+                else kp3d_id_feature[old_point_idx]
+            )
             scores = np.append(
                 scores, kp3d_id_score[old_point_idx].reshape(-1, 1), axis=0
             )
@@ -333,7 +337,11 @@ def gather_3d_ann(
         kp3d_position = np.append(
             kp3d_position, xyzs[new_point_idx].reshape(1, 3), axis=0
         )
-        kp3d_descriptors = np.append(kp3d_descriptors, descriptors, axis=0) if kp3d_descriptors is not None else descriptors
+        kp3d_descriptors = (
+            np.append(kp3d_descriptors, descriptors, axis=0)
+            if kp3d_descriptors is not None
+            else descriptors
+        )
         kp3d_scores = np.append(kp3d_scores, scores, axis=0)
         idxs.append(descriptors.shape[0] if descriptors is not None else 0)
 
@@ -452,7 +460,7 @@ def save_2d_anno_dict(
     points_idxs,
     img_kp3d_idx_to_kp2d_idx,
     anno2d_out_path,
-    verbose=True
+    verbose=True,
 ):
     annotations = []
     anno_id = 0
@@ -506,7 +514,7 @@ def save_2d_anno(
     anno2d_out_path,
     save_feature_for_each_img=True,
     save_threshold=0.05,
-    verbose=True
+    verbose=True,
 ):
     """ Save 2d annotations for each image and gather all 2d annotations """
     annotations = []
@@ -526,7 +534,11 @@ def save_2d_anno(
 
         keypoints_2d, descriptors_2d, scores_2d = read_features(feature)
         num_matches, assign_matrix, total_2d_kpts = get_assign_matrix(
-            keypoints_2d, filter_xyzs, kp3d_idx_to_kp2d_idx, kp3d_id_mapping, verbose=verbose
+            keypoints_2d,
+            filter_xyzs,
+            kp3d_idx_to_kp2d_idx,
+            kp3d_id_mapping,
+            verbose=verbose,
         )
 
         if num_matches > save_threshold * total_2d_kpts:
@@ -580,6 +592,57 @@ def mean_scores(scores, idxs):
     return avg_scores
 
 
+def mean_descriptors_and_scores(descriptors, scores, idxs, mean_piller_only=False):
+    cumsum_idxs = np.cumsum(idxs)
+    pre_cumsum_idxs = np.cumsum(idxs)[:-1]
+    pre_cumsum_idxs = np.insert(pre_cumsum_idxs, 0, 0)
+
+    avg_descriptors = []
+    warpped_descriptors = []
+    for i, (start, end) in enumerate(zip(pre_cumsum_idxs, cumsum_idxs)):
+        descriptors_span = descriptors[start:end]
+        scores_span = scores[start:end]
+        real_feature_dim = int(descriptors_span.shape[1] // 2)
+        descriptors_real = descriptors_span[:, :real_feature_dim]
+        descriptors_warpped = descriptors_span[:, real_feature_dim:]
+
+        # Get average feature:
+        piller_mask = (scores_span == 0).reshape(
+            -1
+        )  # [N] 0 in score marks point as piller point
+
+        if mean_piller_only:
+            descriptors_real = descriptors_real[piller_mask]
+            assert (
+                descriptors_real.shape[0] != 0
+            ), "Problem exists, there mast be at least 1 piller point for each feature track"
+        avg_descriptors.append(np.mean(descriptors_real, axis=0, keepdims=True))
+        # update idx to exclude piller feature
+
+        # Get leaf (warpped) feature:
+        idxs[i] -= np.sum(piller_mask)
+        warpped_descriptors.append(descriptors_warpped[~piller_mask])
+
+        # # Debug:
+        # non_piller_descriptors = descriptors_span[~piller_mask] # N*D
+        # avg_piller_descriptors = np.mean(piller_descriptors, axis=0).reshape(1, -1) # 1*D
+        # sim = np.einsum('nd,md->nm', non_piller_descriptors, avg_piller_descriptors)
+        # sim2 = np.einsum('nd,md->nm', piller_descriptors, avg_piller_descriptors)
+
+    avg_descriptors = np.concatenate(avg_descriptors, axis=0)  # N*D
+    avg_scores = np.ones((avg_descriptors.shape[0], 1))  # N*1 Fake score!
+
+    # Exclude piller points:
+    piller_mask = (scores == 0).reshape(-1)  # [N]
+    descriptors = np.concatenate(warpped_descriptors, axis=0)
+    scores = scores[~piller_mask] # [N,1]
+
+    # Sanity check:
+    assert (descriptors.shape[0] == np.sum(idxs)) and (np.sum(idxs) == scores.shape[0]), f'descriptors:{descriptors.shape[0]}, idx: {np.sum(idxs)}, scores: {scores.shape[0]}'
+
+    return avg_descriptors, avg_scores, descriptors, scores, idxs
+
+
 def get_kpt_ann(
     cfg,
     img_lists,
@@ -588,6 +651,7 @@ def get_kpt_ann(
     points_idxs,
     xyzs,
     save_feature_for_each_image=True,
+    mean_descriptors_piller_only=False,
     use_ray=False,
     feat_3d_name_suffix="",
     verbose=True,
@@ -658,7 +722,7 @@ def get_kpt_ann(
                 xyzs,
                 sub_points_ids,
                 pb.actor if pb is not None else None,
-                verbose=verbose
+                verbose=verbose,
             )
             for sub_points_ids in points_idxs_chunked
         ]
@@ -674,9 +738,17 @@ def get_kpt_ann(
             kp3d_id_feature, kp3d_id_score, xyzs, points_idxs, verbose=verbose
         )
 
-    avg_descriptors, avg_scores = (
-        mean_descriptors(filter_descriptors, idxs),
-        mean_scores(filter_scores, idxs),
+    (
+        avg_descriptors,
+        avg_scores,
+        filter_descriptors,
+        filter_scores,
+        idxs,
+    ) = mean_descriptors_and_scores(
+        filter_descriptors,
+        filter_scores,
+        idxs,
+        mean_piller_only=mean_descriptors_piller_only,
     )
 
     anno2d_out_path = osp.join(anno_out_dir, "anno_2d.json")
@@ -689,11 +761,15 @@ def get_kpt_ann(
         kp3d_idx_to_img_kp2d_idx,
         anno2d_out_path,
         save_feature_for_each_img=save_feature_for_each_image,
-        verbose=verbose
+        verbose=verbose,
     )
 
-    avg_anno3d_out_path = osp.join(anno_out_dir, "anno_3d_average" + feat_3d_name_suffix + ".npz")
-    collect_anno3d_out_path = osp.join(anno_out_dir, "anno_3d_collect" + feat_3d_name_suffix + ".npz")
+    avg_anno3d_out_path = osp.join(
+        anno_out_dir, "anno_3d_average" + feat_3d_name_suffix + ".npz"
+    )
+    collect_anno3d_out_path = osp.join(
+        anno_out_dir, "anno_3d_collect" + feat_3d_name_suffix + ".npz"
+    )
     save_3d_anno(filter_xyzs, avg_descriptors, avg_scores, avg_anno3d_out_path)
     save_3d_anno(
         filter_xyzs, filter_descriptors, filter_scores, collect_anno3d_out_path

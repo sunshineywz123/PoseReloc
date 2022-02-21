@@ -4,50 +4,53 @@
 # python train.py +experiment=PoseReloc
 
 defaults:
-  - override /trainer: null # override trainer to null so it's not loaded from main config defaults...
-  - override /model: null
-  - override /datamodule: null
-  - override /callbacks: null
-  - override /logger: null
+    - override /trainer: null  # override trainer to null so it's not loaded from main config defaults...
+    - override /model: null
+    - override /datamodule: null
+    - override /callbacks: null
+    - override /logger: null
 
 # we override default configurations with nulls to prevent them from loading at all
-# instead we define all modules and their paths directly in this config,
+# instead we define all modules and their paths directly in this config, 
 # so everything is stored in one place for more readibility
 
 seed: 12345
 task_name: null
-exp_name: null
+exp_name: train_coarse_thr_0.4_layernorm_n_head_4_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_gats_loftr_warp
 
-data_base_dir: "/nas/users/hexingyi/arscan_data"
-sfm_dir: "/nas/users/hexingyi/onepose_sfm_v3"
-merge_output_dir: "/nas/users/hexingyi/onepose_merged"
+# data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/scan_data'
+# sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm'
+merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
 
 trainer:
-  _target_: pytorch_lightning.Trainer
-  gpus:
-    # - 0
-    - 1
-    # - 2
-    # - 3
-  num_nodes: 1
-  accelerator: "ddp"
+    _target_: pytorch_lightning.Trainer
+    gpus: 
+        # - 0
+        # - 1
+        # - 2
+        # - 3
+        - 4
+        - 5
+        - 6
+        - 7
+    num_nodes: 1
+    accelerator: 'ddp'
 
-  min_epochs: 1
-  max_epochs: 15
-  gradient_clip_val: 0.5
-  accumulate_grad_batches: 2
-  weights_summary: full
-  num_sanity_val_steps: 2 # 0 means no sanity check
-  check_val_every_n_epoch: 1
-  log_every_n_steps: 70
-  flush_logs_every_n_steps: 1
-
-  # resume_from_checkpoint: ${work_dir}/last.ckpt
+    min_epochs: 1
+    max_epochs: 25
+    gradient_clip_val: 0.5
+    accumulate_grad_batches: 2
+    weights_summary: null
+    num_sanity_val_steps: 5 # 0 means no sanity check
+    check_val_every_n_epoch: 1
+    log_every_n_steps: 70
+    flush_logs_every_n_steps: 1
+    
+    # resume_from_checkpoint: '${work_dir}/models/checkpoints/${exp_name}/last.ckpt'
 
 model:
   # _target_: src.models.spg_model.LitModelSPG
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  # pretrained_ckpt: weight/test_inference_loftr_gats.ckpt
   pretrained_ckpt: null
 
   loftr:
@@ -68,7 +71,7 @@ model:
 
     keypoints_encoding:
       enable: True
-      type: mlp_linear # ['mlp_cov1d', 'mlp_linear', "sine"]
+      type: mlp_linear # ['mlp_cov1d', 'mlp_linear']
       descriptor_dim: 256
       keypoints_encoder: [32, 64, 128]
       norm_method: "instancenorm"
@@ -83,9 +86,9 @@ model:
       d_ffm: 128
       nhead: 8
       # nhead: 8
-      layer_names: ['GATs', 'self', 'cross']
+      # layer_names: ['Pe', 'self', 'cross']
       # layer_names: ["self", "cross"]
-      # layer_names: ["Pe", "self", "cross"]
+      layer_names: ["GATs","self", "cross"]
       layer_iter_n: 4
       dropout: 0.
       attention: "linear"
@@ -101,9 +104,9 @@ model:
       # GATs part
       GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
       GATs_include_self: False
-      # useful for loftr_attention
+      # useful for loftr_attention:
       GATs_feat2d_db_update: True
-      # useful for origin_gats
+      # useful for origin_gats:
       d_db_feat: 256 # The input dim of database feature
       GATs_dropout: 0.6
       GATs_alpha: 0.2
@@ -116,7 +119,7 @@ model:
       feature_dim_3D: 256
       keypoints_encoder_3D: [32, 64, 128]
       norm_method_3D: "instancenorm"
-      encoding_type_3D: mlp_linear # ['mlp_cov1d', 'mlp_linear']
+      encoding_type_3D: sine # ['mlp_cov1d', 'mlp_linear', 'sine']
 
     coarse_matching:
       type: "dual-softmax"
@@ -153,6 +156,7 @@ model:
         train_pad_num_gt_min: 200 # avoid deadlock; better convergence
 
     loftr_fine:
+      enable: False
       # Fine preprocess:
       window_size: 5
       concat_coarse_feat: False
@@ -162,13 +166,10 @@ model:
       ms_feat_type: 'PROJ_MERGE'
 
       # Fine module
-      enable: False
       type: "LoFTR"
-      # type: 'LoFTR-Conv1d'
       d_model: 128
       nhead: 8
-      # layer_names: ["self", "cross"]
-      layer_names: ["GATs","self", "cross"]
+      layer_names: ["self", "cross"]
       layer_iter_n: 1
       dropout: 0.0
       attention: "linear"
@@ -181,7 +182,7 @@ model:
       final_proj: False
 
       # GATs part
-      GATs_type: 'origin_gats' # ["origin_gats", 'loftr_attention']
+      GATs_type: 'loftr_attention' # ["origin_gats", 'loftr_attention']
       GATs_include_self: False
       # useful for loftr_attention
       GATs_feat2d_db_update: True
@@ -209,7 +210,7 @@ model:
 
     # Config for coarse
     focal_alpha: 0.5 # 0.25 default
-    focal_gamma: 1.0
+    focal_gamma: 2.0
     pos_weight: 1.0
     neg_weight: 1.0
 
@@ -221,10 +222,10 @@ model:
   trainer:
     enable_plotting: True
     canonical_bs: 4
-    canonical_lr: 5e-4
+    canonical_lr: 1e-4 # Original: 5e-4
     scaling: null
     world_size: null
-    n_val_pairs_to_plot: 50
+    n_val_pairs_to_plot: 100
 
     # Optimizer
     optimizer: "adamw" # ['adam', 'adamw']
@@ -235,7 +236,7 @@ model:
     # Scheduler
     scheduler: "MultiStepLR"
     scheduler_invervel: "epoch"
-    mslr_milestones: [5,8,11,18]
+    mslr_milestones: [3,6,9,12]
     mslr_gamma: 0.5
     cosa_tmax: 30
     elr_gamma: 0.999992
@@ -244,82 +245,76 @@ model:
     point_cloud_rescale: 1000
     pnp_reprojection_error: 5
     pose_thresholds: [1, 3, 5]
-
     enable_post_optimization: False
 
   match_type: "softmax"
 
 datamodule:
-  _target_: src.datamodules.GATs_loftr_datamodule.GATsLoFTRDataModule
-  data_dirs: ${sfm_dir}
-  anno_dirs: outputs_${model.match_type}/anno
-  train_anno_file: ${merge_output_dir}/${task_name}/train.json
-  val_anno_file: ${merge_output_dir}/${task_name}/val.json
+    _target_: src.datamodules.GATs_loftr_datamodule.GATsLoFTRDataModule
+    # data_dirs: ${sfm_dir}
+    anno_dirs: outputs_${model.match_type}/anno
+    train_anno_file: ${merge_output_dir}/${task_name}/train.json
+    val_anno_file: ${merge_output_dir}/${task_name}/val.json
 
-  batch_size: 1
-  num_workers: 4
-  pin_memory: True
+    batch_size: 3
+    num_workers: 4
+    pin_memory: True
 
-  train_percent: 1 # For debug
-  val_percent: 0.3
-  train_image_warp_adapt: True
+    train_percent: 1.0 # For debug
+    val_percent: 0.4
 
-  # TODO: move to a template
-  # 3D part
-  num_leaf: 6
-  load_3d_coarse: True
-  shape2d: 2000 # Not used
-  shape3d_train: 7000
-  shape3d_val: 7000
-  # shape3d: 8000
+    # TODO: move to a template
+    # 3D part
+    num_leaf: 8
+    load_3d_coarse: True
+    shape2d: 2000 # Not used
+    shape3d_train: 7000 # NOTE: Changed from 11000 to 12000
+    shape3d_val: 7000
+    train_image_warp_adapt: True
 
-  downsample3d: False
-  downsample_resolution: 30
+    # 2D part
+    img_pad: False
+    img_resize: [512, 512]
+    df: 8
+    coarse_scale: 0.125
 
-  # 2D part
-  img_pad: False
-  img_resize: [512, 512]
-  df: 8
-  coarse_scale: 0.125
+    downsample3d: False
+    downsample_resolution: 30
 
-  # File path substitute:
-  # path_prefix_substitute_3D_source: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v2'
-  # path_prefix_substitute_3D_aim:  '/nas/users/hexingyi/onepose_sfm_v2'
-  # path_prefix_substitute_2D_source: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
-  # path_prefix_substitute_2D_aim: '/nas/users/hexingyi/arscan_data'
-  path_prefix_substitute_3D_source: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v2'
-  path_prefix_substitute_3D_aim:  '/nas/users/hexingyi/onepose_sfm_v2'
-  path_prefix_substitute_2D_source: '/raid/zihao/arscan_aligned_temp/arscan_data'
-  path_prefix_substitute_2D_aim: '/nas/users/hexingyi/arscan_data'
+    # File path substitute:
+    path_prefix_substitute_3D_source: null
+    path_prefix_substitute_3D_aim: null
+    path_prefix_substitute_2D_source: '/raid/zihao/arscan_aligned_temp/arscan_data'
+    path_prefix_substitute_2D_aim: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
 
 callbacks:
-  model_checkpoint:
-    _target_: pytorch_lightning.callbacks.ModelCheckpoint
-    # monitor: cm3degree3
-    monitor: null
-    save_top_k: -1
-    save_last: True
-    mode: "max"
-    dirpath: "${work_dir}/models/checkpoints/${exp_name}"
-    # filename: '{epoch}-{cm3degree3:.4f}'
-    filename: '{epoch}'
-    every_n_epochs: 1
-  lr_monitor:
-    _target_: pytorch_lightning.callbacks.LearningRateMonitor
-    logging_interval: "step"
+    model_checkpoint:
+      _target_: pytorch_lightning.callbacks.ModelCheckpoint
+      # monitor: cm3degree3
+      monitor: null
+      save_top_k: -1
+      save_last: True
+      mode: "max"
+      dirpath: "${work_dir}/models/checkpoints/${exp_name}"
+      # filename: '{epoch}-{cm3degree3:.4f}'
+      filename: '{epoch}'
+      every_n_epochs: 1
+    lr_monitor:
+        _target_: pytorch_lightning.callbacks.LearningRateMonitor
+        logging_interval: 'step'
 
 logger:
-  tensorboard:
-    _target_: pytorch_lightning.loggers.TensorBoardLogger
-    save_dir: "${work_dir}/logs"
-    name: ${exp_name}
-    default_hp_metric: False
+    tensorboard:
+        _target_: pytorch_lightning.loggers.TensorBoardLogger
+        save_dir: '${work_dir}/logs'
+        name: ${exp_name}
+        default_hp_metric: False
 
-  neptune:
-    tags: ["best_model"]
-  csv_logger:
-    save_dir: "."
+    neptune:
+        tags: ["best_model"]
+    csv_logger:
+        save_dir: "."
 
 hydra:
-  run:
-    dir: ${work_dir}
+    run:
+      dir: ${work_dir}

@@ -413,18 +413,27 @@ if __name__ == "__main__":
         # '0575-saltbottle-bottle', '0576-saltbox-box', '0577-schoko-box', '0578-tee-others',
         # '0579-tomatocan-bottle', '0580-xmaxbox-others', '0581-yogurt-bottle', '0582-yogurtlarge-others',
         # '0583-yogurtmedium-others', '0584-yogurtsmall-others'
-        # '0600-toyrobot-others'
+        # '0600-toyrobot-others',
         # '0601-oldtea-box', '0602-sensesheep-others', '0603-fakebanana-others', '0604-catmodel-others'
         # '0605-pingpangball-ball', '0606-yellowduck-others', '0607-oringe-others'
         # '0608-greenteapot-others', '0609-blackteapot-others', '0610-lecreusetcup-others', '0611-bosecolumnaudio-others'
-        # "0612-insta-others", '0613-batterycharger-others', '0614-hhkbhandrest-others', '0615-logimouse-others', '0616-sensezong-others', '0617-miehuoqixiang-others'
+        # "0612-insta-others", '0613-batterycharger-others', '0614-hhkbhandrest-others', 
+        # '0615-logimouse-others', 
+        # '0616-sensezong-others', 
+        # '0617-miehuoqixiang-others'
         # "0618-huangjinyatea-others", 
         # '0619-blueyellowbox-box', '0620-shuixiantea-others','0621-headphonecontainer-others', '0622-ugreenbox-others', '0623-camera-others', '0624-weishengsubox-others', '0625-dogairpods-others'
         # "0626-sensecup-others", '0627-shiningscan-box', '0628-sensenut-box'
         # '0629-guihuatea-others', 
-        '0630-blackcolumcontainer-others', 
+        # '0630-blackcolumcontainer-others', 
         # '0631-whitesonycontainer-others', 
         # '0632-whitechair-others'
+        # "0633-sensemouse-others",
+        # "0634-arglasscontainer-others"
+        "0635-zishengtangface-others",
+        "0636-toothbrushcontainer-others",
+        "0637-pelikancontainer-box",
+        "0638-teapotcontainer-box"
     ]
     deal_first = True
     deal_last = True

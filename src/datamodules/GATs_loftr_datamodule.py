@@ -26,6 +26,7 @@ class GATsLoFTRDataModule(LightningDataModule):
         # Data related
         self.train_percent = kwargs["train_percent"]
         self.val_percent = kwargs["val_percent"]
+        self.train_image_warp_adapt = kwargs['train_image_warp_adapt']
         # 3D part
         self.num_leaf = kwargs["num_leaf"]
         self.shape2d = kwargs["shape2d"]
@@ -91,7 +92,8 @@ class GATsLoFTRDataModule(LightningDataModule):
             path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
             downsample=self.downsample,
             downsample_resolution=self.downsample_resolution,
-            load_3d_coarse_feature=self.load_3d_coarse
+            load_3d_coarse_feature=self.load_3d_coarse,
+            image_warp_adapt=self.train_image_warp_adapt
         )
         print("=> Read train anno file: ", self.train_anno_file)
 

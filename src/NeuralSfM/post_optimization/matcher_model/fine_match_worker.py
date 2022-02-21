@@ -5,6 +5,7 @@ import ray
 from ray.actor import ActorHandle
 from tqdm import tqdm
 import os.path as osp
+from loguru import logger
 
 from src.NeuralSfM.loftr_config.default import get_cfg_defaults
 from src.NeuralSfM.loftr_for_sfm import LoFTR_SfM
@@ -63,7 +64,7 @@ def build_model(args):
     return detector, matcher
 
 
-def extract_preds(data, extract_feature_method=None):
+def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
     """extract predictions assuming bs==1"""
     m_bids = data["m_bids"].cpu().numpy()
     assert (np.unique(m_bids) == 0).all()
@@ -107,6 +108,18 @@ def extract_preds(data, extract_feature_method=None):
         feature_c1 = data['feat_coarse_b_1'].cpu().numpy()
     else:
         feature_c0, feature_c1 = None, None
+    
+    if use_warpped_feature:
+        if "feat_coarse_b_1_warpped" in data:
+            feature_c1_warp = data['feat_coarse_b_1_warpped'].cpu().numpy()
+            feature1_warp = data['feat_f_1_warpped'].cpu().numpy()
+        else:
+            logger.warning("feat_coarse_b_1_warpped is not in data! use warpped feature failed!")
+            feature_c1_warp = feature_c1
+            feature1_warp = feature1
+    else:
+        feature_c1_warp = feature_c1
+        feature1_warp = feature1
 
     return (
         mkpts0_c,
@@ -121,6 +134,8 @@ def extract_preds(data, extract_feature_method=None):
         feature_c1,
         feature0,
         feature1,
+        feature_c1_warp,
+        feature1_warp
     )
 
 
@@ -131,6 +146,7 @@ def extract_results(
     refiner=None,
     refine_args={},
     extract_feature_method=None,
+    use_warpped_feature=False
 ):
     # 1. inference
     detector(data)
@@ -153,7 +169,9 @@ def extract_results(
         feature_c1,
         feature0,
         feature1,
-    ) = extract_preds(data, extract_feature_method=extract_feature_method)
+        feature_c1_warp,
+        feature1_warp
+    ) = extract_preds(data, extract_feature_method=extract_feature_method, use_warpped_feature=use_warpped_feature)
     del data
     torch.cuda.empty_cache()
     return (
@@ -169,6 +187,8 @@ def extract_results(
         feature_c1,
         feature0,
         feature1,
+        feature_c1_warp,
+        feature1_warp
     )
 
 
@@ -180,6 +200,7 @@ def matchWorker(
     detector,
     matcher,
     extract_feature_method=None,
+    use_warpped_feature=False,
     visualize=False,
     visualize_dir=None,
     pba: ActorHandle = None,
@@ -218,11 +239,14 @@ def matchWorker(
             feature_c1,
             feature0,
             feature1,
+            feature_c1_warp,
+            feature1_warp
         ) = extract_results(
             data_c,
             detector=detector,
             matcher=matcher,
             extract_feature_method=extract_feature_method,
+            use_warpped_feature=use_warpped_feature
         )
 
         # 3. extract results
@@ -240,6 +264,8 @@ def matchWorker(
             "feature_c1": feature_c1,
             "feature0": feature0,
             "feature1": feature1,
+            "feature_c1_warp": feature_c1_warp,
+            "feature1_warp": feature1_warp
         }
         if pba is not None:
             pba.update.remote(1)

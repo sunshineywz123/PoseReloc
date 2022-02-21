@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops.einops import rearrange, repeat
+from kornia import homography_warp
+from kornia.geometry.warp import normalize_homography, normal_transform_pixel
 from src.utils.profiler import PassThroughProfiler
 
 from .backbone import (
@@ -159,13 +161,20 @@ class LoFTR_SfM(nn.Module):
             # 2. coarse-level loftr module
             with self.profiler.record_function("LoFTR/coarse-loftr"):
                 # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
-                feat_c0 = rearrange(self.pos_encoding(feat_b_c0), "n c h w -> n (h w) c")
-                feat_c1 = rearrange(self.pos_encoding(feat_b_c1), "n c h w -> n (h w) c")
+                feat_c0 = rearrange(
+                    self.pos_encoding(feat_b_c0), "n c h w -> n (h w) c"
+                )
+                feat_c1 = rearrange(
+                    self.pos_encoding(feat_b_c1), "n c h w -> n (h w) c"
+                )
 
                 # handle padding mask, for MegaDepth dataset
                 mask_c0 = mask_c1 = None
                 if "mask0" in data:
-                    mask_c0, mask_c1 = data["mask0"].flatten(-2), data["mask1"].flatten(-2)
+                    mask_c0, mask_c1 = (
+                        data["mask0"].flatten(-2),
+                        data["mask1"].flatten(-2),
+                    )
                 # NOTE: feat_c0 & feat_c1 are conv features residually modulated by LoFTR: x + sum_i(self_i + cross_i)
                 feat_c0, feat_c1 = self.loftr_coarse(feat_c0, feat_c1, mask_c0, mask_c1)
                 # logger.info('Profiling LoFTR model...')
@@ -204,16 +213,28 @@ class LoFTR_SfM(nn.Module):
             # Only fine with coarse provided
             # Convert coarse match to b_ids, i_ids, j_ids
             # NOTE: only allow bs == 1
-            b_ids = torch.zeros((data['mkpts0_c'].shape[0],), device=data['mkpts0_c'].device).long()
+            b_ids = torch.zeros(
+                (data["mkpts0_c"].shape[0],), device=data["mkpts0_c"].device
+            ).long()
 
-            scale = data['hw0_i'][0] / data['hw0_c'][0]
-            scale0 = scale * data['scale0'][b_ids][:, [1, 0]] if 'scale0' in data else scale
-            scale1 = scale * data['scale1'][b_ids][:, [1, 0]] if 'scale1' in data else scale
+            scale = data["hw0_i"][0] / data["hw0_c"][0]
+            scale0 = (
+                scale * data["scale0"][b_ids][:, [1, 0]] if "scale0" in data else scale
+            )
+            scale1 = (
+                scale * data["scale1"][b_ids][:, [1, 0]] if "scale1" in data else scale
+            )
 
-            mkpts0_coarse_scaled = torch.round(data['mkpts0_c'] / scale0)
-            mkpts1_coarse_scaled = torch.round(data['mkpts1_c'] / scale1)
-            i_ids = (mkpts0_coarse_scaled[:, 1] * data['hw0_c'][1] + mkpts0_coarse_scaled[:, 0]).long()
-            j_ids = (mkpts1_coarse_scaled[:, 1] * data['hw1_c'][1] + mkpts1_coarse_scaled[:, 0]).long()
+            mkpts0_coarse_scaled = torch.round(data["mkpts0_c"] / scale0)
+            mkpts1_coarse_scaled = torch.round(data["mkpts1_c"] / scale1)
+            i_ids = (
+                mkpts0_coarse_scaled[:, 1] * data["hw0_c"][1]
+                + mkpts0_coarse_scaled[:, 0]
+            ).long()
+            j_ids = (
+                mkpts1_coarse_scaled[:, 1] * data["hw1_c"][1]
+                + mkpts1_coarse_scaled[:, 0]
+            ).long()
 
             # # Debug
             # mkpts0_c = torch.stack([i_ids % data['hw0_c'][1], i_ids // data['hw0_c'][1]], dim=1) * scale0
@@ -224,14 +245,8 @@ class LoFTR_SfM(nn.Module):
             feat_c0, feat_c1 = None, None
 
             data.update(
-                {
-                "m_bids": b_ids,
-                "b_ids": b_ids,
-                "i_ids": i_ids,
-                "j_ids": j_ids
-                }
+                {"m_bids": b_ids, "b_ids": b_ids, "i_ids": i_ids, "j_ids": j_ids}
             )
-
 
         # 4. fine-level refinement
         with self.profiler.record_function("LoFTR/fine-refinement"):
@@ -269,18 +284,137 @@ class LoFTR_SfM(nn.Module):
             # data.update({"feats0":feats0, "feats1":feats1}) # backbone features ['coarse', 'fine']
             # data.update({"feat_c0": feat_c0, "feat_c1": feat_c1}) # coarse feature after loftr feature coarse
             # data.update({'feat_f0' : feat_f0, 'feat_f1' : feat_f1}) # fine feature backbone
-            data.update({"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold})
+            data.update(
+                {"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold}
+            )
             # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)
-        
+
         # Extract fine_feature (optional):
-        if 'extract_coarse_feature' in kwargs:
-            if kwargs['extract_coarse_feature']:
-                #NOTE: Use mkpts0/1_f is not a bug, try to use their nearest coarse feature
-                feat_coarse_b_0 = sample_feature_from_featuremap(feat_c0_backbone, data['mkpts0_f'], imghw=data['scale0'].squeeze(0) * torch.tensor(data['hw0_i']).to(data['scale0']), sample_mode='nearest')
-                feat_coarse_b_1 = sample_feature_from_featuremap(feat_c1_backbone, data['mkpts1_f'], imghw=data['scale1'].squeeze(0) * torch.tensor(data['hw1_i']).to(data['scale1']), sample_mode='nearest')
-                data.update({'feat_coarse_b_0': feat_coarse_b_0, 'feat_coarse_b_1': feat_coarse_b_1})
-        if 'extract_fine_feature' in kwargs:
-            if kwargs['extract_fine_feature']:
-                feat_ext0 = sample_feature_from_featuremap(feat_f0_backbone, data['mkpts0_f'], imghw=data['scale0'].squeeze(0) * torch.tensor(data['hw0_i']).to(data['scale0']))
-                feat_ext1 = sample_feature_from_featuremap(feat_f1_backbone, data['mkpts1_f'], imghw=data['scale1'].squeeze(0) * torch.tensor(data['hw1_i']).to(data['scale1']))
-                data.update({'feat_ext0': feat_ext0, 'feat_ext1': feat_ext1})
+        if "extract_coarse_feature" in kwargs:
+            if kwargs["extract_coarse_feature"]:
+                # NOTE: Use mkpts0/1_f is not a bug, try to use their nearest coarse feature
+                feat_coarse_b_0 = sample_feature_from_featuremap(
+                    feat_c0_backbone,
+                    data["mkpts0_f"],
+                    imghw=data["scale0"].squeeze(0)
+                    * torch.tensor(data["hw0_i"]).to(data["scale0"]),
+                    sample_mode="nearest",
+                )
+                feat_coarse_b_1 = sample_feature_from_featuremap(
+                    feat_c1_backbone,
+                    data["mkpts1_f"],
+                    imghw=data["scale1"].squeeze(0)
+                    * torch.tensor(data["hw1_i"]).to(data["scale1"]),
+                    sample_mode="nearest",
+                )
+                data.update(
+                    {
+                        "feat_coarse_b_0": feat_coarse_b_0,
+                        "feat_coarse_b_1": feat_coarse_b_1,
+                    }
+                )
+        if "extract_fine_feature" in kwargs:
+            if kwargs["extract_fine_feature"]:
+                feat_ext0 = sample_feature_from_featuremap(
+                    feat_f0_backbone,
+                    data["mkpts0_f"],
+                    imghw=data["scale0"].squeeze(0)
+                    * torch.tensor(data["hw0_i"]).to(data["scale0"]),
+                )
+                feat_ext1 = sample_feature_from_featuremap(
+                    feat_f1_backbone,
+                    data["mkpts1_f"],
+                    imghw=data["scale1"].squeeze(0)
+                    * torch.tensor(data["hw1_i"]).to(data["scale1"]),
+                )
+                data.update({"feat_ext0": feat_ext0, "feat_ext1": feat_ext1})
+
+        # Wrap image1 and kpts to sample wrapped feature:
+        if "homo_mat" in data:
+            # Get warpped feature1
+            h, w = data["hw1_i"]
+            homo_sampled_normed = normalize_homography(
+                data["homo_mat"], (h, w), (h, w)
+            ).to(torch.float32)  # B*3*3
+            # homo_warpped_image1 = transform.warp((pair_data['image1'].cpu().numpy() * 255).round().astype(np.int32)[0], homo_sampled)
+            homo_warpped_image1 = homography_warp(
+                data["image1"], torch.linalg.inv(homo_sampled_normed), (h, w)
+            )
+
+            image1_warpped_feat = self.backbone(homo_warpped_image1)
+            image1_warpped_feat_b_c, image1_warpped_feat_f = _extract_backbone_feats(
+                image1_warpped_feat, self.config["loftr_backbone"]
+            )
+
+            # Get warpped mkpts1
+            norm_pixel_mat = normal_transform_pixel(h, w).to(data['mkpts1_f'].device)  # B*3*3 (1*3*3)
+            mkpts1_normed = (
+                norm_pixel_mat[0]
+                @ (
+                    torch.cat(
+                        [data["mkpts1_f"].to(torch.float32), torch.ones((data["mkpts1_f"].shape[0], 1), device=data['mkpts1_f'].device)],
+                        dim=-1,
+                    )
+                ).transpose(0, 1)
+            )
+            mkpts1_warpped = (
+                norm_pixel_mat[0].inverse() @ homo_sampled_normed[0] @ mkpts1_normed
+            ).transpose(
+                0, 1
+            )  # N*3
+            mkpts1_warpped[:, :2] /= mkpts1_warpped[:, [2]]  # N*2
+            mkpts1_warpped = mkpts1_warpped[:, :2]
+            out_of_boundry_mask = (mkpts1_warpped[:,0] < 0) | (mkpts1_warpped[:,0] > (w - 1)) | (mkpts1_warpped[:,1] < 0) | (mkpts1_warpped[:, 1] > (h-1))
+
+            # Sample kpts' features from feature map
+            feat_coarse_b_1_warpped = sample_feature_from_featuremap(
+                image1_warpped_feat_b_c,
+                mkpts1_warpped,
+                imghw=data["scale1"].squeeze(0)
+                * torch.tensor(data["hw1_i"]).to(data["scale1"]),
+                sample_mode="bilinear",
+            )
+            feat_f_1_warpped = sample_feature_from_featuremap(
+                image1_warpped_feat_f,
+                mkpts1_warpped,
+                imghw=data["scale1"].squeeze(0)
+                * torch.tensor(data["hw1_i"]).to(data["scale1"]),
+            )
+
+            # Use not warpped feature to substitute out of boundery feature:
+            if "feat_coarse_b_1" not in data or "feat_ext1" not in data:
+                raise NotImplementedError
+            feat_coarse_b_1_warpped[out_of_boundry_mask, :] = data['feat_coarse_b_1'][out_of_boundry_mask, :]
+            feat_f_1_warpped[out_of_boundry_mask] = data['feat_ext1'][out_of_boundry_mask, :]
+
+            data.update(
+                {
+                    "feat_coarse_b_1_warpped": feat_coarse_b_1_warpped,
+                    "feat_f_1_warpped": feat_f_1_warpped,
+                }
+            )
+
+            # # Debug: plot match pair
+            # from src.utils.plot_utils import make_matching_plot
+            # import matplotlib.pyplot as plt
+            # import numpy as np
+            # original_image1 = (
+            #     (data["image1"].cpu().numpy() * 255).round().astype(np.int32)[0]
+            # )  # 1*H*W
+            # homo_warpped_image1 = (
+            #     (homo_warpped_image1.cpu().numpy() * 255).round().astype(np.int32)[0]
+            # )  # 1*H*W
+            # mkpts1 = data['mkpts1_f'][~out_of_boundry_mask].cpu().numpy()
+            # mkpts1_warpped = mkpts1_warpped[~out_of_boundry_mask].cpu().numpy()
+            # figure = make_matching_plot(
+            #     original_image1[0],
+            #     homo_warpped_image1[0],
+            #     mkpts1,
+            #     mkpts1_warpped,
+            #     mkpts1,
+            #     mkpts1_warpped,
+            #     color=np.zeros((mkpts1.shape[0], 3)),
+            #     text="",
+            # )
+            # plt.savefig("wrapped_match_pair.png")
+            # plt.close()

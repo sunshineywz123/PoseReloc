@@ -126,13 +126,13 @@ class LocalFeatureTransformer(nn.Module):
                 if self.gats_type == 'origin_gats':
                     module_list.append(
                         GraphAttentionLayer(
-                            config["d_db_feat"],
-                            config["d_model"],
-                            config["GATs_dropout"],
-                            config["GATs_alpha"],
-                            config['GATs_include_self'],
-                            config["GATs_enable_feed_forward"],
-                            config["GATs_feed_forward_norm_method"],
+                            in_features=config["d_db_feat"],
+                            out_features=config["d_model"],
+                            dropout=config["GATs_dropout"],
+                            alpha=config["GATs_alpha"],
+                            include_self=config['GATs_include_self'],
+                            enable_feed_forward=config["GATs_enable_feed_forward"],
+                            feed_forward_norm_method=config["GATs_feed_forward_norm_method"],
                         )
                     )
                 elif self.gats_type == 'loftr_attention':

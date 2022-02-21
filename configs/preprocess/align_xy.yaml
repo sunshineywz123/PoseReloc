@@ -10,8 +10,14 @@ suffix: ""
 
 dataset:
     data_dir:
+        - ${data_base_dir}/0635-zishengtangface-others zishengtangface-1 zishengtangface-2
+        - ${data_base_dir}/0636-toothbrushcontainer-others toothbrushcontainer-1 toothbrushcontainer-2
+        - ${data_base_dir}/0637-pelikancontainer-box pelikancontainer-1 pelikancontainer-2
+        - ${data_base_dir}/0638-teapotcontainer-box teapotcontainer-1 teapotcontainer-2
+        # - ${data_base_dir}/0634-arglasscontainer-others arglasscontainer-1 arglasscontainer-2
+        # - ${data_base_dir}/0633-sensemouse-others sensemouse-1 sensemouse-2
         # - ${data_base_dir}/0629-guihuatea-others guihuatea-1 guihuatea-2
-        - ${data_base_dir}/0630-blackcolumcontainer-others blackcolumcontainer-1 blackcolumcontainer-2
+        # - ${data_base_dir}/0630-blackcolumcontainer-others blackcolumcontainer-1 blackcolumcontainer-2
         # - ${data_base_dir}/0631-whitesonycontainer-others whitesonycontainer-1 whitesonycontainer-2
         # - ${data_base_dir}/0632-whitechair-others whitechair-1 whitechair-2
         # - ${data_base_dir}/0626-sensecup-others sensecup-1 sensecup-2
@@ -31,7 +37,7 @@ dataset:
         # - ${data_base_dir}/0612-insta-others insta-1
         # - ${data_base_dir}/0613-batterycharger-others batterycharger-1
         # - ${data_base_dir}/0614-hhkbhandrest-others hhkbhandrest-1
-        # - ${data_base_dir}/0615-logimouse-others logimouse-1
+        # - ${data_base_dir}/0615-logimouse-others logimouse-1 logimouse-2
         # - ${data_base_dir}/0616-sensezong-others sensezong-1
         # - ${data_base_dir}/0617-miehuoqixiang-others miehuoqixiang-1
         # - ${data_base_dir}/0608-greenteapot-others greenteapot-1 greenteapot-2
@@ -45,7 +51,7 @@ dataset:
         # - ${data_base_dir}/0602-sensesheep-others sensesheep-1 sensesheep-2
         # - ${data_base_dir}/0603-fakebanana-others fakebanana-1 fakebanana-2
         # - ${data_base_dir}/0604-catmodel-others catmodel-1 catmodel-2
-        # - ${data_base_dir}/0600-toyrobot-others toyrobot-1 toyrobot-2
+        - ${data_base_dir}/0600-toyrobot-others toyrobot-1 toyrobot-2
         # - ${work_dir}/data/scan_data/017-porcelain-bottle pcl1 pcl2 pcl3 pcl4
         # - ${work_dir}/data/scan_data/021-porcelain-bottle bottle1 bottle2 bottle3 bottle4
         # - ${work_dir}/data/scan_data/022-haimianbaobao-others hmbb1 hmbb2 hmbb3 hmbb5

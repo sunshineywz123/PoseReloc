@@ -37,6 +37,7 @@ cfgs = {
         "visualize": False,  # Visualize fine feature map and corresponds
         # [None, 'fine_match_backbone', 'fine_match_attention'] Save for later 2D-3D match use, None means don't extract feature
         "extract_feature_method": "fine_match_backbone",
+        "use_warpped_feature": True,
         # "extract_feature_method": 'fine_match_attention',
         "ray": {
             "slurm": False,

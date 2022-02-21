@@ -1,6 +1,4 @@
 import cv2
-from matplotlib.pyplot import axis
-from numpy.core.defchararray import index, lower
 import torch
 import numpy as np
 

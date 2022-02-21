@@ -17,6 +17,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
             detector,
             matcher,
             extract_feature_method=cfgs['extract_feature_method'],
+            use_warpped_feature=cfgs['use_warpped_feature'],
             visualize=cfgs["visualize"],
             visualize_dir=visualize_dir,
             verbose=verbose
@@ -45,6 +46,7 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
                 detector,
                 matcher,
                 extract_feature_method=cfgs['extract_feature_method'],
+                use_warpped_feature=cfgs['use_warpped_feature'],
                 visualize=cfgs["visualize"],
                 visualize_dir=visualize_dir,
                 pba=pb.actor if pb is not None else None,

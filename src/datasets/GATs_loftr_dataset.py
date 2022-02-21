@@ -1,4 +1,3 @@
-from audioop import avg
 from loguru import logger
 
 try:
@@ -9,13 +8,14 @@ import torch
 import numpy as np
 import time
 import os.path as osp
-
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset
-import open3d as o3d
+# import open3d as o3d
 from scipy import stats
+from kornia import homography_warp, normalize_homography, normal_transform_pixel
 from .utils import read_grayscale
 from src.utils import data_utils
+from src.utils.sample_homo import sample_homography_sap
 
 
 class GATsLoFTRDataset(Dataset):
@@ -40,6 +40,7 @@ class GATsLoFTRDataset(Dataset):
         downsample=False,
         downsample_resolution=30,
         load_3d_coarse_feature=False,
+        image_warp_adapt=False,
     ):
         super(Dataset, self).__init__()
 
@@ -51,11 +52,12 @@ class GATsLoFTRDataset(Dataset):
         sample_inverval = int(1 / percent)
         self.anns = self.anns[::sample_inverval]
 
-        self.num_leaf = num_leaf
         self.load_pose_gt = load_pose_gt
+        self.image_warp_adapt = image_warp_adapt
 
         # 3D point cloud part
         self.pad = pad
+        self.num_leaf = num_leaf
         self.load_3d_coarse = load_3d_coarse_feature
         self.shape2d = shape2d
         self.shape3d = shape3d
@@ -301,7 +303,10 @@ class GATsLoFTRDataset(Dataset):
                     )
 
                     if avg_coarse_descriptors3d is not None:
-                        avg_coarse_descriptors3d, avg_coarse_scores = data_utils.pad_features3d_top_n(
+                        (
+                            avg_coarse_descriptors3d,
+                            avg_coarse_scores,
+                        ) = data_utils.pad_features3d_top_n(
                             avg_coarse_descriptors3d, avg_coarse_scores, self.shape3d
                         )
                         (
@@ -334,8 +339,14 @@ class GATsLoFTRDataset(Dataset):
                 )
 
                 if avg_coarse_descriptors3d is not None:
-                    (avg_coarse_descriptors3d, avg_coarse_scores,) = data_utils.pad_features3d_random(
-                        avg_coarse_descriptors3d, avg_coarse_scores, self.shape3d, padding_index
+                    (
+                        avg_coarse_descriptors3d,
+                        avg_coarse_scores,
+                    ) = data_utils.pad_features3d_random(
+                        avg_coarse_descriptors3d,
+                        avg_coarse_scores,
+                        self.shape3d,
+                        padding_index,
                     )
                     (
                         clt_coarse_descriptors,
@@ -439,7 +450,7 @@ class GATsLoFTRDataset(Dataset):
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
 
-    def read_anno(self, img_id):
+    def read_anno(self, img_id, image_warp_adapt=False):
         """
         read image, 2d info and 3d info.
         pad 2d info and 3d info to a constant size.
@@ -561,7 +572,7 @@ class GATsLoFTRDataset(Dataset):
             idxs_file,
             pad=self.pad,
             assignmatrix=assign_matrix,
-            load_3d_coarse=self.load_3d_coarse
+            load_3d_coarse=self.load_3d_coarse,
         )
 
         data.update(
@@ -577,10 +588,12 @@ class GATsLoFTRDataset(Dataset):
         )
 
         if avg_coarse_descriptors3d is not None:
-            data.update({
-                "descriptors3d_coarse_db": avg_coarse_descriptors3d,  # [dim, n2]
-                "descriptors2d_coarse_db": clt_coarse_descriptors2d,  # [dim, n2 * num_leaf]
-            })
+            data.update(
+                {
+                    "descriptors3d_coarse_db": avg_coarse_descriptors3d,  # [dim, n2]
+                    "descriptors2d_coarse_db": clt_coarse_descriptors2d,  # [dim, n2 * num_leaf]
+                }
+            )
 
         if self.split == "train":
             assign_matrix = assign_matrix.long()
@@ -597,10 +610,88 @@ class GATsLoFTRDataset(Dataset):
             mkpts_proj = (K_crop @ mkpts_3d_camera).transpose(1, 0)  # N*3
             mkpts_proj = mkpts_proj[:, :2] / (mkpts_proj[:, [2]] + 1e-6)
 
+            # Sample random homography and transform image to get more source images
+            if image_warp_adapt:
+                homo_sampled = sample_homography_sap(self.h_i, self.w_i)
+                homo_sampled_normed = normalize_homography(
+                    torch.from_numpy(homo_sampled[None]).to(torch.float32),
+                    (self.h_i, self.w_i),
+                    (self.h_i, self.w_i),
+                )
+                homo_warpped_image = homography_warp(
+                    data["query_image"][None],
+                    torch.linalg.inv(homo_sampled_normed),
+                    (self.h_i, self.w_i),
+                )[
+                    0
+                ]  # 1*h*w
+
+                # Warp kpts:
+                norm_pixel_mat = normal_transform_pixel(self.h_i, self.w_i)
+                mkpts_proj_normed = (
+                    norm_pixel_mat[0].numpy()
+                    @ (
+                        np.concatenate(
+                            [mkpts_proj, np.ones((mkpts_proj.shape[0], 1))], axis=-1
+                        )
+                    ).T
+                ).astype(np.float32)
+                mkpts_proj_normed_warpped = (
+                    norm_pixel_mat[0].inverse()
+                    @ homo_sampled_normed[0]
+                    @ mkpts_proj_normed
+                ).T  # N*3
+
+                mkpts_proj_normed_warpped[:, :2] /= mkpts_proj_normed_warpped[
+                    :, [2]
+                ]  # NOTE: Important! [:, 2] is not all 1!
+                mkpts_proj = mkpts_proj_normed_warpped[:, :2]  # N*2
+
+                out_of_boundry_mask = (
+                    (mkpts_proj[:, 0] < 0)
+                    | (mkpts_proj[:, 0] > (self.w_i - 1))
+                    | (mkpts_proj[:, 1] < 0)
+                    | (mkpts_proj[:, 1] > (self.h_i - 1))
+                )
+                mkpts_proj = mkpts_proj[~out_of_boundry_mask]
+                assign_matrix = assign_matrix[:, ~out_of_boundry_mask]
+                K_crop_warpped = (
+                    torch.from_numpy(homo_sampled).to(torch.float32) @ K_crop
+                )  # FIXME: incorrect! Shouldn't H \times K directly.
+                data.update(
+                    {
+                        "query_image": homo_warpped_image,
+                        "query_intrinsic": K_crop_warpped,
+                        # "homo_warp": torch.from_numpy(homo_sampled).to(torch.float32)
+                    }
+                )
+
+                # # Debug: TODO: remove!
+                # from src.utils.plot_utils import reproj, make_matching_plot
+                # import matplotlib.pyplot as plt
+                # mkpts_3d = mkpts_3d[~out_of_boundry_mask]
+                # query_image = (
+                #     (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
+                # )
+                # mkpts3d_reprojed, depth = reproj(K_crop_warpped.cpu().numpy(), pose_gt.cpu().numpy(), mkpts_3d.numpy())
+                # figure = make_matching_plot(
+                #     query_image[0],
+                #     query_image[0],
+                #     mkpts_proj.numpy(),
+                #     mkpts3d_reprojed,
+                #     mkpts_proj.numpy(),
+                #     mkpts3d_reprojed,
+                #     color= np.zeros((mkpts_proj.shape[0],3)),
+                #     text=''
+                # )
+                # plt.savefig("wrapped_match_pair.png")
+
             # if self.downsample:
             mkpts_proj_rounded = (
                 mkpts_proj / int(1 / self.coarse_scale)
-            ).round() * int(1 / self.coarse_scale)
+            ).round() * int(
+                1 / self.coarse_scale
+            )  # TODO: scale problem exists!
             invalid = (
                 (mkpts_proj_rounded[:, 0] < 0)
                 | (mkpts_proj_rounded[:, 0] > query_img.shape[-1] - 1)
@@ -655,10 +746,13 @@ class GATsLoFTRDataset(Dataset):
         return data
 
     def __getitem__(self, index):
-        img_id = self.anns[index]
-
-        data = self.read_anno(img_id)
+        if not self.image_warp_adapt:
+            img_id = self.anns[index]
+            data = self.read_anno(img_id)
+        else:
+            img_id = self.anns[index // 2]
+            data = self.read_anno(img_id, image_warp_adapt=(index % 2) != 0)
         return data
 
     def __len__(self):
-        return len(self.anns)
+        return len(self.anns) if not self.image_warp_adapt else len(self.anns) * 2

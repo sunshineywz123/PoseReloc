@@ -21,10 +21,10 @@ from .inference_gats_loftr_worker import (
 args = {
     "ray": {
         "slurm": False,
-        "n_workers": 1,
+        "n_workers": 4,
         # "n_cpus_per_worker": 1,
         "n_cpus_per_worker": 1,
-        "n_gpus_per_worker": 1,
+        "n_gpus_per_worker": 0.25,
         "local_mode": False,
     },
 }

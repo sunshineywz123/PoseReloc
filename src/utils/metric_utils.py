@@ -209,6 +209,7 @@ def compute_query_pose_errors(
     mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
     query_K = data["query_intrinsic"].cpu().numpy()
     query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
+    # homo_warp = data['homo_warp'].cpu().numpy() if 'homo_warp' in data else None # B*3*3
 
     data.update({"R_errs": [], "t_errs": [], "inliers": []})
     data.update({"R_errs_c": [], "t_errs_c": [], "inliers_c": []})

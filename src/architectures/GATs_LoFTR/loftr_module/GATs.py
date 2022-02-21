@@ -12,8 +12,8 @@ class GraphAttentionLayer(nn.Module):
         dropout,
         alpha,
         concat=True,
-        include_self=True,
-        enable_feed_forward=False,
+        include_self=False,
+        enable_feed_forward=True,
         feed_forward_norm_method="instancenorm",
     ):
         super(GraphAttentionLayer, self).__init__()

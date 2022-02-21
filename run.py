@@ -429,6 +429,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
+        mean_descriptors_piller_only=False,
         feat_3d_name_suffix="_coarse",
         use_ray=cfg.use_local_ray,
         verbose=cfg.verbose
@@ -443,6 +444,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         merge_idxs,
         merge_xyzs,
         save_feature_for_each_image=False,
+        mean_descriptors_piller_only=False,
         use_ray=cfg.use_local_ray,
         verbose=cfg.verbose
     )

@@ -11,10 +11,10 @@ enable_loftr_post_refine: True
 
 overwrite_all: False
 overwrite_coarse: False
-overwrite_fine: False
+overwrite_fine: True
 
 use_global_ray: False
-use_local_ray: False
+use_local_ray: True
 debug: True
 
 ray:
@@ -154,7 +154,7 @@ sfm:
 post_process:
   filter_bbox_before_filter_track_length: True
 
-verbose: False
+verbose: True
 
 # feature:
 # method: 'average'
