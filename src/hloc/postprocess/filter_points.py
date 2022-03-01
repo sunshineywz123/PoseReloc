@@ -211,13 +211,14 @@ def filter_bbox(model_path, model_updated_save_path, box_path, box_trans_path=No
     write_model(cameras, images, points3D_keeped, model_updated_save_path, ext='.bin')
 
 # NOTE: Function duplicate! Because of old repo
-def filter_3d(model_path, track_length, box_path, box_trans_path=None):
+def filter_3d(model_path, track_length, box_path, box_trans_path=None, skip_bbox_filtering=False):
     """ Filter 3d points by tracke length and 3d box """
     points_model_path = osp.join(model_path, 'points3D.bin')
     points3D = read_write_model.read_points3d_binary(points_model_path)
    
     xyzs, points_idxs = filter_by_track_length(points3D, track_length)
-    xyzs, points_idxs = filter_by_3d_box(xyzs, points_idxs, box_path, box_trans_path)
+    if not skip_bbox_filtering:
+        xyzs, points_idxs = filter_by_3d_box(xyzs, points_idxs, box_path, box_trans_path)
 
     return xyzs, points_idxs
 

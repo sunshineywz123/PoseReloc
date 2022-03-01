@@ -83,6 +83,7 @@ class GraphAttentionLayer(nn.Module):
             h_prime = self.norm1(h_prime)
 
         return h_3d + h_prime
+        # return h_prime
 
     def _prepare_attentional_mechanism_input(
         self, wh_2d, wh_3d, num_leaf, include_self=False

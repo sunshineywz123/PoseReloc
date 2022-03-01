@@ -147,6 +147,7 @@ network:
   matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
+  down_ratio: 5
   gap: 3
   covis_num: 8
   track_length: 8

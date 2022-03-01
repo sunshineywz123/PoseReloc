@@ -2,6 +2,7 @@ from copy import deepcopy
 import json
 import os
 import os.path as osp
+import natsort
 
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 import glob
@@ -23,6 +24,7 @@ def parseScanData(cfg):
     """ Parse arkit scanning data"""
     # TODO: add arkit data processing
     pass
+
 
 def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
@@ -86,7 +88,9 @@ def sfm(cfg):
         pb = ProgressBar(len(data_dirs), "SfM Mapping begin...")
         all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
         sfm_worker_results = [
-            sfm_worker_ray_wrapper.remote(subset_data_dirs, cfg, worker_id=id, pba=pb.actor)
+            sfm_worker_ray_wrapper.remote(
+                subset_data_dirs, cfg, worker_id=id, pba=pb.actor
+            )
             for id, subset_data_dirs in enumerate(all_subsets)
         ]
         pb.print_until_done()
@@ -94,26 +98,35 @@ def sfm(cfg):
 
 
 def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
-    logger.info(f"Worker: {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects")
+    logger.info(
+        f"Worker: {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects"
+    )
     data_dirs = tqdm(data_dirs) if pba is None else data_dirs
     for data_dir in data_dirs:
         logger.info(f"Processing {data_dir}.")
         root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
 
         img_lists = []
+        ext_bag = [".png", ".jpg"]
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
-            img_lists += glob.glob(
-                str(Path(seq_dir)) + "/color/*.png", recursive=True
-            )
+            img_lists = os.listdir(osp.join(seq_dir, "color"))
+            img_lists = [
+                osp.join(seq_dir, "color", img_name)
+                for img_name in img_lists
+                if osp.splitext(img_name)[1] in ext_bag
+            ]
+            # img_lists += glob.glob(
+            #     str(Path(seq_dir)) + "/color/*.png", recursive=True
+            # )
 
         # ------------------ downsample ------------------
         down_img_lists = []
-        down_ratio = 5
+        down_ratio = cfg.sfm.down_ratio
         # down_ratio = 20
-        for img_file in img_lists:
+        for id, img_file in enumerate(natsort.natsorted(img_lists)):
             index = int(img_file.split("/")[-1].split(".")[0])
-            if index % down_ratio == 0:
+            if id % down_ratio == 0:
                 down_img_lists.append(img_file)
         img_lists = down_img_lists
         # -------------------------------------------------
@@ -133,7 +146,7 @@ def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
         logger.info(f"Finish Processing {data_dir}.")
         if pba is not None:
             pba.update.remote(1)
-    logger.info(f'Worker finish!')
+    logger.info(f"Worker finish!")
     return None
 
 
@@ -165,6 +178,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
         generate_empty,
         triangulation,
         pairs_from_poses,
+        pairs_exhaustive_all,
     )
     from src.NeuralSfM import coarse_match, post_optimization
 
@@ -205,12 +219,15 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
 
             extract_features.main(img_lists, feature_out, cfg)
             # pairs_from_covisibility.covis_from_index(img_lists, covis_pairs_out, num_matched=covis, gap=cfg.sfm.gap)
-            pairs_from_poses.covis_from_pose(
-                img_lists,
-                covis_pairs_out,
-                covis_num,
-                max_rotation=cfg.sfm.rotation_thresh,
-            )
+            if covis_num == -1:
+                pairs_exhaustive_all.exhaustive_all_pairs(img_lists, covis_pairs_out)
+            else:
+                pairs_from_poses.covis_from_pose(
+                    img_lists,
+                    covis_pairs_out,
+                    covis_num,
+                    max_rotation=cfg.sfm.rotation_thresh,
+                )
             match_features.main(
                 cfg, feature_out, covis_pairs_out, matches_out, vis_match=False
             )
@@ -260,12 +277,25 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 pairs_from_covisibility.covis_from_index(
                     img_lists, covis_pairs_out, num_matched=covis_num, gap=cfg.sfm.gap
                 )
+                if covis_num == -1:
+                    pairs_exhaustive_all.exhaustive_all_pairs(
+                        img_lists, covis_pairs_out
+                    )
+                else:
+                    pairs_from_covisibility.covis_from_index(
+                        img_lists,
+                        covis_pairs_out,
+                        num_matched=covis_num,
+                        gap=cfg.sfm.gap,
+                    )
+
                 coarse_match.loftr_coarse_matching(
                     img_lists,
                     covis_pairs_out,
                     feature_out,
                     matches_out,
                     use_ray=cfg.use_local_ray,
+                    verbose=cfg.verbose
                 )
                 generate_empty.generate_model(img_lists, empty_dir)
                 if cfg.use_global_ray:
@@ -279,7 +309,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         matches_out,
                         match_model=cfg.network.matching,
                         image_dir=None,
-                        verbose=cfg.verbose
+                        verbose=cfg.verbose,
                     )
                     results = ray.get(triangulation_results)
                 else:
@@ -292,7 +322,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         matches_out,
                         match_model=cfg.network.matching,
                         image_dir=None,
-                        verbose=cfg.verbose
+                        verbose=cfg.verbose,
                     )
 
                 if cfg.enable_loftr_post_refine:
@@ -326,7 +356,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         fine_match_use_ray=cfg.use_local_ray,
                         visualize_dir=visualize_dir,
                         vis3d_pth=vis3d_pth,
-                        verbose=cfg.verbose
+                        verbose=cfg.verbose,
                     )
                     if state == False:
                         logger.error("colmap coarse is empty!")
@@ -368,13 +398,21 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     deep_sfm_dir = osp.join(outputs_dir, "sfm_ws")
     model_path = osp.join(deep_sfm_dir, "model")
 
-    # TODO: add filter bbox and then filter track length
     if cfg.post_process.filter_bbox_before_filter_track_length:
         model_filted_bbox_path = osp.join(deep_sfm_dir, "model_filted_bbox")
         os.makedirs(model_filted_bbox_path, exist_ok=True)
-        filter_points.filter_bbox(
-            model_path, model_filted_bbox_path, bbox_path, box_trans_path=trans_box_path
-        )  # crop 3d points by 3d box and save as colmap format
+        if not cfg.post_process.skip_bbox_filter:
+            filter_points.filter_bbox(
+                model_path,
+                model_filted_bbox_path,
+                bbox_path,
+                box_trans_path=trans_box_path,
+            )  # crop 3d points by 3d box and save as colmap format
+        else:
+            os.system(f"rm -rf {model_filted_bbox_path}")
+            os.system(
+                f"cp -r {model_path} {model_filted_bbox_path}"
+            )
 
         # select track length to limit the number of 3d points below thres.
         track_length, points_count_list = filter_tkl.get_tkl(
@@ -401,7 +439,11 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         )  # visualization only
 
         xyzs, points_ids = filter_points.filter_3d(
-            model_path, track_length, bbox_path, box_trans_path=trans_box_path
+            model_path,
+            track_length,
+            bbox_path,
+            box_trans_path=trans_box_path,
+            skip_bbox_filtering=cfg.post_process.skip_bbox_filter,
         )  # crop 3d points by 3d box and track length
 
     merge_xyzs, merge_idxs = filter_points.merge(
@@ -410,6 +452,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
 
     if cfg.debug:
         import open3d as o3d
+
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(merge_xyzs)
         out_file = osp.join(outputs_dir, "box_filter.ply")
@@ -432,7 +475,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         mean_descriptors_piller_only=False,
         feat_3d_name_suffix="_coarse",
         use_ray=cfg.use_local_ray,
-        verbose=cfg.verbose
+        verbose=cfg.verbose,
     )
 
     # Save loftr fine keypoints and features:
@@ -446,7 +489,7 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
         save_feature_for_each_image=False,
         mean_descriptors_piller_only=False,
         use_ray=cfg.use_local_ray,
-        verbose=cfg.verbose
+        verbose=cfg.verbose,
     )
 
 

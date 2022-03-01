@@ -2,6 +2,7 @@ import sys
 sys.path.insert(0, '/home/hexingyi/code/PoseReloc')
 
 import os
+import os.path as osp
 import cv2
 import json
 import tqdm
@@ -14,13 +15,15 @@ from pathlib import Path
 from transforms3d import affines, quaternions
 
 def get_gt_pose_path_by_color(color_path):
+    ext = osp.splitext(color_path)[1]
     return color_path.replace('/color/', '/poses_ba/').replace(
-        '.png', '.txt'
+        ext, '.txt'
     )
 
 def get_intrin_path_by_color(color_path):
+    ext = osp.splitext(color_path)[1]
     return color_path.replace('/color/', '/intrin_ba/').replace(
-        '.png', '.txt'
+        ext, '.txt'
     )
 
 def get_test_seq_path(obj_root, last_n_seq_as_test=1):

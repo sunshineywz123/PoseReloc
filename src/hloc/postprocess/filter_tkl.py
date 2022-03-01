@@ -34,12 +34,14 @@ def get_points_count(points3D, show=False):
     return count_dict, points_count_list
 
 
-def get_tkl(model_path, thres, show=False):
+def get_tkl(model_path, thres, percent_thres=1.0, show=False):
     """ Get the track length value which can limit the number of 3d points below thres"""
     from src.utils.colmap.read_write_model import read_model
 
     cameras, images, points3D = read_model(model_path, ext='.bin')
     count_dict, points_count_list = get_points_count(points3D, show)
+    points3D_num = len(points3D)
+    thres = min(points3D_num * percent_thres, thres)
     
     ret_points = len(points3D.keys())
     count_keys = np.array(list(count_dict.keys())) 

@@ -5,5 +5,6 @@ from . import (
     generate_empty,
     triangulation,
     pairs_from_poses,
+    pairs_exhaustive_all
 )
 
