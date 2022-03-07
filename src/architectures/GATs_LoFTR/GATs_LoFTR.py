@@ -165,13 +165,14 @@ class GATs_LoFTR(nn.Module):
                 else data["descriptors3d_db"] if "descriptors3d_coarse_db" not in data else data['descriptors3d_coarse_db']
             )
             desc2d_db = data["descriptors2d_db"] if 'descriptors2d_coarse_db' not in data else data['descriptors2d_coarse_db']
+            desc2d_db_pad_mask = data['desc2d_db_padding_mask'] if 'descriptors2d_coarse_db' not in data else data['desc2d_coarse_db_padding_mask']
 
             query_mask = None
             if "query_image_mask" in data:
                 query_mask = data["query_image_mask"].flatten(-2)
             # NOTE: feat_c0 & feat_c1 are conv features residually modulated by LoFTR: x + sum_i(self_i + cross_i)
             desc3d_db, query_feat_c = self.loftr_coarse(
-                desc3d_db, desc2d_db, query_feat_c, data, query_mask=query_mask, keypoints3D=kpts3d
+                desc3d_db, desc2d_db, query_feat_c, data, query_mask=query_mask, keypoints3D=kpts3d, desc2d_db_pad_mask=desc2d_db_pad_mask
             )
             # logger.info('Profiling LoFTR model...')
             # torch_speed_test(self.loftr_coarse, [feat_c0, feat_c1, mask_c0, mask_c1], model_name='loftr_coarse')

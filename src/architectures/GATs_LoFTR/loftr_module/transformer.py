@@ -135,9 +135,12 @@ class LocalFeatureTransformer(nn.Module):
                             feed_forward_norm_method=config["GATs_feed_forward_norm_method"],
                         )
                     )
-                elif self.gats_type == 'loftr_attention':
+                elif self.gats_type in ['loftr_attention', 'loftr_attention_self']:
                     self.gats_include_self = config['GATs_include_self']
                     self.gats_feat2d_db_update = config['GATs_feat2d_db_update']
+                    self.gats_enable_leaf_feat_padding_mask = config['GATs_enable_leaf_feat_padding_mask']
+                    if self.gats_type == 'loftr_attention_self':
+                        self.gats_use_mean_as_3D_feat = config['GATs_use_mean_as_3D_feat']
                     module_list.append(copy.deepcopy(encoder_layer))
                 else:
                     raise NotImplementedError
@@ -170,7 +173,7 @@ class LocalFeatureTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, desc3d_db, desc2d_db, desc2d_query, data, query_mask=None, keypoints3D=None):
+    def forward(self, desc3d_db, desc2d_db, desc2d_query, data, query_mask=None, keypoints3D=None, desc2d_db_pad_mask=None):
         """
         Args:
            desc3d_db (torch.Tensor): [N, C, L] 
@@ -178,6 +181,7 @@ class LocalFeatureTransformer(nn.Module):
            desc2d_query (torch.Tensor): [N, P, C]
            query_mask (torch.Tensor): [N, P]
            keypoints3D (torch.Tensor): [N, L, 3]
+           desc2d_db_pad_mask (torch.Tensor): [N, M]
         """
         self.device = desc3d_db.device
 
@@ -198,17 +202,50 @@ class LocalFeatureTransformer(nn.Module):
                     if self.gats_include_self:
                         raise NotImplementedError
                         desc2d_db = torch.cat([desc3d_db, desc2d_db], dim=-2) # [(B*N1), 1+num_leaf, dim]
-                    
-                    src0, src1 = desc3d_db, desc2d_db
+
+                    if self.gats_enable_leaf_feat_padding_mask and desc2d_db_pad_mask is not None:
+                        leaf_feat_padding_mask = desc2d_db_pad_mask.reshape(-1, num_leaf)
+                    else:
+                        leaf_feat_padding_mask = None
                     
                     # Forward
-                    desc3d_db = layer(desc3d_db, src1)
+                    src0, src1 = desc3d_db, desc2d_db
+                    desc3d_db = layer(desc3d_db, src1, source_mask=leaf_feat_padding_mask)
                     if self.gats_feat2d_db_update:
-                        desc2d_db = layer(desc2d_db, src0)
+                        desc2d_db = layer(desc2d_db, src0, x_mask=leaf_feat_padding_mask)
 
                     # Reformat
                     desc3d_db = desc3d_db.view(b, n1, dim)
                     desc2d_db = desc2d_db.view(b, n2, dim)
+                elif self.gats_type == 'loftr_attention_self':
+                    # Change data format
+                    b, n1, dim = desc3d_db.shape
+                    b, n2, dim = desc2d_db.shape
+                    num_leaf = int(n2 / n1)
+                    desc2d_db = desc2d_db.reshape(-1, num_leaf, dim) # [(B*N2), n_leaf, dim]
+                    desc3d_db = desc3d_db.reshape(-1, 1, dim) # [(B*N1), 1, dim]
+
+                    if self.gats_enable_leaf_feat_padding_mask and desc2d_db_pad_mask is not None:
+                        leaf_feat_padding_mask = desc2d_db_pad_mask.reshape(-1, num_leaf)
+                        leaf_feat_padding_mask = torch.cat([torch.ones((desc2d_db.shape[0],1), dtype=torch.bool, device=desc2d_db.device)], dim=-1) # [(B*N), 1+n_leaf]
+                    else:
+                        leaf_feat_padding_mask = None
+
+                    # Forward
+                    feat_concat = torch.cat([desc3d_db, desc2d_db], dim=1) # [(B*N), 1+n_leaf, dim]
+                    feat_concat = layer(feat_concat, feat_concat, leaf_feat_padding_mask, leaf_feat_padding_mask) # [(B*N), 1+n_leaf, dim]
+
+                    # Split:
+                    if self.gats_use_mean_as_3D_feat:
+                        desc3d_db = torch.mean(feat_concat, dim=1, keepdim=True)
+                    else:
+                        desc3d_db = feat_concat[:,:1,:]  # [(B*N), 1, dim]
+                    if self.gats_feat2d_db_update:
+                        desc2d_db = feat_concat[:,1:, :] # [(B*N), n_leaf, dim]
+
+                    # Reformat:
+                    desc3d_db = desc3d_db.reshape(b, n1, dim)
+                    desc2d_db = desc2d_db.reshape(b, n2, dim)
                 else:
                     raise NotImplementedError
             elif name == "Pe":

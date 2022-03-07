@@ -190,6 +190,7 @@ class GATs_loftr_inference_dataset(Dataset):
 
         data = {}
 
+        desc2d_db_padding_mask = torch.sum(self.clt_descriptors2d==1, dim=0) != self.clt_descriptors2d.shape[0]
         data.update(
             {
                 "keypoints3d": self.keypoints3d[None],  # [1, n2, 3]
@@ -197,6 +198,7 @@ class GATs_loftr_inference_dataset(Dataset):
                 "descriptors2d_db": self.clt_descriptors2d[
                     None
                 ],  # [1, dim, n2 * num_leaf]
+                "desc2d_db_padding_mask": desc2d_db_padding_mask, # [n2*num_leaf]
                 "scores3d_db": self.avg_scores3d.squeeze(1)[None],  # [1, n2]
                 "scores2d_db": self.clt_descriptors2d.squeeze(1)[
                     None
@@ -208,9 +210,11 @@ class GATs_loftr_inference_dataset(Dataset):
         )
 
         if self.avg_coarse_descriptors3d is not None:
+            desc2d_coarse_db_padding_mask = torch.sum(self.clt_coarse_descriptors2d==1, dim=0) != self.clt_coarse_descriptors2d.shape[0]
             data.update({
                 "descriptors3d_coarse_db": self.avg_coarse_descriptors3d[None],  # [1, dim, n2]
                 "descriptors2d_coarse_db": self.clt_coarse_descriptors2d[None],  # [1, dim, n2 * num_leaf]
+                "desc2d_coarse_db_padding_mask": desc2d_coarse_db_padding_mask, # [n2*num_leaf]
             })
 
         if query_img_mask is not None:
