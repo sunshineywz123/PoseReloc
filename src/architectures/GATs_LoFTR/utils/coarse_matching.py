@@ -143,12 +143,13 @@ class CoarseMatching(nn.Module):
             sim_matrix = (
                 torch.einsum("nlc,nsc->nls", feat_db_3d, feat_query) / (self.temperature() + 1e-4)
             )
-            # if mask_query is not None:
-            #     valid_sim_mask = mask_c0[..., None] * mask_c1[:, None]
-            #     _inf = torch.zeros_like(sim_matrix)
-            #     _inf[~valid_sim_mask.bool()] = -1e9
-            #     del valid_sim_mask
-            #     sim_matrix += _inf
+            if mask_query is not None:
+                fake_mask3D = torch.ones((N, L), dtype=torch.bool, device=mask_query.device)
+                valid_sim_mask = fake_mask3D[..., None] * mask_query[:, None]
+                _inf = torch.zeros_like(sim_matrix)
+                _inf[~valid_sim_mask.bool()] = -1e9
+                del valid_sim_mask
+                sim_matrix += _inf
             # with self.profiler.record_function('LoFTR/coarse-matching/dual-softmax'):
             conf_matrix = F.softmax(sim_matrix, 1) * F.softmax(sim_matrix, 2)
 

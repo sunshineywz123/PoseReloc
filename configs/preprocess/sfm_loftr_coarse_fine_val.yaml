@@ -9,9 +9,9 @@ match_type: "softmax"
 redo: True
 enable_loftr_post_refine: True
 
-overwrite_all: True
-overwrite_coarse: True
-overwrite_fine: True
+overwrite_all: False
+overwrite_coarse: False
+overwrite_fine: False
 
 use_global_ray: False
 use_local_ray: False
@@ -126,9 +126,12 @@ dataset:
     # - '0591'
 
     # # Hard case:
+    # - "0600"
     # - '0601'
     # - '0603'
     # - '0604'
+    - '0606'
+    - '0607'
     # - '0626'
     # - '0627'
     # - '0628'
@@ -136,7 +139,7 @@ dataset:
     # - '0630'
     # - '0631'
 
-    - '0600'
+    # - '0600'
     # - '0602'
     # - '0606'
     # - '0607'
@@ -146,7 +149,7 @@ dataset:
     # - '0612'
     # - '0613'
     # - '0614'
-    - '0615'
+    # - '0615'
     # - '0616'
     # - '0617'
 
@@ -158,10 +161,10 @@ dataset:
     # - '0623'
     # - '0624'
     # - '0625'
-    - '0633'
-    - '0634'
-    - '0635'
-    - '0636'
+    # - '0633'
+    # - '0634'
+    # - '0635'
+    # - '0636'
     # - '0637'
     # - '0638'
   exception_obj_names:
@@ -185,6 +188,7 @@ sfm:
 
 post_process:
   filter_bbox_before_filter_track_length: True
+  skip_bbox_filter: False
 
 verbose: False
 

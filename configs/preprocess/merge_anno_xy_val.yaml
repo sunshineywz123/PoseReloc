@@ -12,9 +12,9 @@ merge_output_dir: '/nas/users/hexingyi/onepose_merged'
 
 names:
     # val set
-    - '0408'
-    # - '0618'
-    # - '0616'
+    # - '0408'
+    - '0618'
+    - '0616'
     # - '0456'
     # - '0499'
     # - '0506'

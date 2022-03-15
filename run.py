@@ -2,10 +2,10 @@ from copy import deepcopy
 import json
 import os
 import os.path as osp
+from shutil import copyfile, rmtree
 import natsort
 
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
-import glob
 import hydra
 import math
 import ray
@@ -16,7 +16,9 @@ from tqdm import tqdm
 from loguru import logger
 from pathlib import Path
 from omegaconf import DictConfig
+import subprocess
 
+from src.utils.colmap.read_write_model import read_model, write_model
 from src.utils.ray_utils import ProgressBar, chunks
 
 
@@ -25,6 +27,173 @@ def parseScanData(cfg):
     # TODO: add arkit data processing
     pass
 
+
+def mvs(cfg):
+    """ Sparse reconstruction and postprocess (on 3d points and features)"""
+    data_dirs = cfg.dataset.data_dir
+
+    if isinstance(data_dirs, str):
+        # Parse object directory
+        # assert isinstance(data_dirs, str)
+        num_seq = cfg.dataset.num_seq
+        exception_obj_name_list = cfg.dataset.exception_obj_names
+        top_k_obj = cfg.dataset.top_k_obj
+        if num_seq is not None:
+            assert num_seq > 0
+        logger.info(
+            f"Process all objects in directory:{data_dirs}, process: {num_seq if num_seq is not None else 'all'} sequences"
+        )
+
+        object_names = os.listdir(data_dirs)[:top_k_obj]
+        data_dirs_list = []
+
+        if cfg.dataset.ids is not None:
+            # Use data ids
+            id2full_name = {name[:4]: name for name in object_names if "-" in name}
+            object_names = [
+                id2full_name[id] for id in cfg.dataset.ids if id in id2full_name
+            ]
+
+        for object_name in object_names:
+            if "-" not in object_name:
+                continue
+
+            if object_name in exception_obj_name_list:
+                continue
+            sequence_names = sorted(os.listdir(osp.join(data_dirs, object_name)))
+            sequence_names = [
+                sequence_name
+                for sequence_name in sequence_names
+                if "-" in sequence_name
+            ][:num_seq]
+            data_dirs_list.append(
+                " ".join([osp.join(data_dirs, object_name)] + sequence_names)
+            )
+
+        data_dirs = data_dirs_list
+
+    if not cfg.use_global_ray:
+        mvs_worker(data_dirs, cfg)
+    else:
+        # Init ray
+        if cfg.ray.slurm:
+            ray.init(address=os.environ["ip_head"])
+        else:
+            ray.init(
+                num_cpus=math.ceil(cfg.ray.n_workers * cfg.ray.n_cpus_per_worker),
+                num_gpus=math.ceil(cfg.ray.n_workers * cfg.ray.n_gpus_per_worker),
+                local_mode=cfg.ray.local_mode,
+                ignore_reinit_error=True,
+            )
+        logger.info(f"Use ray for MVS, total: {cfg.ray.n_workers} workers")
+
+        pb = ProgressBar(len(data_dirs), "MVS begin...")
+        all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
+        sfm_worker_results = [
+            mvs_worker_ray_wrapper.remote(
+                subset_data_dirs, cfg, worker_id=id, pba=pb.actor
+            )
+            for id, subset_data_dirs in enumerate(all_subsets)
+        ]
+        pb.print_until_done()
+        results = ray.get(sfm_worker_results)
+
+
+def mvs_worker(data_dirs, cfg, worker_id=0, pba=None):
+    logger.info(
+        f"Worker: {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects"
+    )
+    data_dirs = tqdm(data_dirs) if pba is None else data_dirs
+    for data_dir in data_dirs:
+        logger.info(f"Processing {data_dir}.")
+        root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
+
+        obj_name = root_dir.split("/")[-1]
+        outputs_dir_root = cfg.dataset.outputs_dir
+        sfm_dir_root = cfg.dataset.sfm_dir
+
+        mvs_core(cfg, outputs_dir_root, sfm_dir_root, obj_name)
+
+        logger.info(f"Finish Processing {data_dir}.")
+        if pba is not None:
+            pba.update.remote(1)
+    logger.info(f"Worker finish!")
+    return None
+
+
+@ray.remote  # release gpu after finishing
+def mvs_worker_ray_wrapper(*args, **kwargs):
+    return mvs_worker(*args, **kwargs)
+
+def mvs_core(cfg, outputs_dir_root, sfm_dir_root, obj_name):
+    outputs_dir = osp.join(
+        outputs_dir_root,
+        "outputs_"
+        + cfg.match_type
+        + "_"
+        + cfg.network.detection
+        + "_"
+        + cfg.network.matching,
+        obj_name,
+    )
+    sfm_dir = osp.join(
+        sfm_dir_root,
+        "outputs_"
+        + cfg.match_type
+        + "_"
+        + cfg.network.detection
+        + "_"
+        + cfg.network.matching,
+        obj_name,
+    )
+
+    Path(outputs_dir).mkdir(exist_ok=True, parents=True)
+
+    # Make colmap friendly format:
+    temp_image_path = osp.join(outputs_dir, "temp", "images")
+    temp_model_path = osp.join(outputs_dir, "temp", "model")
+    Path(temp_image_path).mkdir(exist_ok=True, parents=True)
+    Path(temp_model_path).mkdir(exist_ok=True, parents=True)
+    
+    try:
+        # sfm_model_path = osp.join(sfm_dir, "sfm_ws", "model")
+        sfm_model_path = osp.join(sfm_dir, "sfm_ws", "model_filted_bbox")
+        assert osp.exists(sfm_model_path), f"sfm_model_path:{sfm_model_path} not exists!"
+        cameras, images, points3D = read_model(sfm_model_path)
+        for img_id, image in images.items():
+            image_path = image.name
+            assert osp.exists(image_path)
+            copyfile(image_path, osp.join(temp_image_path, image_path.replace('/', "__")))
+            images[img_id] = image._replace(name=image_path.replace('/', "__"))
+        write_model(cameras, images, points3D, path=temp_model_path, ext='.txt')
+
+        # COLMAP dense
+        dense_dir = osp.join(outputs_dir, "dense")
+        os.makedirs(dense_dir, exist_ok=True)
+        print("Image undistorter begin")
+        cmd = ["colmap", "image_undistorter"]
+        cmd += ["--image_path", temp_image_path]
+        cmd += ["--input_path", temp_model_path]
+        cmd += ["--output_path", dense_dir]
+        subprocess.run(cmd)
+
+        print("Patch match stereo begin")
+        cmd = ["colmap", "patch_match_stereo"]
+        cmd += ["--workspace_path", dense_dir]
+        subprocess.run(cmd)
+
+        print("Stereo fusion begin")
+        cmd = ["colmap", "stereo_fusion"]
+        cmd += ["--workspace_path", dense_dir]
+        cmd += ["--output_path", osp.join(dense_dir, "fused.ply")]
+        subprocess.run(cmd)
+
+        rmtree(osp.join(outputs_dir, "temp"))
+    except Exception as err:
+        rmtree(osp.join(outputs_dir, "temp"))
+        rmtree(osp.join(dense_dir))
+        print(err)
+        raise RuntimeError("Parts of colmap runs returns failed state!")
 
 def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
