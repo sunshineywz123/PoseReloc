@@ -279,10 +279,10 @@ def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
         ext_bag = [".png", ".jpg"]
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
-            img_lists = os.listdir(osp.join(seq_dir, "color"))
-            img_lists = [
+            img_name_lists = os.listdir(osp.join(seq_dir, "color"))
+            img_lists += [
                 osp.join(seq_dir, "color", img_name)
-                for img_name in img_lists
+                for img_name in img_name_lists
                 if osp.splitext(img_name)[1] in ext_bag
             ]
             # img_lists += glob.glob(
