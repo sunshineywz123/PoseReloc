@@ -12,6 +12,7 @@ import time
 import os.path as osp
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset
+
 # import open3d as o3d
 from scipy import stats
 from kornia import homography_warp, normalize_homography, normal_transform_pixel
@@ -55,7 +56,7 @@ class GATsLoFTRDataset(Dataset):
         self.anns = self.anns[::sample_inverval]
 
         self.load_pose_gt = load_pose_gt
-        self.load_img_mask = True
+        self.load_img_mask = False
         self.image_warp_adapt = image_warp_adapt
 
         # 3D point cloud part
@@ -495,27 +496,46 @@ class GATsLoFTRDataset(Dataset):
         data = {}
 
         if self.load_img_mask:
-            try:
-                img_ext = osp.splitext(color_path)[1]
-                reproj_box3d = np.loadtxt(color_path.replace("/color/", "/reproj_box/").replace(img_ext, ".txt")).astype(int)
-                x0, y0 = reproj_box3d.min(0)
-                x1, y1 = reproj_box3d.max(0)
+            img_ext = osp.splitext(color_path)[1]
+            reproj_box3d = np.loadtxt(
+                color_path.replace("/color/", "/reproj_box/").replace(
+                    img_ext, ".txt"
+                )
+            ).astype(int)
+            x0, y0 = reproj_box3d.min(0)
+            x1, y1 = reproj_box3d.max(0)
 
-                original_img = cv2.imread(color_path.replace('/color/', '/color_full/'))
-                origin_h, origin_w = original_img.shape[:2] # H, W before crop
-                original_img_fake = np.ones((origin_h, origin_w)) # All white
-                box = np.array([x0, y0, x1, y1])
-                resize_shape = np.array([y1 - y0, x1 - x0])
-                image_crop, _ = data_utils.get_image_crop_resize(original_img_fake, box, resize_shape)
+            original_img = cv2.imread(color_path.replace("/color/", "/color_full/"))
+            assert (
+                original_img is not None
+            ), f"color full path: {color_path.replace('/color/', '/color_full/')} not exists"
+            origin_h, origin_w = original_img.shape[:2]  # H, W before crop
+            original_img_fake = np.ones((origin_h, origin_w))  # All white
+            box = np.array([x0, y0, x1, y1])
+            resize_shape = np.array([y1 - y0, x1 - x0])
+            image_crop, _ = data_utils.get_image_crop_resize(
+                original_img_fake, box, resize_shape
+            )
 
-                box_new = np.array([0, 0, x1-x0, y1-y0])  
-                resize_shape = np.array([self.h_origin, self.w_origin])
-                image_crop, _ = data_utils.get_image_crop_resize(image_crop, box_new, resize_shape)
-                crop_border_mask = image_crop != 0
-                crop_border_mask_rescaled = F.interpolate(torch.from_numpy(crop_border_mask)[None][None].to(torch.float), scale_factor=self.coarse_scale).squeeze().to(torch.bool) # H_coarse * W_coarse
-                query_img_mask = crop_border_mask_rescaled if query_img_mask is None else query_img_mask & crop_border_mask_rescaled
-            except:
-                crop_border_mask = None
+            box_new = np.array([0, 0, x1 - x0, y1 - y0])
+            resize_shape = np.array([self.h_origin, self.w_origin])
+            image_crop, _ = data_utils.get_image_crop_resize(
+                image_crop, box_new, resize_shape
+            )
+            crop_border_mask = image_crop != 0
+            crop_border_mask_rescaled = (
+                F.interpolate(
+                    torch.from_numpy(crop_border_mask)[None][None].to(torch.float),
+                    scale_factor=self.coarse_scale,
+                )
+                .squeeze()
+                .to(torch.bool)
+            )  # H_coarse * W_coarse
+            query_img_mask = (
+                crop_border_mask_rescaled
+                if query_img_mask is None
+                else query_img_mask & crop_border_mask_rescaled
+            )
 
         if query_img_mask is not None:
             data.update({"query_image_mask": query_img_mask})  # [h*w]
@@ -602,14 +622,16 @@ class GATsLoFTRDataset(Dataset):
             load_3d_coarse=self.load_3d_coarse,
         )
 
-        desc2d_db_padding_mask = torch.sum(clt_descriptors2d==1, dim=0) != clt_descriptors2d.shape[0]
+        desc2d_db_padding_mask = (
+            torch.sum(clt_descriptors2d == 1, dim=0) != clt_descriptors2d.shape[0]
+        )
 
         data.update(
             {
                 "keypoints3d": keypoints3d,  # [n2, 3]
                 "descriptors3d_db": avg_descriptors3d,  # [dim, n2]
                 "descriptors2d_db": clt_descriptors2d,  # [dim, n2 * num_leaf]
-                "desc2d_db_padding_mask": desc2d_db_padding_mask, # [n2*num_leaf]
+                "desc2d_db_padding_mask": desc2d_db_padding_mask,  # [n2*num_leaf]
                 "scores3d_db": avg_scores3d.squeeze(1),  # [n2]
                 "scores2d_db": clt_scores2d.squeeze(1),  # [n2 * num_leaf]
                 "query_image": query_img,  # [1*h*w]
@@ -618,12 +640,15 @@ class GATsLoFTRDataset(Dataset):
         )
 
         if avg_coarse_descriptors3d is not None:
-            desc2d_coarse_db_padding_mask = torch.sum(clt_coarse_descriptors2d==1, dim=0) != clt_coarse_descriptors2d.shape[0]
+            desc2d_coarse_db_padding_mask = (
+                torch.sum(clt_coarse_descriptors2d == 1, dim=0)
+                != clt_coarse_descriptors2d.shape[0]
+            )
             data.update(
                 {
                     "descriptors3d_coarse_db": avg_coarse_descriptors3d,  # [dim, n2]
                     "descriptors2d_coarse_db": clt_coarse_descriptors2d,  # [dim, n2 * num_leaf]
-                    "desc2d_coarse_db_padding_mask": desc2d_coarse_db_padding_mask, # [n2*num_leaf]
+                    "desc2d_coarse_db_padding_mask": desc2d_coarse_db_padding_mask,  # [n2*num_leaf]
                 }
             )
 
