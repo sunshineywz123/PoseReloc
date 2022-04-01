@@ -3,6 +3,8 @@ import os
 import os.path as osp
 import torch
 import numpy as np
+import cv2
+import torch.nn.functional as F
 from torch.utils.data import Dataset
 
 from .utils import read_grayscale
@@ -22,6 +24,7 @@ class GATs_loftr_inference_dataset(Dataset):
         df=8,
         pad=True,
         load_pose_gt=True,
+        coarse_scale=1/8,
         n_images=None,  # Used for debug
     ) -> None:
         super().__init__()
@@ -39,6 +42,8 @@ class GATs_loftr_inference_dataset(Dataset):
         self.img_resize = img_resize
         self.df = df
         self.load_pose_gt = load_pose_gt
+        self.load_img_mask=False
+        self.coarse_scale = coarse_scale
 
         # Load pointcloud and point feature
         avg_anno_3d_path, clt_anno_3d_path, idxs_path = self.get_default_paths(sfm_dir)
@@ -187,6 +192,55 @@ class GATs_loftr_inference_dataset(Dataset):
             ret_pad_mask=True,
             df=self.df,
         )
+        self.h_origin = query_img.shape[1] * query_img_scale[0]
+        self.w_origin = query_img.shape[2] * query_img_scale[1]
+        self.query_img_scale = query_img_scale
+        self.h_i = query_img.shape[1]
+        self.w_i = query_img.shape[2]
+        self.h_c = int(self.h_i * self.coarse_scale)
+        self.w_c = int(self.w_i * self.coarse_scale)
+
+        if self.load_img_mask:
+            img_ext = osp.splitext(image_path)[1]
+            reproj_box3d = np.loadtxt(
+                image_path.replace("/color/", "/reproj_box/").replace(
+                    img_ext, ".txt"
+                )
+            ).astype(int)
+            x0, y0 = reproj_box3d.min(0)
+            x1, y1 = reproj_box3d.max(0)
+
+            original_img = cv2.imread(image_path.replace("/color/", "/color_full/"))
+            assert (
+                original_img is not None
+            ), f"color full path: {image_path.replace('/color/', '/color_full/')} not exists"
+            origin_h, origin_w = original_img.shape[:2]  # H, W before crop
+            original_img_fake = np.ones((origin_h, origin_w))  # All white
+            box = np.array([x0, y0, x1, y1])
+            resize_shape = np.array([y1 - y0, x1 - x0])
+            image_crop, _ = data_utils.get_image_crop_resize(
+                original_img_fake, box, resize_shape
+            )
+
+            box_new = np.array([0, 0, x1 - x0, y1 - y0])
+            resize_shape = np.array([self.h_origin, self.w_origin])
+            image_crop, _ = data_utils.get_image_crop_resize(
+                image_crop, box_new, resize_shape
+            )
+            crop_border_mask = image_crop != 0
+            crop_border_mask_rescaled = (
+                F.interpolate(
+                    torch.from_numpy(crop_border_mask)[None][None].to(torch.float),
+                    scale_factor=self.coarse_scale,
+                )
+                .squeeze()
+                .to(torch.bool)
+            )  # H_coarse * W_coarse
+            query_img_mask = (
+                crop_border_mask_rescaled
+                if query_img_mask is None
+                else query_img_mask & crop_border_mask_rescaled
+            )
 
         data = {}
 

@@ -34,7 +34,7 @@ from src.utils.torch_utils import torch_speed_test
 
 
 class LoFTR_SfM(nn.Module):
-    def __init__(self, config={}, profiler=None, debug=False):
+    def __init__(self, config={}, profiler=None, debug=False, extract_coarse_feats_mode=False):
         super().__init__()
         # Misc
         self.config = config
@@ -106,6 +106,10 @@ class LoFTR_SfM(nn.Module):
                 )
             ):
                 param.requires_grad = False
+        
+        self.extract_coarse_feats_mode = extract_coarse_feats_mode # Skip fine matching and use coarse mkpts to extract coarse fine features
+        if self.extract_coarse_feats_mode:
+            logger.warning("extract coarse features mode is open! skip fine matching!")
 
     def forward(self, data, **kwargs):
         """ 
@@ -115,6 +119,7 @@ class LoFTR_SfM(nn.Module):
                 'image1': (torch.Tensor): (N, 1, H, W)
                 'mask0'(optional) : (torch.Tensor): (N, H, W) '0' indicates a padded position
                 'mask1'(optional) : (torch.Tensor): (N, H, W)
+                'extract_feature_mode' : used for neural_sfm no refinement ablation experiment skip fine matching and use coarse keypoint to extract features 
             }
         """
         # TODO: this should be removed in the future @zehong
@@ -260,26 +265,29 @@ class LoFTR_SfM(nn.Module):
                     feat_f0_unfold, feat_f1_unfold
                 )
 
-        # 5. match fine-level
-        with self.profiler.record_function("LoFTR/fine-matching"):
-            # TODO: add `cfg.FINE_MATCHING.ENABLE`
-            self.fine_matching(feat_f0_unfold, feat_f1_unfold, data)
+        if not self.extract_coarse_feats_mode:
+            # 5. match fine-level
+            with self.profiler.record_function("LoFTR/fine-matching"):
+                # TODO: add `cfg.FINE_MATCHING.ENABLE`
+                self.fine_matching(feat_f0_unfold, feat_f1_unfold, data)
 
-        # 6. (optional) fine-level rejection (with post loftr local feature)
-        with self.profiler.record_function("LoFTR/fine-rejection"):
-            feat_f0_rej, feat_f1_rej = (
-                (feat_f0_unfold, feat_f1_unfold)
-                if self.config["loftr_fine"]["rejector"]["post_loftr"]
-                else (feat_f0_raw, feat_f1_raw)
+            # 6. (optional) fine-level rejection (with post loftr local feature)
+            with self.profiler.record_function("LoFTR/fine-rejection"):
+                feat_f0_rej, feat_f1_rej = (
+                    (feat_f0_unfold, feat_f1_unfold)
+                    if self.config["loftr_fine"]["rejector"]["post_loftr"]
+                    else (feat_f0_raw, feat_f1_raw)
+                )
+                self.fine_rejector(feat_f0_rej, feat_f1_rej, data)
+
+            # 7. (optional) Guided matching of existing detections
+            with self.profiler.record_function("LoFTR/guided-matching"):
+                self.guided_matching(data)
+        else:
+            data.update(
+                {"mkpts0_f": data["mkpts0_c"], "mkpts1_f": data["mkpts1_c"],}
             )
-            self.fine_rejector(feat_f0_rej, feat_f1_rej, data)
 
-        # 7. (optional) Guided matching of existing detections
-        with self.profiler.record_function("LoFTR/guided-matching"):
-            self.guided_matching(data)
-
-        # Pose regression
-        # TODO: remove to a independent function in future
         with self.profiler.record_function("SfM pose refinement"):
             # data.update({"feats0":feats0, "feats1":feats1}) # backbone features ['coarse', 'fine']
             # data.update({"feat_c0": feat_c0, "feat_c1": feat_c1}) # coarse feature after loftr feature coarse

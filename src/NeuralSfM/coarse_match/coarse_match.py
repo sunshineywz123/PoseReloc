@@ -13,9 +13,9 @@ from .coarse_match_worker import *
 from ..dataset.loftr_coarse_dataset import LoftrCoarseDataset
 
 cfgs = {
-    # "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
+    "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
     # "data": {"img_resize": 1600, "df": 8, "shuffle": True}, # For Inloc
-    "data": {"img_resize": 640, "df": 8, "shuffle": True}, # For Scannet
+    # "data": {"img_resize": 640, "df": 8, "shuffle": True}, # For Scannet
     "matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
@@ -35,10 +35,10 @@ cfgs = {
     "coarse_match_debug": True,
     "ray": {
         "slurm": False,
-        "n_workers": 8, # 4 for onepose
+        "n_workers": 4, # 4 for onepose
         # "n_cpus_per_worker": 1,
         "n_cpus_per_worker": 1,
-        "n_gpus_per_worker": 1, # 0.25 for onepose
+        "n_gpus_per_worker": 0.25, # 0.25 for onepose
         "local_mode": False,
     },
 }

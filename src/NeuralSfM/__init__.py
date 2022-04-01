@@ -1,3 +1,3 @@
 from .coarse_match import coarse_match
-from .post_optimization import post_optimization
+from .post_optimization import post_optimization, extract_coarse_fine_features
 from .neuralSfM_pipeline import neuralSfM

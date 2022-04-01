@@ -349,7 +349,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
         pairs_from_poses,
         pairs_exhaustive_all,
     )
-    from src.NeuralSfM import coarse_match, post_optimization
+    from src.NeuralSfM import coarse_match, post_optimization, extract_coarse_fine_features
 
     outputs_dir = osp.join(
         outputs_dir_root,
@@ -494,13 +494,13 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         verbose=cfg.verbose,
                     )
 
+                os.system(
+                    f"mv {feature_out} {osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]}"
+                )
                 if cfg.enable_loftr_post_refine:
                     assert osp.exists(osp.join(deep_sfm_dir, "model"))
                     os.system(
                         f"mv {osp.join(deep_sfm_dir, 'model')} {osp.join(deep_sfm_dir, 'model_coarse')}"
-                    )
-                    os.system(
-                        f"mv {feature_out} {osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]}"
                     )
 
             if cfg.enable_loftr_post_refine:
@@ -529,6 +529,22 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     )
                     if state == False:
                         logger.error("colmap coarse is empty!")
+            else:
+                logger.info("No post optimization, extract coarse and fine feature for coarse matches...")
+                state = extract_coarse_fine_features.extract_coarse_fine_features(
+                    img_lists,
+                    covis_pairs_out,
+                    colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
+                    refined_model_save_dir=None,
+                    match_out_pth=matches_out,
+                    feature_out_pth=feature_out,
+                    fine_match_use_ray=cfg.use_local_ray,
+                    visualize_dir=visualize_dir,
+                    vis3d_pth=vis3d_pth,
+                    verbose=cfg.verbose,
+                )
+                if state == False:
+                    logger.error("colmap coarse is empty!")
 
 
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):

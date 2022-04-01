@@ -31,7 +31,7 @@ def inference(cfg):
             f"Process all objects in directory:{data_dirs}, process: {num_val_seq if num_val_seq is not None else 'all'} sequences"
         )
         if num_val_seq is not None:
-            assert num_val_seq > 0
+            assert num_val_seq != 0
             num_val_seq = -1 * num_val_seq
 
         object_names = os.listdir(data_dirs)[top_k_obj :]

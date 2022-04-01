@@ -20,7 +20,7 @@ from .utils import sample_feature_from_unfold_featuremap
 from ..visualization.draw_plots import draw_matches, draw_local_heatmaps
 
 
-def build_model(args):
+def build_model(args, extract_coarse_feats_mode=False):
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args["cfg_path"])
     pl.seed_everything(args["seed"])
@@ -48,7 +48,7 @@ def build_model(args):
         "loftr_match_fine": lower_config(cfg.LOFTR_MATCH_FINE),
         "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
     }
-    matcher = LoFTR_SfM(config=match_cfg).eval()
+    matcher = LoFTR_SfM(config=match_cfg, extract_coarse_feats_mode=extract_coarse_feats_mode).eval()
     # load checkpoints
     state_dict = torch.load(args["weight_path"], map_location="cpu")["state_dict"]
     for k in list(state_dict.keys()):
@@ -90,6 +90,7 @@ def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
         feature0 = data["feat_ext0"].cpu().numpy()
         feature1 = data["feat_ext1"].cpu().numpy()
     elif extract_feature_method == "fine_match_attention":
+        raise NotImplementedError
         ref_features = sample_feature_from_unfold_featuremap(
             feat_f1_unfold,
             data["mkpts1_f"] - data["mkpts1_c"],
@@ -294,7 +295,7 @@ def matchWorker(
     return results_dict
 
 
-# @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
-@ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
+@ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+# @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
 def matchWorker_ray_wrapper(*args, **kwargs):
     return matchWorker(*args, **kwargs)

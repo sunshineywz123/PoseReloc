@@ -56,7 +56,7 @@ class GATsLoFTRDataset(Dataset):
         self.anns = self.anns[::sample_inverval]
 
         self.load_pose_gt = load_pose_gt
-        self.load_img_mask = False
+        self.load_img_mask = True
         self.image_warp_adapt = image_warp_adapt
 
         # 3D point cloud part

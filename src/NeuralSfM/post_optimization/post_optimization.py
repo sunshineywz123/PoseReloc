@@ -20,9 +20,9 @@ from .feature_aggregation import feature_aggregation_and_update
 
 cfgs = {
     "coarse_colmap_data": {
-        # "img_resize": 512,  # For OnePose
+        "img_resize": 512,  # For OnePose
         # "img_resize": 1600, # For InLoc
-        "img_resize": 640, # For InLoc
+        # "img_resize": 640, # For InLoc
         "df": 8,
         "feature_track_assignment_strategy": "greedy",
         # "feature_track_assignment_strategy": "balance",
@@ -42,10 +42,10 @@ cfgs = {
         # "extract_feature_method": 'fine_match_attention',
         "ray": {
             "slurm": False,
-            "n_workers": 8, # 4 for onepose
+            "n_workers": 4, # 4 for onepose
             "n_cpus_per_worker": 1,
-            # "n_gpus_per_worker": 0.25,
-            "n_gpus_per_worker": 1, # 0.25 for onepose
+            "n_gpus_per_worker": 0.25,
+            # "n_gpus_per_worker": 1, # 0.25 for onepose
             "local_mode": False,
         },
     },

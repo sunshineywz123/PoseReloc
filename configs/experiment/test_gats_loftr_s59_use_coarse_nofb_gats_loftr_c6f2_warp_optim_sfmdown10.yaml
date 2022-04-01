@@ -3,10 +3,10 @@
 type: inference
 
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_down10"
 
 match_type: softmax
-task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_optim
+task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_optim_down10
 suffix: ""
 feature_method: "average"
 

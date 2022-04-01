@@ -6,8 +6,17 @@ from src.utils.ray_utils import ProgressBar, chunk_index
 from .fine_match_worker import *
 
 
-def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False, verbose=True):
-    detector, matcher = build_model(cfgs["model"])
+def fine_matcher(
+    cfgs,
+    matching_pairs_dataset,
+    visualize_dir=None,
+    extract_coarse_feats_mode=False,
+    use_ray=False,
+    verbose=True,
+):
+    detector, matcher = build_model(
+        cfgs["model"], extract_coarse_feats_mode=extract_coarse_feats_mode
+    )
 
     if not use_ray:
         subset_ids = range(len(matching_pairs_dataset))
@@ -16,11 +25,11 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
             subset_ids,
             detector,
             matcher,
-            extract_feature_method=cfgs['extract_feature_method'],
-            use_warpped_feature=cfgs['use_warpped_feature'],
+            extract_feature_method=cfgs["extract_feature_method"],
+            use_warpped_feature=cfgs["use_warpped_feature"],
             visualize=cfgs["visualize"],
             visualize_dir=visualize_dir,
-            verbose=verbose
+            verbose=verbose,
         )
     else:
         # Initial ray:
@@ -31,10 +40,15 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
             ray.init(
                 num_cpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_cpus_per_worker"]),
                 num_gpus=math.ceil(cfg_ray["n_workers"] * cfg_ray["n_gpus_per_worker"]),
-                local_mode=cfg_ray["local_mode"], ignore_reinit_error=True
+                local_mode=cfg_ray["local_mode"],
+                ignore_reinit_error=True,
             )
 
-        pb = ProgressBar(len(matching_pairs_dataset), "Matching image pairs...") if verbose else None
+        pb = (
+            ProgressBar(len(matching_pairs_dataset), "Matching image pairs...")
+            if verbose
+            else None
+        )
         all_subset_ids = chunk_index(
             len(matching_pairs_dataset),
             math.ceil(len(matching_pairs_dataset) / cfg_ray["n_workers"]),
@@ -45,12 +59,12 @@ def fine_matcher(cfgs, matching_pairs_dataset, visualize_dir=None, use_ray=False
                 subset_ids,
                 detector,
                 matcher,
-                extract_feature_method=cfgs['extract_feature_method'],
-                use_warpped_feature=cfgs['use_warpped_feature'],
+                extract_feature_method=cfgs["extract_feature_method"],
+                use_warpped_feature=cfgs["use_warpped_feature"],
                 visualize=cfgs["visualize"],
                 visualize_dir=visualize_dir,
                 pba=pb.actor if pb is not None else None,
-                verbose=verbose
+                verbose=verbose,
             )
             for subset_ids in all_subset_ids
         ]
