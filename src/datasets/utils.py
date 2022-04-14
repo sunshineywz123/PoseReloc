@@ -76,6 +76,7 @@ def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
                    pad_to=None, ret_scales=False, ret_pad_mask=False,
                    augmentor=None):
     resize = tuple(resize)
+    assert osp.exists(path), f"image path: {path} not exists!"
     # TODO: Refactor the code to separate read, pad and to_tensor. @ang
     if augmentor is None:
         image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if client is None \
@@ -87,6 +88,7 @@ def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
         image = augmentor(image)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
+    assert image is not None, f"path: {path} image not properly loaded"
     w, h = image.shape[1], image.shape[0]
     w_new, h_new = process_resize(w, h, resize, df) if resize is not None else (w, h)
     scales = torch.tensor([float(h) / float(h_new), float(w) / float(w_new)]) # [2]

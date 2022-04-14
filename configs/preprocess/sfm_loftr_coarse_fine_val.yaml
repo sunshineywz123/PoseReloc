@@ -7,11 +7,11 @@ data_base_dir: "/nas/users/hexingyi/scan_data"
 output_base_dir: "/nas/users/hexingyi/onepose_sfm"
 match_type: "softmax"
 redo: True
-enable_loftr_post_refine: False
+enable_loftr_post_refine: True
 
 overwrite_all: True
-overwrite_coarse: True
-overwrite_fine: True
+overwrite_coarse: False
+overwrite_fine: False
 
 use_global_ray: False
 use_local_ray: False
@@ -161,9 +161,18 @@ dataset:
     # - '0636'
     # - '0637'
     # - '0638'
-    - '0639'
-    - '0640'
-    - '0641'
+    # - '0639'
+    # - '0640'
+    # - '0641'
+
+    # YCBV:
+    - '0700'
+    - '0701'
+    - '0702'
+    # LM: 
+    - '0801'
+    - '0807'
+    - '0808'
 
 
   exception_obj_names:
@@ -180,9 +189,10 @@ network:
   matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
-  down_ratio: 5 # 5 original
+  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
+  down_ratio: 15 # 5 original
   gap: 3
-  covis_num: 8
+  covis_num: 12 # 8 original
   track_length: 8
 
 post_process:

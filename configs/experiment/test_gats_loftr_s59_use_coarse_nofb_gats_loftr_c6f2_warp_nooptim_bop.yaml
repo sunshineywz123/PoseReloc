@@ -2,11 +2,12 @@
 
 type: inference
 
+
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_norefine"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3"
 
 match_type: softmax
-task_name: test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_optim_sfmnorefine
+task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_nooptim_bop
 suffix: ""
 feature_method: "average"
 
@@ -220,10 +221,12 @@ model:
     elr_gamma: 0.999992
 
   eval_metrics:
-    point_cloud_rescale: 1000
+    point_cloud_rescale: 1
     pnp_reprojection_error: 8
+    model_unit: 'mm'
     pose_thresholds: [1, 3, 5, 7]
-    enable_post_optimization: True
+    use_pycolmap_ransac: False
+    enable_post_optimization: False
     post_optimization_configs:
       # residual_mode: 'feature_metric_error'
       residual_mode: 'geometry_error'
@@ -385,12 +388,12 @@ ids:
     # - '0608'
     # - '0610'
 
-    # - '0612'
-    # - '0613'
-    # - '0614'
+    # # - '0612' # not yet
+    # # - '0613'
+    # # - '0614'
     # - '0615'
-    # - '0616'
-    # - '0617'
+    # # - '0616'
+    # # - '0617'
 
     # - '0618'
     # - '0619'
@@ -406,9 +409,18 @@ ids:
     # - '0636'
     # - '0637'
     # - '0638'
-    - '0639'
-    - '0640'
-    - '0641'
+    # - '0639'
+    # - '0640'
+    # - '0641'
+
+    # BOP objects:
+    - '0700'
+    - '0701'
+    - '0702'
+
+    # - '0801'
+    # - '0807'
+    # - '0808'
 
     # Train objects
     # - '0410'

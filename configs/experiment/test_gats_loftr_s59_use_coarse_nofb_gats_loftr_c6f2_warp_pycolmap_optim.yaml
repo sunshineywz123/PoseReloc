@@ -2,11 +2,12 @@
 
 type: inference
 
+
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_norefine"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3"
 
 match_type: softmax
-task_name: test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_optim_sfmnorefine
+task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_pycolmap_optim
 suffix: ""
 feature_method: "average"
 
@@ -200,6 +201,7 @@ model:
   trainer:
     enable_plotting: True
     canonical_bs: 4
+    
     canonical_lr: 5e-4
     scaling: null
     world_size: null
@@ -223,15 +225,17 @@ model:
     point_cloud_rescale: 1000
     pnp_reprojection_error: 8
     pose_thresholds: [1, 3, 5, 7]
-    enable_post_optimization: True
+    enable_post_optimization: False
+    use_pycolmap_ransac: True
     post_optimization_configs:
-      # residual_mode: 'feature_metric_error'
-      residual_mode: 'geometry_error'
+      residual_mode: 'feature_metric_error'
+      # residual_mode: 'geometry_error'
       use_fine_pose_as_init: True
       solver_type: 'FirstOrder'
+      feature_distance_map_temperature: 1.0 # feature_metric_error valid
       distance_loss_scale: 80
-      # optimize_lr: 1e-4
-      optimize_lr: 8e-4
+      optimize_lr: 1e-4
+      # optimize_lr: 8e-4
       max_steps: 200
       image_i_f_scale: 2
       verbose: False
@@ -366,49 +370,50 @@ ids:
     # - '0595'
 
     # # test hard
-    # - '0601'
-    # - '0603'
-    # - '0604'
-    # # - '0605' # pingpang too hard!
-    # - '0626'
-    # - '0627'
-    # - '0628'
-    # - '0629'
-    # - '0630'
-    # - '0631'
-    # # - '0632' # chair too hard
-    # # From train objects
-    # - '0600'
-    # - '0602'
-    # - '0606'
-    # - '0607'
-    # - '0608'
-    # - '0610'
+    - '0601'
+    - '0603'
+    - '0604'
+    # - '0605' # pingpang too hard!
+    - '0626'
+    - '0627'
+    - '0628'
+    - '0629'
+    - '0630'
+    - '0631'
+    # - '0632' # chair too hard
+    # From train objects
+    - '0600'
+    - '0602'
+    - '0606'
+    - '0607'
+    - '0608'
+    - '0610'
 
-    # - '0612'
-    # - '0613'
-    # - '0614'
-    # - '0615'
-    # - '0616'
-    # - '0617'
+    - '0612'
+    - '0613'
+    - '0614'
+    - '0615'
+    - '0616'
+    - '0617'
 
-    # - '0618'
-    # - '0619'
-    # - '0620'
-    # - '0621'
-    # - '0622'
-    # - '0623'
-    # - '0624'
-    # - '0625'
-    # - '0633'
-    # - '0634'
-    # - '0635'
-    # - '0636'
-    # - '0637'
-    # - '0638'
-    - '0639'
-    - '0640'
-    - '0641'
+    - '0618'
+    - '0619'
+    - '0620'
+    - '0621'
+    - '0622'
+    - '0623'
+    - '0624'
+    - '0625'
+    - '0633'
+    - '0634'
+    - '0635'
+    - '0636'
+    - '0637'
+    - '0638'
+
+    # - '0639'
+    # - '0640'
+    # - '0641'
 
     # Train objects
     # - '0410'

@@ -451,12 +451,21 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         img_lists, covis_pairs_out
                     )
                 else:
-                    pairs_from_covisibility.covis_from_index(
-                        img_lists,
-                        covis_pairs_out,
-                        num_matched=covis_num,
-                        gap=cfg.sfm.gap,
-                    )
+                    if cfg.sfm.gen_cov_from == 'index':
+                        pairs_from_covisibility.covis_from_index(
+                            img_lists,
+                            covis_pairs_out,
+                            num_matched=covis_num,
+                            gap=cfg.sfm.gap,
+                        )
+                    elif cfg.sfm.gen_cov_from == 'pose':
+                        pairs_from_poses.covis_from_pose(
+                            img_lists,
+                            covis_pairs_out,
+                            covis_num,
+                        )
+                    else:
+                        raise NotImplementedError
 
                 coarse_match.loftr_coarse_matching(
                     img_lists,
@@ -556,6 +565,9 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     # bbox_path = bbox_path if osp.isfile(bbox_path) else osp.join(data_dir0, 'Box.txt')
     bbox_path = osp.join(data_dir0, "Box.txt")
     trans_box_path = osp.join(data_dir0, "Box_trans.txt")
+    if not osp.exists(trans_box_path):
+        logger.warning(f'trans box path:{trans_box_path} not exists')
+        trans_box_path = None
 
     match_type = cfg.match_type
     outputs_dir = osp.join(

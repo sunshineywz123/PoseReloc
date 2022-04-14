@@ -175,7 +175,7 @@ def feature_aggregation_and_update(
                 image_name = colmap_image.name
                 updated_keypoints = colmap_image.xys
                 origin_keypoints = feature_dict_fine[image_name]["keypoints"]
-                assert origin_keypoints.shape[0] == updated_keypoints.shape[0]
+                assert origin_keypoints.shape[0] == updated_keypoints.shape[0], f'origin_kpts: {origin_keypoints.shape[0]}, updated_kpts: {updated_keypoints.shape[0]}'
                 feature_dict_fine[image_name]["keypoints"] = updated_keypoints
 
     # Save results (overwrite previous)

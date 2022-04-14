@@ -54,6 +54,7 @@ def inference(cfg):
                 for sequence_name in sequence_names
                 if "-" in sequence_name
             ][num_val_seq:]
+            print(sequence_names)
             data_dirs_list.append(
                 " ".join([osp.join(data_dirs, object_name)] + sequence_names)
             )
@@ -131,6 +132,8 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
 
         # Load obj name and inference sequences
         root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
+        sfm_mapping_sub_dir = '-'.join([sub_dirs[0].split("-")[0], '1'])
+        num_img_in_mapping_seq = len(os.listdir(osp.join(root_dir, sfm_mapping_sub_dir, 'color')))
         obj_name = root_dir.split("/")[-1]
         sfm_base_path = cfg.sfm_base_dir
 
@@ -139,6 +142,8 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
         for sub_dir in sub_dirs:
             color_dir = osp.join(root_dir, sub_dir, "color")
             img_names = os.listdir(color_dir)
+            if len(img_names) == num_img_in_mapping_seq:
+                logger.warning(f"Same num of images in test sequence:{sub_dir}")
             image_paths = [osp.join(color_dir, img_name) for img_name in img_names]
             all_image_paths += image_paths
 

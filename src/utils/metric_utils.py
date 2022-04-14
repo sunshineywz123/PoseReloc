@@ -7,6 +7,14 @@ from .colmap.read_write_model import qvec2rotmat, read_images_binary
 from .colmap.eval_helper import quaternion_from_matrix
 
 
+def convert_pose2T(pose):
+    # pose: [R: 3*3, t: 3]
+    R, t = pose
+    return np.concatenate(
+        [np.concatenate([R, t[:, None]], axis=1), [[0, 0, 0, 1]]], axis=0
+    )  # 4*4
+
+
 def evaluate_R_t(R_gt, t_gt, R, t, q_gt=None):
     t = t.flatten()
     t_gt = t_gt.flatten()
@@ -129,7 +137,7 @@ def pose_auc(errors, thresholds, ret_dict=False):
 
 
 # Evaluate query pose errors
-def query_pose_error(pose_pred, pose_gt):
+def query_pose_error(pose_pred, pose_gt, unit='m'):
     """
     Input:
     -----------
@@ -142,7 +150,16 @@ def query_pose_error(pose_pred, pose_gt):
     if pose_gt.shape[0] == 4:
         pose_gt = pose_gt[:3]
 
-    translation_distance = np.linalg.norm(pose_pred[:, 3] - pose_gt[:, 3]) * 100
+    # Convert results' unit to cm
+    if unit == 'm':
+        translation_distance = np.linalg.norm(pose_pred[:, 3] - pose_gt[:, 3]) * 100
+    elif unit == 'cm':
+        translation_distance = np.linalg.norm(pose_pred[:, 3] - pose_gt[:, 3])
+    elif unit == 'mm':
+        translation_distance = np.linalg.norm(pose_pred[:, 3] - pose_gt[:, 3]) / 10
+    else:
+        raise NotImplementedError
+
     rotation_diff = np.dot(pose_pred[:, :3], pose_gt[:, :3].T)
     trace = np.trace(rotation_diff)
     trace = trace if trace <= 3 else 3
@@ -150,43 +167,88 @@ def query_pose_error(pose_pred, pose_gt):
     return angular_distance, translation_distance
 
 
-def ransac_PnP(K, pts_2d, pts_3d, scale=1, pnp_reprojection_error=5):
+def ransac_PnP(
+    K,
+    pts_2d,
+    pts_3d,
+    scale=1,
+    pnp_reprojection_error=5,
+    img_hw=None,
+    use_pycolmap_ransac=False,
+):
     """ solve pnp """
-    dist_coeffs = np.zeros(shape=[8, 1], dtype="float64")
+    if use_pycolmap_ransac:
+        import pycolmap
 
-    pts_2d = np.ascontiguousarray(pts_2d.astype(np.float64))
-    pts_3d = np.ascontiguousarray(pts_3d.astype(np.float64))
-    K = K.astype(np.float64)
+        assert img_hw is not None and len(img_hw) == 2
 
-    pts_3d *= scale
-    state = None
-    try:
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(
-            pts_3d,
-            pts_2d,
-            K,
-            dist_coeffs,
-            reprojectionError=pnp_reprojection_error,
-            iterationsCount=10000,
-            flags=cv2.SOLVEPNP_EPNP,
+        pts_2d = list(np.ascontiguousarray(pts_2d.astype(np.float64))[..., None]) # List(2*1)
+        pts_3d = list(np.ascontiguousarray(pts_3d.astype(np.float64))[..., None]) # List(3*1)
+        # pts_2d = pts_2d.astype(np.float64)
+        # pts_3d = pts_3d.astype(np.float64)
+        K = K.astype(np.float64)
+        # Colmap pnp
+        focal_length = K[0, 0]
+        cx = K[0, 2]
+        cy = K[1, 2]
+        cfg = {
+            "model": "SIMPLE_PINHOLE",
+            "width": int(img_hw[1]),
+            "height": int(img_hw[0]),
+            "params": [focal_length, cx, cy],
+        }
+
+        ret = pycolmap.absolute_pose_estimation(
+            pts_2d, pts_3d, cfg, max_error_px=float(pnp_reprojection_error)
         )
-        # _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
-
-        rotation = cv2.Rodrigues(rvec)[0]
-
-        tvec /= scale
-        pose = np.concatenate([rotation, tvec], axis=-1)
-        pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
-
-        if inliers is None:
+        qvec = ret["qvec"]
+        tvec = ret["tvec"]
+        pose_homo = convert_pose2T([qvec2rotmat(qvec), tvec])
+        # Make inliers:
+        inliers = ret['inliers']
+        if len(inliers) == 0:
             inliers = np.array([]).astype(np.bool)
-        state = True
+        else:
+            index = np.arange(0, len(pts_3d))
+            inliers = index[inliers]
 
-        return pose, pose_homo, inliers, state
-    except cv2.error:
-        # print("CV ERROR")
-        state = False
-        return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool), state
+        return pose_homo[:3], pose_homo, inliers, True
+    else:
+        dist_coeffs = np.zeros(shape=[8, 1], dtype="float64")
+
+        pts_2d = np.ascontiguousarray(pts_2d.astype(np.float64))
+        pts_3d = np.ascontiguousarray(pts_3d.astype(np.float64))
+        K = K.astype(np.float64)
+
+        pts_3d *= scale
+        state = None
+        try:
+            _, rvec, tvec, inliers = cv2.solvePnPRansac(
+                pts_3d,
+                pts_2d,
+                K,
+                dist_coeffs,
+                reprojectionError=pnp_reprojection_error,
+                iterationsCount=10000,
+                flags=cv2.SOLVEPNP_EPNP,
+            )
+            # _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
+
+            rotation = cv2.Rodrigues(rvec)[0]
+
+            tvec /= scale
+            pose = np.concatenate([rotation, tvec], axis=-1)
+            pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
+
+            if inliers is None:
+                inliers = np.array([]).astype(np.bool)
+            state = True
+
+            return pose, pose_homo, inliers, state
+        except cv2.error:
+            # print("CV ERROR")
+            state = False
+            return np.eye(4)[:3], np.eye(4), np.array([]).astype(np.bool), state
 
 
 @torch.no_grad()
@@ -202,11 +264,15 @@ def compute_query_pose_errors(
         }
     """
     device = data["m_bids"].device
+    model_unit = configs['model_unit'] if 'model_unit' in configs else 'm'
 
     m_bids = data["m_bids"].cpu().numpy()
     mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
     mkpts_query = data["mkpts_query_f"].cpu().numpy()
     mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
+    img_orig_size = (
+        torch.tensor(data["q_hw_i"]).numpy() * data["query_image_scale"].cpu().numpy()
+    )  # B*2
     query_K = data["query_intrinsic"].cpu().numpy()
     query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
     # homo_warp = data['homo_warp'].cpu().numpy() if 'homo_warp' in data else None # B*3*3
@@ -238,7 +304,9 @@ def compute_query_pose_errors(
             mkpts_query_f,
             mkpts_3d[mask],
             scale=configs["point_cloud_rescale"],
+            img_hw=img_orig_size[bs].tolist(),
             pnp_reprojection_error=configs["pnp_reprojection_error"],
+            use_pycolmap_ransac=configs["use_pycolmap_ransac"],
         )
         pose_pred.append(query_pose_pred_homo)
 
@@ -247,15 +315,20 @@ def compute_query_pose_errors(
             mkpts_query_c[mask],
             mkpts_3d[mask],
             scale=configs["point_cloud_rescale"],
+            img_hw=img_orig_size[bs].tolist(),
             pnp_reprojection_error=configs["pnp_reprojection_error"],
+            use_pycolmap_ransac=configs["use_pycolmap_ransac"],
         )
 
         if configs["enable_post_optimization"] and state is not False and not training:
             from src.NeuralSfM.loc.optimizer import Optimizer
+
             optimizer = Optimizer(configs["post_optimization_configs"])
-            scale = data["query_image_scale"][bs].cpu().numpy()[None] # [1*2]
-            inliers_mask = np.full((mkpts_3d[mask].shape[0],), 0, dtype=np.bool) # All False
-            if configs['post_optimization_configs']['use_fine_pose_as_init']:
+            scale = data["query_image_scale"][bs].cpu().numpy()[None]  # [1*2]
+            inliers_mask = np.full(
+                (mkpts_3d[mask].shape[0],), 0, dtype=np.bool
+            )  # All False
+            if configs["post_optimization_configs"]["use_fine_pose_as_init"]:
                 initial_pose = query_pose_pred  # [3*4]
                 inliers_mask[inliers] = True
             else:
@@ -277,27 +350,33 @@ def compute_query_pose_errors(
                 scale=scale,
                 feature_3d=feature_3d,
                 feature_2d_window=feature_2d_window,
+                feature_distance_map_temperature=configs["post_optimization_configs"][
+                    "feature_distance_map_temperature"
+                ],
                 device=device,
-                point_cloud_scale=configs["point_cloud_rescale"]
+                point_cloud_scale=configs["point_cloud_rescale"],
             )
             query_pose_pred = query_pose_pred_refined
 
             # For debug:
-            R_err_before, t_err_before = query_pose_error(initial_pose, query_pose_gt[bs])
-            R_err_after, t_err_after = query_pose_error(query_pose_pred_refined, query_pose_gt[bs])
+            R_err_before, t_err_before = query_pose_error(
+                initial_pose, query_pose_gt[bs], unit=model_unit
+            )
+            R_err_after, t_err_after = query_pose_error(
+                query_pose_pred_refined, query_pose_gt[bs], unit=model_unit
+            )
             R_err_decrease = R_err_before - R_err_after
             t_err_decrease = t_err_before - t_err_after
 
             if R_err_decrease < 0 or t_err_decrease < 0:
                 R_err_decrease = R_err_decrease
 
-
         if query_pose_pred is None:
             data["R_errs"].append(np.inf)
             data["t_errs"].append(np.inf)
             data["inliers"].append(np.array([]).astype(np.bool))
         else:
-            R_err, t_err = query_pose_error(query_pose_pred, query_pose_gt[bs])
+            R_err, t_err = query_pose_error(query_pose_pred, query_pose_gt[bs], unit=model_unit)
             data["R_errs"].append(R_err)
             data["t_errs"].append(t_err)
             data["inliers"].append(inliers)
@@ -307,7 +386,7 @@ def compute_query_pose_errors(
             data["t_errs_c"].append(np.inf)
             data["inliers_c"].append(np.array([]).astype(np.bool))
         else:
-            R_err, t_err = query_pose_error(query_pose_pred_c, query_pose_gt[bs])
+            R_err, t_err = query_pose_error(query_pose_pred_c, query_pose_gt[bs], unit=model_unit)
             data["R_errs_c"].append(R_err)
             data["t_errs_c"].append(t_err)
             data["inliers_c"].append(inliers_c)
@@ -327,7 +406,7 @@ def compute_query_pose_errors(
                 data["t_errs_gt"].append(np.inf)
                 data["inliers_gt"].append(np.array([]).astype(np.bool))
             else:
-                R_err, t_err = query_pose_error(query_pose_pred_gt, query_pose_gt[bs])
+                R_err, t_err = query_pose_error(query_pose_pred_gt, query_pose_gt[bs],unit=model_unit)
                 data["R_errs_gt"].append(R_err)
                 data["t_errs_gt"].append(t_err)
                 data["inliers_gt"].append(inliers_gt)
