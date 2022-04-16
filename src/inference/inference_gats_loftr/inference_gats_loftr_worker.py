@@ -23,17 +23,20 @@ def extract_matches(data, match_model, metrics_configs):
     pose_pred = [data["pose_pred"][0]]
 
     result_data = {
-        "mkpts3d": data['mkpts_3d_db'].cpu().numpy(),
-        "mkpts_query": data['mkpts_query_f'].cpu().numpy(),
-        "mconf": data['mconf'].cpu().numpy(),
+        "mkpts3d": data["mkpts_3d_db"].cpu().numpy(),
+        "mkpts_query": data["mkpts_query_f"].cpu().numpy(),
+        "mconf": data["mconf"].cpu().numpy(),
         "R_errs": R_errs,
         "t_errs": t_errs,
         "inliers": inliers,
         "pose_pred": pose_pred,
-        "pose_gt": data['query_pose_gt'][0].cpu().numpy(),
-        "intrinsic": data['query_intrinsic'][0].cpu().numpy(),
-        'image_path': data['query_image_path']
+        "pose_gt": data["query_pose_gt"][0].cpu().numpy(),
+        "intrinsic": data["query_intrinsic"][0].cpu().numpy(),
+        "image_path": data["query_image_path"],
     }
+
+    if "ADD" in data:
+        result_data.update({"ADD_metric": data["ADD"]})
 
     del data
     torch.cuda.empty_cache()

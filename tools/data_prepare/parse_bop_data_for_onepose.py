@@ -1,5 +1,6 @@
 import argparse
 from itertools import chain
+from shutil import copyfile
 from typing import ChainMap
 import os
 import os.path as osp
@@ -129,11 +130,13 @@ def parse_data_for_obj(
     assert dataset_name in dataset_name2model_dict
     model_dir_name = dataset_name2model_dict[dataset_name]
     model_dir = osp.join(data_base_dir, dataset_name, model_dir_name)
+    model_eval_dir = osp.join(data_base_dir, dataset_name, "models_eval")
     models_info = load_json(osp.join(model_dir, "models_info.json"))
     model_info = models_info[obj_id]
 
     min_xyz = [model_info["min_x"], model_info["min_y"], model_info["min_z"]]
     size_xyz = [model_info["size_x"], model_info["size_y"], model_info["size_z"]]
+    diameter = model_info["diameter"]
 
     obj_depth_dir = osp.join(seq_dir, "obj_depth")
     os.makedirs(obj_depth_dir, exist_ok=True)
@@ -175,6 +178,10 @@ def parse_data_for_obj(
                 cad_model_path = osp.join(
                     model_dir, "obj_" + "0" * (6 - len(obj_id)) + obj_id + ".ply",
                 )
+                cad_model_eval_path = osp.join(
+                    model_eval_dir, "obj_" + "0" * (6 - len(obj_id)) + obj_id + ".ply",
+                )
+
                 assert osp.exists(cad_model_path)
 
                 # points_sampled, _ = sample_points_on_cad(cat_model_path, 5000)
@@ -191,6 +198,8 @@ def parse_data_for_obj(
                     "bbox_obj": bbox_obj,
                     "bbox_visible": bbox_visible,
                     "cad_model_path": cad_model_path,
+                    "cad_model_eval_path": cad_model_eval_path,
+                    "model_diameter": diameter,
                     "model_min_xyz": min_xyz,
                     "model_size_xyz": size_xyz,
                 }
@@ -237,14 +246,14 @@ if __name__ == "__main__":
 
     # Construct output data file structure
     output_data_base_dir = args.output_data_dir
+    output_data_obj_dir = osp.join(
+        output_data_base_dir,
+        "-".join([args.assign_onepose_id, args.dataset_name + args.obj_id, "others"]),
+    )
     sequence_name = "-".join(
         [args.dataset_name + args.obj_id, "1" if args.split == "train" else "2"]
     )  # label seq 0 for mapping data, label seq 1 for test data
-    output_data_seq_dir = osp.join(
-        output_data_base_dir,
-        "-".join([args.assign_onepose_id, args.dataset_name + args.obj_id, "others"]),
-        sequence_name,
-    )
+    output_data_seq_dir = osp.join(output_data_obj_dir, sequence_name,)
     Path(output_data_seq_dir).mkdir(parents=True, exist_ok=True)
 
     if args.use_ray:
@@ -300,7 +309,7 @@ if __name__ == "__main__":
         enumerate(results_dict.items()), total=len(results_dict)
     ):
 
-        if global_id == 0 and args.split=='train':
+        if global_id == 0 and args.split == "train":
             # Make bbox info
             model_min_xyz = np.array(image_info["model_min_xyz"])
             model_size_xyz = np.array(image_info["model_size_xyz"])
@@ -314,13 +323,24 @@ if __name__ == "__main__":
             extend_xyz_str = ",".join(
                 np.concatenate(
                     [np.array([0, 0, 0]), extend_xyz, np.array([0, 0, 0, 0])]
-                ).astype(str).tolist()
+                )
+                .astype(str)
+                .tolist()
             )
             with open(osp.join(output_data_seq_dir, "Box.txt"), "w") as f:
                 f.write(
                     "# px(position_x), py, pz, ex(extent_x), ey, ez, qw(quaternion_w), qx, qy, qz\n"
                 )
                 f.write(extend_xyz_str)
+
+            # Copy eval model and save diameter:
+            model_eval_path = image_info["cad_model_eval_path"]
+            diameter = image_info['model_diameter']
+            assert osp.exists(
+                model_eval_path
+            ), f"model eval path:{model_eval_path} not exists!"
+            copyfile(model_eval_path, osp.join(output_data_obj_dir, 'model_eval.ply'))
+            np.savetxt(osp.join(output_data_obj_dir, 'diameter.txt'), np.array([diameter]))
 
         img_ext = osp.splitext(image_path)[1]
         K = np.array(image_info["K"])  # 3*3
@@ -343,6 +363,8 @@ if __name__ == "__main__":
         resize_shape = np.array([512, 512])  # FIXME: change to global configs
         K_crop, K_crop_homo = get_K_crop_resize(box_new, K_crop, resize_shape)
         image_crop, _ = get_image_crop_resize(image_crop, box_new, resize_shape)
+
+        # TODO: add color full, intrin full
 
         # Save to aim dir:
         cv2.imwrite(osp.join(color_path, str(global_id) + img_ext), image_crop)

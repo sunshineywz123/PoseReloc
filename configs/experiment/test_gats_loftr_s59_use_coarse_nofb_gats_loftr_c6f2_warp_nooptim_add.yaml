@@ -7,7 +7,7 @@ data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
 sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3"
 
 match_type: softmax
-task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_nooptim_bop
+task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c6f2_warp_no_pad_nooptim_add
 suffix: ""
 feature_method: "average"
 
@@ -224,7 +224,7 @@ model:
   eval_metrics:
     point_cloud_rescale: 1
     pnp_reprojection_error: 8
-    model_unit: 'mm'
+    model_unit: 'm'
     eval_ADD_metric: True
     pose_thresholds: [1, 3, 5, 7]
     use_pycolmap_ransac: False
@@ -413,12 +413,12 @@ ids:
     # - '0638'
     # - '0639'
     # - '0640'
-    # - '0641'
+    - '0641'
 
     # BOP objects:
-    - '0700'
-    - '0701'
-    - '0702'
+    # - '0700'
+    # - '0701'
+    # - '0702'
 
     # - '0801'
     # - '0807'

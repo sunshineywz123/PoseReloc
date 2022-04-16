@@ -112,9 +112,17 @@ def inference_gats_loftr(
     # Parse results:
     R_errs = []
     t_errs = []
+    if 'ADD_metric' in results[0]:
+        add_metric = []
+    else:
+        add_metric = None
+    
+    # Gather results metrics:
     for result in results:
         R_errs.append(result['R_errs'])
         t_errs.append(result['t_errs'])
+        if add_metric is not None:
+            add_metric.append(result['ADD_metric'])
     
     # Write results to vis3d
     if vis3d_pth is not None:
@@ -123,6 +131,8 @@ def inference_gats_loftr(
 
     # Aggregate metrics: 
     pose_errs = {'R_errs': R_errs, "t_errs": t_errs}
+    if add_metric is not None:
+        pose_errs.update({'ADD_metric': add_metric})
     metrics = aggregate_metrics(pose_errs, cfg['model']['eval_metrics']['pose_thresholds'])
 
     # TODO: add visualize

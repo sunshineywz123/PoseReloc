@@ -2,7 +2,9 @@ import numpy as np
 import os
 import cv2
 import torch
+import os.path as osp
 from loguru import logger
+from tools.data_prepare.sample_points_on_cad import sample_points_on_cad, model_diameter_from_bbox
 from .colmap.read_write_model import qvec2rotmat, read_images_binary
 from .colmap.eval_helper import quaternion_from_matrix
 
@@ -134,6 +136,43 @@ def pose_auc(errors, thresholds, ret_dict=False):
         return {f"auc@{t}": auc for t, auc in zip(thresholds, aucs)}
     else:
         return aucs
+
+def projection_2d_error(model_3D_pts, pose_pred, pose_targets, K):
+    def project(xyz, K, RT):
+        """
+        xyz: [N, 3]
+        K: [3, 3]
+        RT: [3, 4]
+        """
+        xyz = np.dot(xyz, RT[:, :3].T) + RT[:, 3:].T
+        xyz = np.dot(xyz, K.T)
+        xy = xyz[:, :2] / xyz[:, 2:]
+        return xy
+
+    # Dim check:
+    if pose_pred.shape[0] == 4:
+        pose_pred = pose_pred[:3]
+    if pose_targets.shape[0] == 4:
+        pose_targets = pose_targets[:3]
+
+    model_2d_pred = project(model_3D_pts, K, pose_pred) # pose_pred: 3*4
+    model_2d_targets = project(model_3D_pts, K, pose_targets)
+    proj_mean_diff = np.mean(np.linalg.norm(model_2d_pred - model_2d_targets, axis=-1))
+    return proj_mean_diff
+
+def add_metric(model_3D_pts, diameter, pose_pred, pose_target, percentage=0.1):
+    # Dim check:
+    if pose_pred.shape[0] == 4:
+        pose_pred = pose_pred[:3]
+    if pose_target.shape[0] == 4:
+        pose_target = pose_target[:3]
+
+    diameter = diameter * percentage
+    model_pred = np.dot(model_3D_pts, pose_pred[:, :3].T) + pose_pred[:, 3]
+    model_target = np.dot(model_3D_pts, pose_target[:, :3].T) + pose_target[:, 3]
+
+    mean_dist = np.mean(np.linalg.norm(model_pred - model_target, axis=-1))
+    return mean_dist < diameter
 
 
 # Evaluate query pose errors
@@ -280,6 +319,29 @@ def compute_query_pose_errors(
     data.update({"R_errs": [], "t_errs": [], "inliers": []})
     data.update({"R_errs_c": [], "t_errs_c": [], "inliers_c": []})
 
+    # Prepare query model for eval ADD metric
+    if 'eval_ADD_metric' in configs:
+        if configs['eval_ADD_metric'] and not training:
+            image_path = data['query_image_path']
+            model_path = osp.join(image_path.rsplit('/', 3)[0], 'model_eval.ply')
+            if not osp.exists(model_path):
+                logger.warning('Model_eval.ply not exists! try to use model.ply instead!')
+                model_path = osp.join(image_path.rsplit('/', 3)[0], 'model.ply')
+            diameter_file_path = osp.join(image_path.rsplit('/', 3)[0], 'diameter.txt')
+            if not osp.exists(model_path):
+                logger.warning(f'want to eval add metric, however model_eval.ply path:{model_path} not exists!')
+            else:
+                # Load model:
+                model_vertices, bbox = sample_points_on_cad(model_path, 10000) # N*3
+                # Load diameter:
+                if osp.exists(diameter_file_path):
+                    diameter = np.loadtxt(diameter_file_path)
+                else:
+                    diameter = model_diameter_from_bbox(bbox)
+                    logger.warning(f'Diameter file not exists! Diameter compute from CAD model is {diameter}')
+                
+                data.update({"ADD":[]})
+
     pose_pred = []
     for bs in range(query_K.shape[0]):
         mask = m_bids == bs
@@ -375,11 +437,17 @@ def compute_query_pose_errors(
             data["R_errs"].append(np.inf)
             data["t_errs"].append(np.inf)
             data["inliers"].append(np.array([]).astype(np.bool))
+            if "ADD" in data:
+                data['ADD'].append(False)
         else:
             R_err, t_err = query_pose_error(query_pose_pred, query_pose_gt[bs], unit=model_unit)
             data["R_errs"].append(R_err)
             data["t_errs"].append(t_err)
             data["inliers"].append(inliers)
+
+            if "ADD" in data:
+                add_result = add_metric(model_vertices, diameter, pose_pred=query_pose_pred, pose_target=query_pose_gt[bs])
+                data["ADD"].append(add_result)
 
         if query_pose_pred_c is None:
             data["R_errs_c"].append(np.inf)
@@ -415,7 +483,7 @@ def compute_query_pose_errors(
     data.update({"pose_pred": pose_pred})
 
 
-def aggregate_metrics(metrics, thres=[1, 3, 5]):
+def aggregate_metrics(metrics, pose_thres=[1, 3, 5], proj2d_thres=5):
     """ Aggregate metrics for the whole dataset:
     (This method should be called once per dataset)
     1. AUC of the pose error (angular) at the threshold [5, 10, 20]
@@ -429,20 +497,24 @@ def aggregate_metrics(metrics, thres=[1, 3, 5]):
     R_errs = metrics["R_errs"]
     t_errs = metrics["t_errs"]
 
-    degree_distance_metric = {}
-    for threshold in thres:
-        degree_distance_metric[f"{threshold}cm@{threshold}degree"] = np.mean(
-            (np.array(R_errs) < threshold) & (np.array(t_errs) < threshold)
+    agg_metric = {}
+    for pose_threshold in pose_thres:
+        agg_metric[f"{pose_threshold}cm@{pose_threshold}degree"] = np.mean(
+            (np.array(R_errs) < pose_threshold) & (np.array(t_errs) < pose_threshold)
         )
 
     if "R_errs_coarse" in metrics:
         R_errs_coarse = metrics["R_errs_coarse"]
         t_errs_coarse = metrics["t_errs_coarse"]
 
-        for threshold in thres:
-            degree_distance_metric[f"{threshold}cm@{threshold}degree coarse"] = np.mean(
+        for threshold in pose_thres:
+            agg_metric[f"{threshold}cm@{threshold}degree coarse"] = np.mean(
                 (np.array(R_errs_coarse) < threshold)
                 & (np.array(t_errs_coarse) < threshold)
             )
+    
+    if "ADD_metric" in metrics:
+        ADD_metric = metrics['ADD_metric']
+        agg_metric["ADD metric"] = np.mean(ADD_metric)
 
-    return degree_distance_metric
+    return agg_metric
