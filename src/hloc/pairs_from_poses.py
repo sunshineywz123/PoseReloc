@@ -39,14 +39,14 @@ def get_pairswise_distances(pose_files):
 
 def covis_from_pose(img_lists, covis_pairs_out, num_matched, do_ba=False):
     img_type = img_lists[0].split('/')[-2]
-    img_ext = osp.splitext(img_lists[0])[1]
-    if not do_ba:
-        pose_lists = [img_file.replace(f'/{img_type}/', '/poses_ba/').replace(img_ext, '.txt') for img_file in img_lists]
-    else:
-        pose_lists = [img_file.replace(f'/{img_type}/', '/poses/').replace(img_ext, '.txt') for img_file in img_lists]
+    pose_lists = []
+    for img_file in img_lists:
+        img_ext = osp.splitext(img_file)[1]
+        pose_lists.append(img_file.replace(f'/{img_type}/', '/poses_ba/' if not do_ba else '/poses/').replace(img_ext, '.txt'))
+    # import ipdb; ipdb.set_trace() 
     dist, dR, seqs_ids = get_pairswise_distances(pose_lists)
 
-    min_rotation = 10
+    min_rotation = 3
     valid = dR > min_rotation
     np.fill_diagonal(valid, False)
     dist = np.where(valid, dist, np.inf)

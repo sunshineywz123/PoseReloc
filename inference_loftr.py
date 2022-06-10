@@ -33,6 +33,12 @@ def inference(cfg):
         if num_val_seq is not None:
             assert num_val_seq != 0
             num_val_seq = -1 * num_val_seq
+        
+        if "want_seq_id" in cfg:
+            num_val_seq = 0
+            want_seq_id = cfg.want_seq_id
+        else:
+            want_seq_id = None
 
         object_names = os.listdir(data_dirs)[top_k_obj :]
         data_dirs_list = []
@@ -52,8 +58,20 @@ def inference(cfg):
             sequence_names = [
                 sequence_name
                 for sequence_name in sequence_names
+                if ("-" in sequence_name) and ('-demo' not in sequence_name)
+            ][num_val_seq:]
+
+            obj_short_name = object_name.split('-', 2)[1]
+            sequence_ids = [
+                sequence_name.split('-',1)[1]
+                for sequence_name in sequence_names
                 if "-" in sequence_name
             ][num_val_seq:]
+
+            if want_seq_id is not None:
+                assert str(want_seq_id) in sequence_ids
+                sequence_names = ['-'.join([obj_short_name, str(want_seq_id)])]
+
             print(sequence_names)
             data_dirs_list.append(
                 " ".join([osp.join(data_dirs, object_name)] + sequence_names)
@@ -98,10 +116,10 @@ def inference(cfg):
                 gathered_metrics[metric_name].append(metric)
         
     # Dump metrics:
-    name2metrics_sorted = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['5cm@5degree'])}
+    # name2metrics = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['5cm@5degree'])}
     os.makedirs(cfg.output.txt_dir, exist_ok=True)
     with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'w') as f:
-        for name, metrics in name2metrics_sorted.items():
+        for name, metrics in name2metrics.items():
             f.write(f'{name}: \n')
             for metric_name, metric in metrics.items():
                 f.write(f"{metric_name}: {metric}  ")
@@ -146,6 +164,12 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
                 logger.warning(f"Same num of images in test sequence:{sub_dir}")
             image_paths = [osp.join(color_dir, img_name) for img_name in img_names]
             all_image_paths += image_paths
+        
+        if 'sample_n_for_test' in cfg:
+            if cfg.sample_n_for_test is not None:
+                # For debug:
+                interval = len(all_image_paths) // cfg.sample_n_for_test
+                all_image_paths = all_image_paths[::interval]
 
         if len(all_image_paths) == 0:
             logger.info(f"No png image in {root_dir}")

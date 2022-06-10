@@ -54,10 +54,10 @@ def vis_cameras_point_clouds(
         name="point_clouds after refinement",
     )
 
-    for i in range(cameras.shape[0]):
-        vis3d.add_camera_trajectory(
-            np.expand_dims(cameras[i], 0), name=f"camera_pose_{i}_after_refine"
-        )
+    # for i in range(cameras.shape[0]):
+    #     vis3d.add_camera_trajectory(
+    #         np.expand_dims(cameras[i], 0), name=f"camera_pose_{i}_after_refine"
+    #     )
 
     if old_pointcloud_coord is not None:
         # old_pointcloud_coord[:, [0, 2]] *= -1  # Consistent with refined pointcloud
@@ -69,10 +69,10 @@ def vis_cameras_point_clouds(
             name="point_clouds_before_refinement",
         )
 
-    if old_pose is not None:
-        for i in range(old_pose.shape[0]):
-            vis3d.add_camera_trajectory(
-                np.expand_dims(cameras[i], 0), name=f"camera_pose_{i}_before_refine"
-            )
+    # if old_pose is not None:
+    #     for i in range(old_pose.shape[0]):
+    #         vis3d.add_camera_trajectory(
+    #             np.expand_dims(cameras[i], 0), name=f"camera_pose_{i}_before_refine"
+    #         )
 
     logger.info(f"vis3d saved to {dump_dir}")

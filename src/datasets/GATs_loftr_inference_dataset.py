@@ -69,12 +69,23 @@ class GATs_loftr_inference_dataset(Dataset):
         return avg_anno_3d_path, clt_anno_3d_path, idxs_path
 
     def get_intrin_by_color_pth(self, img_path):
-        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(".png", ".txt")
+        img_ext = osp.splitext(img_path)[1]
+        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(img_ext, ".txt")
+        assert osp.exists(intrin_path), f"{intrin_path}"
         K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K_crop
 
+    def get_intrin_original_by_color_pth(self, img_path):
+        img_ext = osp.splitext(img_path)[1]
+        intrin_path = img_path.replace("/color/", "/intrin/").replace(img_ext, ".txt")
+        assert osp.exists(intrin_path), f"{intrin_path}"
+        K = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
+        return K
+
     def get_gt_pose_by_color_pth(self, img_path):
-        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(".png", ".txt")
+        img_ext = osp.splitext(img_path)[1]
+        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(img_ext, ".txt")
+        assert osp.exists(gt_pose_path), f"{gt_pose_path}"
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
 
@@ -276,9 +287,12 @@ class GATs_loftr_inference_dataset(Dataset):
 
         if self.load_pose_gt:
             K_crop = self.get_intrin_by_color_pth(image_path)
+            # FIXME: K is not real original image intrins, it is K_crop before BA.
+            # However, for LINEMOD data, we store its original intrin in the intrin directory.
+            K = self.get_intrin_original_by_color_pth(image_path)
             pose_gt = self.get_gt_pose_by_color_pth(image_path)
             data.update(
-                {"query_intrinsic": K_crop[None], "query_pose_gt": pose_gt[None]}
+                {"query_intrinsic": K_crop[None], "query_pose_gt": pose_gt[None], "query_intrinsic_origin": K[None]}
             )
 
         return data

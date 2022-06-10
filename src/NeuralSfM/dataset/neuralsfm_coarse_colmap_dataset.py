@@ -371,7 +371,7 @@ class CoarseColmapDataset(Dataset):
                 -1,
             )  # (-1,): unoccupied, (imageid, pointidx): occupied
 
-        for point_3d_id, point_3d in tqdm(colmap_3ds.items()):
+        for point_3d_id, point_3d in colmap_3ds.items():
             image_ids = list(point_3d.image_ids)
             related_colmap_image_state = {
                 key: colmap_images_state[key] for key in image_ids
@@ -424,7 +424,7 @@ class CoarseColmapDataset(Dataset):
             total_feature_track_num = 0
             for id, item in keyframe_dict.items():
                 print(
-                    f"id:{id}, {sum(item['state'] != -1)} / {self.colmap_images[id].xyz.shape[0]} keypoints registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
+                    f"id:{id}, {sum(item['state'] != -1)} / {self.colmap_images[id].xys.shape[0]} keypoints registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
                 )
                 total_feature_track_num += sum(item["state"] >= 0)
             assert total_feature_track_num == len(colmap_3ds)
@@ -506,7 +506,7 @@ class CoarseColmapDataset(Dataset):
                 xyz=kpt_world.squeeze(-1)
             )  # namedtuple format attribute setting
 
-            point_cloud.append(kpt_world.squeeze(-1))
+            point_cloud.append(self.colmap_3ds[point_cloud_id].xyz)
             point_cloud_color.append(self.colmap_3ds[point_cloud_id].rgb)
 
         # Update colmap image keypoints:
@@ -548,6 +548,7 @@ class CoarseColmapDataset(Dataset):
             keypoints[registrated_mask, :] = projected_kpts
             self.colmap_images[colmap_frame_id] = colmap_image._replace(xys=keypoints)
 
+        # import ipdb; ipdb.set_trace()
         # Write results to colmap file format
         os.makedirs(self.colmap_refined_save_dir, exist_ok=True)
         write_model(

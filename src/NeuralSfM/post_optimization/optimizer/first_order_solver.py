@@ -119,14 +119,24 @@ def FirstOrderSolve(
             raise NotImplementedError
 
         optimizer.zero_grad()
-        results, confidance = fn(
-            *variables_expanded,
-            *constantsPar,
-            confidance=confidance,
-            verbose=verbose,
-            marker=False,
-            marker_return=True
-        )
+        try:
+            results, confidance = fn(
+                *variables_expanded,
+                *constantsPar,
+                confidance=confidance,
+                verbose=verbose,
+                marker=False,
+                marker_return=True
+            )
+        except:
+            results = fn(
+                *variables_expanded,
+                *constantsPar,
+                confidance=confidance,
+                verbose=verbose,
+                marker=False,
+                marker_return=True
+            )
         if isinstance(results, torch.Tensor):
             residuals = results
         else:

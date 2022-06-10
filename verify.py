@@ -60,7 +60,7 @@ def align_core(cfg, img_lists, outputs_dir_root):
         min_rotation = cfg.sfm.min_rotation
 
         extract_features.main(img_lists, feature_out, cfg)
-        pairs_from_poses.covis_from_pose(img_lists, covis_pairs_out, covis_num, max_rotation, do_ba=True)
+        pairs_from_poses.covis_from_pose(img_lists, covis_pairs_out, covis_num, do_ba=True)
         match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
         generate_empty.generate_model(img_lists, empty_dir, do_ba=True)
         triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out,

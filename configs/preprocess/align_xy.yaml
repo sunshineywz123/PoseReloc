@@ -10,10 +10,23 @@ suffix: ""
 
 dataset:
     data_dir:
-        - ${data_base_dir}/0635-zishengtangface-others zishengtangface-1 zishengtangface-2
-        - ${data_base_dir}/0636-toothbrushcontainer-others toothbrushcontainer-1 toothbrushcontainer-2
-        - ${data_base_dir}/0637-pelikancontainer-box pelikancontainer-1 pelikancontainer-2
-        - ${data_base_dir}/0638-teapotcontainer-box teapotcontainer-1 teapotcontainer-2
+        # - ${data_base_dir}/0612-insta-others insta-1 insta-2
+        # - ${data_base_dir}/0613-batterycharger-others batterycharger-1 batterycharger-2
+       
+        # - ${data_base_dir}/0656-demoduck-others demoduck-1 demoduck-2
+        # - ${data_base_dir}/0657-demoorange-others demoorange-1 demoorange-2
+        # - ${data_base_dir}/0658-demoorange2-others demoorange2-1 demoorange2-2
+        - ${data_base_dir}/0659-demoorange3-others demoorange3-1 demoorange3-2
+        # - ${data_base_dir}/0650-demotoyrobot-others demotoyrobot-1 demotoyrobot-2
+        # - ${data_base_dir}/0642-hikrobotbox-box hikrobotbox-1 hikrobotbox-2
+        # - ${data_base_dir}/0643-blackcharger-others blackcharger-1 blackcharger-2
+        # - ${data_base_dir}/0644-fan-others fan-1 fan-2
+        # - ${data_base_dir}/0645-ape-others ape-1 ape-2 
+        # - ${data_base_dir}/0646-fakecam-others fakecam-1 fakecam-2
+        # - ${data_base_dir}/0635-zishengtangface-others zishengtangface-1 zishengtangface-2
+        # - ${data_base_dir}/0636-toothbrushcontainer-others toothbrushcontainer-1 toothbrushcontainer-2
+        # - ${data_base_dir}/0637-pelikancontainer-box pelikancontainer-1 pelikancontainer-2
+        # - ${data_base_dir}/0638-teapotcontainer-box teapotcontainer-1 teapotcontainer-2
         # - ${data_base_dir}/0634-arglasscontainer-others arglasscontainer-1 arglasscontainer-2
         # - ${data_base_dir}/0633-sensemouse-others sensemouse-1 sensemouse-2
         # - ${data_base_dir}/0629-guihuatea-others guihuatea-1 guihuatea-2
@@ -27,15 +40,13 @@ dataset:
         # - ${data_base_dir}/0620-shuixiantea-others shuixiantea-1 shuixiantea-2
         # - ${data_base_dir}/0620-shuixiantea-others shuixiantea-1 shuixiantea-2
         # - ${data_base_dir}/0618-huangjinyatea-others huangjinyatea-1 huangjinyatea-2
-        # - ${data_base_dir}/0619-blueyellowbox-box blueyellowbox-1 blueyellowbox-2
+        # - ${data_base_dir}/0619-yellowbluebox-box yellowbluebox-1 yellowbluebox-2
         # - ${data_base_dir}/0620-shuixiantea-others shuixiantea-1 shuixiantea-2
         # - ${data_base_dir}/0621-headphonecontainer-others headphonecontainer-1 headphonecontainer-2
         # - ${data_base_dir}/0622-ugreenbox-others ugreenbox-1 ugreenbox-2
         # - ${data_base_dir}/0623-camera-others camera-1 camera-2
         # - ${data_base_dir}/0624-weishengsubox-others weishengsubox-1 weishengsubox-2
         # - ${data_base_dir}/0625-dogairpods-others dogairpods-1 dogairpods-2
-        # - ${data_base_dir}/0612-insta-others insta-1
-        # - ${data_base_dir}/0613-batterycharger-others batterycharger-1
         # - ${data_base_dir}/0614-hhkbhandrest-others hhkbhandrest-1
         # - ${data_base_dir}/0615-logimouse-others logimouse-1 logimouse-2
         # - ${data_base_dir}/0616-sensezong-others sensezong-1
@@ -51,7 +62,7 @@ dataset:
         # - ${data_base_dir}/0602-sensesheep-others sensesheep-1 sensesheep-2
         # - ${data_base_dir}/0603-fakebanana-others fakebanana-1 fakebanana-2
         # - ${data_base_dir}/0604-catmodel-others catmodel-1 catmodel-2
-        - ${data_base_dir}/0600-toyrobot-others toyrobot-1 toyrobot-2
+        # - ${data_base_dir}/0600-toyrobot-others toyrobot-1 toyrobot-2
         # - ${work_dir}/data/scan_data/017-porcelain-bottle pcl1 pcl2 pcl3 pcl4
         # - ${work_dir}/data/scan_data/021-porcelain-bottle bottle1 bottle2 bottle3 bottle4
         # - ${work_dir}/data/scan_data/022-haimianbaobao-others hmbb1 hmbb2 hmbb3 hmbb5

@@ -28,6 +28,7 @@ def get_intrin_path_by_color(color_path):
 
 def get_test_seq_path(obj_root, last_n_seq_as_test=1):
     seq_names = os.listdir(obj_root)
+    seq_names = [seq_name for seq_name in seq_names if '-' in seq_name]
     seq_ids = [int(seq_name.split('-')[-1]) for seq_name in seq_names if '-' in seq_name]
     
     test_obj_name = seq_names[0].split('-')[0]
@@ -420,12 +421,15 @@ if __name__ == "__main__":
         # '0601-oldtea-box', '0602-sensesheep-others', '0603-fakebanana-others', '0604-catmodel-others'
         # '0605-pingpangball-ball', '0606-yellowduck-others', '0607-oringe-others'
         # '0608-greenteapot-others', '0609-blackteapot-others', '0610-lecreusetcup-others', '0611-bosecolumnaudio-others'
-        # "0612-insta-others", '0613-batterycharger-others', '0614-hhkbhandrest-others', 
+        # "0612-insta-others",
+        # "0613-batterycharger-others",
+        # '0614-hhkbhandrest-others', 
         # '0615-logimouse-others', 
         # '0616-sensezong-others', 
         # '0617-miehuoqixiang-others'
         # "0618-huangjinyatea-others", 
-        # '0619-blueyellowbox-box', '0620-shuixiantea-others','0621-headphonecontainer-others', '0622-ugreenbox-others', '0623-camera-others', '0624-weishengsubox-others', '0625-dogairpods-others'
+        # "0619-yellowbluebox-box",
+        # '0620-shuixiantea-others','0621-headphonecontainer-others', '0622-ugreenbox-others', '0623-camera-others', '0624-weishengsubox-others', '0625-dogairpods-others'
         # "0626-sensecup-others", '0627-shiningscan-box', '0628-sensenut-box'
         # '0629-guihuatea-others', 
         # '0630-blackcolumcontainer-others', 
@@ -433,10 +437,29 @@ if __name__ == "__main__":
         # '0632-whitechair-others'
         # "0633-sensemouse-others",
         # "0634-arglasscontainer-others"
-        "0635-zishengtangface-others",
-        "0636-toothbrushcontainer-others",
-        "0637-pelikancontainer-box",
-        "0638-teapotcontainer-box"
+        # "0635-zishengtangface-others",
+        # "0636-toothbrushcontainer-others",
+        # "0637-pelikancontainer-box",
+        # "0638-teapotcontainer-box"
+        # "0642-hikrobotbox-box",
+        # "0643-blackcharger-others",
+        # "0644-fan-others",
+        # "0645-ape-others",
+        # "0646-fakecam-others"
+        # "0612-insta-others",
+        # "0613-batterycharger-others",
+        # "0619-blueyellowbox-box"
+        # "0650-demotoyrobot-others",
+        # "0653-demobanana-others",
+        # "0656-demoduck-others",
+        # "0657-demoorange-others"
+        # "0658-demoorange2-others"
+        # "0659-demoorange3-others"
+        "0900-toyrobot-others",
+        # "0901-demoteabox-others"
+        # "0940-diaosu2-others",
+        # "0940-diaosu2-others",
+        # "parse_video"
     ]
     deal_first = True
     deal_last = True

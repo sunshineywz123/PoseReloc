@@ -173,7 +173,7 @@ class LocalFeatureTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, desc3d_db, desc2d_db, desc2d_query, data, query_mask=None, keypoints3D=None, desc2d_db_pad_mask=None):
+    def forward(self, desc3d_db, desc2d_db, desc2d_query, data, query_mask=None, keypoints3D=None, desc2d_db_pad_mask=None, return_middle_layer_features=False):
         """
         Args:
            desc3d_db (torch.Tensor): [N, C, L] 
@@ -267,8 +267,17 @@ class LocalFeatureTransformer(nn.Module):
                 )
             else:
                 raise NotImplementedError
+            
+            if return_middle_layer_features:
+                if i == len(self.layer_names) - 2:
+                    desc2d_query_middle = desc2d_query.clone().detach()
+                    desc3d_db_middle = desc3d_db.clone().detach()
 
-        return desc3d_db, desc2d_query
+        if return_middle_layer_features:
+            return desc3d_db, desc2d_query, desc3d_db_middle, desc2d_query_middle
+        else:
+            return desc3d_db, desc2d_query
+
 
     def buildAdjMatrix(self, num_2d, num_3d):
         num_leaf = int(num_2d / num_3d)

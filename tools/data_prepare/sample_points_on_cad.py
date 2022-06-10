@@ -59,6 +59,33 @@ def sample_points_on_cad(cad_model, n_num=1000, save_p3d_path=None):
     sampled_3D_points = np.asarray(sampled_3D_points.points)
     return sampled_3D_points.astype(np.float32), model_8corners_center.astype(np.float32) # 9*3
 
+def load_points_from_cad(cad_model, max_num=-1, save_p3d_path=None):
+    """
+    cad_model: str(path) or open3d mesh
+    """
+    if isinstance(cad_model, str):
+        assert osp.exists(cad_model), f"CAD model mesh: {cad_model} not exists"
+        mesh = o3d.io.read_triangle_mesh(cad_model)
+    else:
+        mesh = cad_model
+
+    model_corners = get_model_corners(np.asarray(mesh.vertices))
+    model_center = (np.max(model_corners, 0, keepdims=True) + np.min(model_corners, 0, keepdims=True)) / 2
+    model_8corners_center = np.concatenate([model_corners, model_center], axis=0) # 9*3
+
+    # Sample uniformly
+    # sampled_3D_points = o3d.geometry.sample_points_uniformly(mesh, n_num)
+    vertices = np.asarray(mesh.vertices)
+    if vertices.shape[0] > max_num and max_num != -1:
+        sampled_3D_points = mesh.sample_points_uniformly(max_num)
+        vertices = np.asarray(sampled_3D_points.points)
+
+    # Save:
+    if save_p3d_path is not None:
+        o3d.io.write_point_cloud(save_p3d_path, vertices)
+
+    return vertices.astype(np.float32), model_8corners_center.astype(np.float32) # 9*3
+
 def model_diameter_from_bbox(bbox):
     """
     bbox: 8*3 or 9*3(including center at last row)

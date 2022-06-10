@@ -21,6 +21,8 @@ def residual(
     distance_loss_scale=80,
     mode="feature_metric_error",
     verbose=True,
+    distance_map_temp=1.0,
+    distance_map_do_softmax=False,
     **kwargs
 ):
     """
@@ -49,6 +51,9 @@ def residual(
     distance_map = (
         distance_map.squeeze(1) if len(distance_map.shape) == 4 else distance_map
     )
+    distance_map /= distance_map_temp
+    if distance_map_do_softmax:
+        distance_map = torch.softmax(distance_map, dim=1)
 
     device = depth.device
 
@@ -123,6 +128,8 @@ def pose_ba_residual(
     mode="feature_metric_error",
     confidance=None,
     verbose=True,
+    distance_map_temp=1.0,
+    distance_map_do_softmax=False,
     **kwargs
 ):
     """
@@ -154,6 +161,10 @@ def pose_ba_residual(
     distance_map = (
         distance_map.squeeze(1) if len(distance_map.shape) == 4 else distance_map
     )
+
+    distance_map /= distance_map_temp
+    if distance_map_do_softmax:
+        distance_map = torch.softmax(distance_map, dim=1)
 
     device = depth.device
 
@@ -241,6 +252,8 @@ def depth_residual(
     mode="feature_metric_error",
     confidance=None,
     verbose=True,
+    distance_map_temp=1.0,
+    distance_map_do_softmax=False,
     **kwargs
 ):
     """
@@ -272,6 +285,11 @@ def depth_residual(
     distance_map = (
         distance_map.squeeze(1) if len(distance_map.shape) == 4 else distance_map
     )
+
+    distance_map /= distance_map_temp
+    if distance_map_do_softmax:
+        # import ipdb; ipdb.set_trace()
+        distance_map = torch.softmax(distance_map, dim=1)
 
     device = depth.device
 
@@ -341,4 +359,4 @@ def depth_residual(
     if confidance is not None:
         return distance[confidance > 0], confidance
     else:
-        return distance, confidance
+        return distance

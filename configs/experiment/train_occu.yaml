@@ -25,14 +25,14 @@ merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
 trainer:
     _target_: pytorch_lightning.Trainer
     gpus: 
-        - 0
-        - 1
+        # - 0
+        # - 1
         # - 2
         # - 3
-        # - 4
-        # - 5
+        - 4
+        - 5
         - 6
-        # - 7
+        - 7
     num_nodes: 1
     accelerator: 'ddp'
 
@@ -263,6 +263,7 @@ datamodule:
     anno_dirs: outputs_${model.match_type}/anno
     train_anno_file: ${merge_output_dir}/${task_name}/train.json
     val_anno_file: ${merge_output_dir}/${task_name}/val.json
+    augmentor_method: null
 
     batch_size: 2
     num_workers: 4

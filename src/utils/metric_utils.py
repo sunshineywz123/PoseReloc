@@ -4,7 +4,8 @@ import cv2
 import torch
 import os.path as osp
 from loguru import logger
-from tools.data_prepare.sample_points_on_cad import sample_points_on_cad, model_diameter_from_bbox
+from scipy import spatial
+from tools.data_prepare.sample_points_on_cad import load_points_from_cad, sample_points_on_cad, model_diameter_from_bbox
 from .colmap.read_write_model import qvec2rotmat, read_images_binary
 from .colmap.eval_helper import quaternion_from_matrix
 
@@ -140,6 +141,7 @@ def pose_auc(errors, thresholds, ret_dict=False):
 def projection_2d_error(model_3D_pts, pose_pred, pose_targets, K):
     def project(xyz, K, RT):
         """
+        NOTE: need to use original K
         xyz: [N, 3]
         K: [3, 3]
         RT: [3, 4]
@@ -160,19 +162,40 @@ def projection_2d_error(model_3D_pts, pose_pred, pose_targets, K):
     proj_mean_diff = np.mean(np.linalg.norm(model_2d_pred - model_2d_targets, axis=-1))
     return proj_mean_diff
 
-def add_metric(model_3D_pts, diameter, pose_pred, pose_target, percentage=0.1):
+def add_metric(model_3D_pts, diameter, pose_pred, pose_target, percentage=0.1, syn=False, model_unit='m'):
     # Dim check:
     if pose_pred.shape[0] == 4:
         pose_pred = pose_pred[:3]
     if pose_target.shape[0] == 4:
         pose_target = pose_target[:3]
+    
+    # if model_unit == 'm':
+    #     model_3D_pts *= 1000
+    #     diameter *= 1000
+    #     pose_pred[:,3] *= 1000
+    #     pose_target[:,3] *= 1000
+        
+    #     max_model_coord = np.max(model_3D_pts, axis=0)
+    #     min_model_coord = np.min(model_3D_pts, axis=0)
+    #     diameter_from_model = np.linalg.norm(max_model_coord - min_model_coord)
+    # elif model_unit == 'mm':
+    #     pass
 
-    diameter = diameter * percentage
+    diameter_thres = diameter * percentage
     model_pred = np.dot(model_3D_pts, pose_pred[:, :3].T) + pose_pred[:, 3]
     model_target = np.dot(model_3D_pts, pose_target[:, :3].T) + pose_target[:, 3]
 
-    mean_dist = np.mean(np.linalg.norm(model_pred - model_target, axis=-1))
-    return mean_dist < diameter
+    if syn:
+        mean_dist_index = spatial.cKDTree(model_pred)
+        mean_dist, _ = mean_dist_index.query(model_target, k=1)
+        mean_dist = np.mean(mean_dist)
+    else:
+        mean_dist = np.mean(np.linalg.norm(model_pred - model_target, axis=-1))
+    if mean_dist < diameter_thres:
+        return True
+    else:
+        # import ipdb; ipdb.set_trace()
+        return False
 
 
 # Evaluate query pose errors
@@ -319,28 +342,31 @@ def compute_query_pose_errors(
     data.update({"R_errs": [], "t_errs": [], "inliers": []})
     data.update({"R_errs_c": [], "t_errs_c": [], "inliers_c": []})
 
+    adds = False
     # Prepare query model for eval ADD metric
     if 'eval_ADD_metric' in configs:
         if configs['eval_ADD_metric'] and not training:
+            adds = configs['ADDS']
             image_path = data['query_image_path']
+            query_K_origin = data["query_intrinsic_origin"].cpu().numpy()
             model_path = osp.join(image_path.rsplit('/', 3)[0], 'model_eval.ply')
             if not osp.exists(model_path):
-                logger.warning('Model_eval.ply not exists! try to use model.ply instead!')
+                # logger.warning('Model_eval.ply not exists! try to use model.ply instead!')
                 model_path = osp.join(image_path.rsplit('/', 3)[0], 'model.ply')
             diameter_file_path = osp.join(image_path.rsplit('/', 3)[0], 'diameter.txt')
             if not osp.exists(model_path):
-                logger.warning(f'want to eval add metric, however model_eval.ply path:{model_path} not exists!')
+                logger.error(f'want to eval add metric, however model_eval.ply path:{model_path} not exists!')
             else:
                 # Load model:
-                model_vertices, bbox = sample_points_on_cad(model_path, 10000) # N*3
+                model_vertices, bbox = load_points_from_cad(model_path) # N*3
                 # Load diameter:
                 if osp.exists(diameter_file_path):
                     diameter = np.loadtxt(diameter_file_path)
                 else:
                     diameter = model_diameter_from_bbox(bbox)
-                    logger.warning(f'Diameter file not exists! Diameter compute from CAD model is {diameter}')
+                    # logger.warning(f'Diameter file not exists! Diameter compute from CAD model is {diameter}')
                 
-                data.update({"ADD":[]})
+                data.update({"ADD":[], "proj2D":[]})
 
     pose_pred = []
     for bs in range(query_K.shape[0]):
@@ -444,10 +470,14 @@ def compute_query_pose_errors(
             data["R_errs"].append(R_err)
             data["t_errs"].append(t_err)
             data["inliers"].append(inliers)
+            # import ipdb; ipdb.set_trace()
 
             if "ADD" in data:
-                add_result = add_metric(model_vertices, diameter, pose_pred=query_pose_pred, pose_target=query_pose_gt[bs])
+                add_result = add_metric(model_vertices, diameter, pose_pred=query_pose_pred, pose_target=query_pose_gt[bs], syn=adds)
                 data["ADD"].append(add_result)
+
+                proj2d_result = projection_2d_error(model_vertices, pose_pred=query_pose_pred, pose_targets=query_pose_gt[bs], K=query_K_origin[bs])
+                data['proj2D'].append(proj2d_result)
 
         if query_pose_pred_c is None:
             data["R_errs_c"].append(np.inf)
@@ -516,5 +546,8 @@ def aggregate_metrics(metrics, pose_thres=[1, 3, 5], proj2d_thres=5):
     if "ADD_metric" in metrics:
         ADD_metric = metrics['ADD_metric']
         agg_metric["ADD metric"] = np.mean(ADD_metric)
+
+        proj2D_metric = metrics['proj2D_metric']
+        agg_metric["proj2D metric"] = np.mean(np.array(proj2D_metric) < proj2d_thres)
 
     return agg_metric

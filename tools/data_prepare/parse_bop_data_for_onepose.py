@@ -20,6 +20,7 @@ from render_cad_model_to_depth import render_cad_model_to_depth, save_np, depth2
 dataset_name2model_dict = {
     "ycbv": "models",
     "lm": "models",
+    "lmo": "models_eval",
     "tless": "models_cad",
 }
 
@@ -158,6 +159,7 @@ def parse_data_for_obj(
                 K = np.array(gt_camera_dic[img_id]["cam_K"]).reshape(3, 3)  # 3*3
                 bbox_obj = gt_meta_dic[img_id][i]["bbox_obj"]
                 bbox_visible = gt_meta_dic[img_id][i]["bbox_visib"]
+                # TODO: if bbox visible not exists, render it!
                 visib_fract = gt_meta_dic[img_id][i]["visib_fract"]
                 try:
                     img_path = osp.join(
@@ -246,13 +248,24 @@ if __name__ == "__main__":
 
     # Construct output data file structure
     output_data_base_dir = args.output_data_dir
-    output_data_obj_dir = osp.join(
-        output_data_base_dir,
-        "-".join([args.assign_onepose_id, args.dataset_name + args.obj_id, "others"]),
-    )
-    sequence_name = "-".join(
-        [args.dataset_name + args.obj_id, "1" if args.split == "train" else "2"]
-    )  # label seq 0 for mapping data, label seq 1 for test data
+    if args.dataset_name != 'lmo':
+        output_data_obj_dir = osp.join(
+            output_data_base_dir,
+            "-".join([args.assign_onepose_id, args.dataset_name + str(int(args.obj_id)), "others"]),
+        )
+        sequence_name = "-".join(
+            [args.dataset_name + str(int(args.obj_id)), "1" if args.split == "train" else "2"]
+        )  # label seq 0 for mapping data, label seq 1 for test data
+    else:
+        assert args.split != 'train', 'no train data in lmo!'
+        output_data_obj_dir = osp.join(
+            output_data_base_dir,
+            "-".join([args.assign_onepose_id, 'lm' + str(int(args.obj_id)), "others"]),
+        )
+        sequence_name = "-".join(
+            ['lm' + str(int(args.obj_id)), "3"]
+        )  # label seq 0 for mapping data, label seq 1 for test data
+
     output_data_seq_dir = osp.join(output_data_obj_dir, sequence_name,)
     Path(output_data_seq_dir).mkdir(parents=True, exist_ok=True)
 
@@ -279,7 +292,7 @@ if __name__ == "__main__":
                 args.data_base_dir,
                 args.dataset_name,
                 subsets,
-                obj_id=args.obj_id,
+                obj_id=str(int(args.obj_id)),
                 split=args.split,
                 pba=pb.actor,
             )
@@ -292,7 +305,7 @@ if __name__ == "__main__":
             args.data_base_dir,
             args.dataset_name,
             seq_dir_list,
-            obj_id=args.obj_id,
+            obj_id=str(int(args.obj_id)),
             split=args.split,
             pba=None,
         )
@@ -346,12 +359,22 @@ if __name__ == "__main__":
         K = np.array(image_info["K"])  # 3*3
         R = np.array(image_info["R_m2c"])  # 3*3
         t = np.array(image_info["t_m2c"])  # 3*1
+
+        if args.dataset_name == 'lmo':
+            t /= 1000 # from mm 2 m
         pose = np.concatenate(
             [np.concatenate([R, t], axis=1), np.array([[0, 0, 0, 1]])], axis=0
         )  # 4*4
         original_img = cv2.imread(image_path)
         x0, y0, w, h = image_info["bbox_visible"]
         x1, y1 = x0 + w, y0 + h
+
+        offset_percent = 0.3
+        # offset_percent = 0.5
+        x0 -= int(w * offset_percent)
+        y0 -= int(h * offset_percent)
+        x1 += int(w * offset_percent)
+        y1 += int(h * offset_percent)
 
         # Crop image by 2D visible bbox, and change K
         box = np.array([x0, y0, x1, y1])
@@ -360,7 +383,8 @@ if __name__ == "__main__":
         image_crop, _ = get_image_crop_resize(original_img, box, resize_shape)
 
         box_new = np.array([0, 0, x1 - x0, y1 - y0])
-        resize_shape = np.array([512, 512])  # FIXME: change to global configs
+        resize_shape = np.array([256, 256])  # FIXME: change to global configs
+        # resize_shape = np.array([512, 512])  # FIXME: change to global configs
         K_crop, K_crop_homo = get_K_crop_resize(box_new, K_crop, resize_shape)
         image_crop, _ = get_image_crop_resize(image_crop, box_new, resize_shape)
 

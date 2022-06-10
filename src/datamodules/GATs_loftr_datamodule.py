@@ -1,9 +1,10 @@
 from turtle import down
 from loguru import logger
+from src.datasets.GATs_loftr_dataset import GATsLoFTRDataset
+from src.utils.utils_phoaug import build_augmentor
 from pytorch_lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader
 import os.path as osp
-from src.datasets.GATs_loftr_dataset import GATsLoFTRDataset
 
 
 class GATsLoFTRDataModule(LightningDataModule):
@@ -22,6 +23,7 @@ class GATsLoFTRDataModule(LightningDataModule):
         self.batch_size = kwargs["batch_size"]
         self.num_workers = kwargs["num_workers"]
         self.pin_memory = kwargs["pin_memory"]
+        self.augmentor_method = kwargs['augmentor_method']
 
         # Data related
         self.train_percent = kwargs["train_percent"]
@@ -68,6 +70,7 @@ class GATsLoFTRDataModule(LightningDataModule):
             "num_workers": self.num_workers,
             "pin_memory": self.pin_memory,
         }
+        self.augmentor = build_augmentor(self.augmentor_method)
 
     def prepare_data(self):
         pass
@@ -93,7 +96,8 @@ class GATsLoFTRDataModule(LightningDataModule):
             downsample=self.downsample,
             downsample_resolution=self.downsample_resolution,
             load_3d_coarse_feature=self.load_3d_coarse,
-            image_warp_adapt=self.train_image_warp_adapt
+            image_warp_adapt=self.train_image_warp_adapt,
+            augmentor=self.augmentor
         )
         print("=> Read train anno file: ", self.train_anno_file)
 

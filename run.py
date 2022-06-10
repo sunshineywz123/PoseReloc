@@ -3,6 +3,7 @@ import json
 import os
 import os.path as osp
 from shutil import copyfile, rmtree
+from time import time
 import natsort
 
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
@@ -315,7 +316,7 @@ def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
         logger.info(f"Finish Processing {data_dir}.")
         if pba is not None:
             pba.update.remote(1)
-    logger.info(f"Worker finish!")
+    logger.info(f"Worker{worker_id} finish!")
     return None
 
 
@@ -467,6 +468,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     else:
                         raise NotImplementedError
 
+                time_start = time()
                 coarse_match.loftr_coarse_matching(
                     img_lists,
                     covis_pairs_out,
@@ -475,6 +477,11 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     use_ray=cfg.use_local_ray,
                     verbose=cfg.verbose
                 )
+                time_end = time()
+                if cfg.verbose:
+                    logger.info(f"coarse matching takes:{time_end - time_start}, process:{len(img_lists)} images")
+
+                time_start = time()
                 generate_empty.generate_model(img_lists, empty_dir)
                 if cfg.use_global_ray:
                     # Need to ask for gpus!
@@ -502,6 +509,9 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         image_dir=None,
                         verbose=cfg.verbose,
                     )
+                time_end = time()
+                if cfg.verbose:
+                    logger.info(f"triangulation takes:{time_end - time_start}")
 
                 os.system(
                     f"mv {feature_out} {osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]}"
@@ -522,6 +532,10 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     ), f"model_coarse not exist under: {deep_sfm_dir}, please set 'cfg.overwrite_coarse = True'"
                     os.system(f"rm -rf {osp.join(deep_sfm_dir, 'model')}")
 
+                    # configs for post optimization:
+                    post_optim_configs = cfg.post_optim if 'post_optim' in cfg else None
+                    # post_optim_configs = cfg.post_optim
+
                     logger.info("LoFTR mapping post refinement begin...")
                     state, _, _ = post_optimization.post_optimization(
                         img_lists,
@@ -535,6 +549,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         visualize_dir=visualize_dir,
                         vis3d_pth=vis3d_pth,
                         verbose=cfg.verbose,
+                        args=post_optim_configs
                     )
                     if state == False:
                         logger.error("colmap coarse is empty!")

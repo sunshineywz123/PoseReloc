@@ -44,6 +44,7 @@ class GATsLoFTRDataset(Dataset):
         downsample_resolution=30,
         load_3d_coarse_feature=False,
         image_warp_adapt=False,
+        augmentor=None
     ):
         super(Dataset, self).__init__()
 
@@ -56,7 +57,7 @@ class GATsLoFTRDataset(Dataset):
         self.anns = self.anns[::sample_inverval]
 
         self.load_pose_gt = load_pose_gt
-        self.load_img_mask = True
+        self.load_img_mask = False
         self.image_warp_adapt = image_warp_adapt
 
         # 3D point cloud part
@@ -81,6 +82,8 @@ class GATsLoFTRDataset(Dataset):
         self.path_prefix_substitute_3D_aim = (str(path_prefix_substitute_3D_aim),)
         self.path_prefix_substitute_2D_source = (str(path_prefix_substitute_2D_source),)
         self.path_prefix_substitute_2D_aim = (str(path_prefix_substitute_2D_aim),)
+    
+        self.augmentor = augmentor
 
     def read_anno2d(self, anno2d_file):
         """ Read (and pad) 2d info"""
@@ -445,12 +448,14 @@ class GATsLoFTRDataset(Dataset):
         return conf_matrix, fine_location_matrix
 
     def get_intrin_by_color_pth(self, img_path):
-        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(".png", ".txt")
+        img_ext = osp.splitext(img_path)[1]
+        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(img_ext, ".txt")
         K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K_crop
 
     def get_gt_pose_by_color_pth(self, img_path):
-        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(".png", ".txt")
+        img_ext = osp.splitext(img_path)[1]
+        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(img_ext, ".txt")
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
 
@@ -481,6 +486,7 @@ class GATsLoFTRDataset(Dataset):
             ret_scales=True,
             ret_pad_mask=True,
             df=self.df,
+            augmentor=self.augmentor
         )
 
         self.h_origin = query_img.shape[1] * query_img_scale[0]
@@ -636,6 +642,7 @@ class GATsLoFTRDataset(Dataset):
                 "scores2d_db": clt_scores2d.squeeze(1),  # [n2 * num_leaf]
                 "query_image": query_img,  # [1*h*w]
                 "query_image_scale": query_img_scale,  # [2]
+                "query_image_path": color_path
             }
         )
 

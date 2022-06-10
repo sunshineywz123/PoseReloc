@@ -1,25 +1,39 @@
 import cv2
+from cv2 import Feature2D
 import numpy as np
+import torch
 from vis3d.vis3d import Vis3D
+from sklearn.decomposition import PCA
 
-def make_matching_plot_fast(image0, image1, kpts0, kpts1,
-                            mkpts0, mkpts1, color, text,
-                            margin=10, show_keypoints=True, num_matches_to_show=None):
+
+def make_matching_plot_fast(
+    image0,
+    image1,
+    kpts0,
+    kpts1,
+    mkpts0,
+    mkpts1,
+    color,
+    text,
+    margin=10,
+    show_keypoints=True,
+    num_matches_to_show=None,
+):
     """draw matches in two images"""
     H0, W0 = image0.shape
     H1, W1 = image1.shape
     H, W = max(H0, H1), W0 + W1 + margin
-    
+
     out = 255 * np.ones((H, W), np.uint8)
     out[:H0, :W0] = image0
-    out[:H1, W0+margin:] = image1
+    out[:H1, W0 + margin :] = image1
     out = np.stack([out] * 3, -1)
-    
+
     if show_keypoints:
         kpts0, kpts1 = np.round(kpts0).astype(int), np.round(kpts1).astype(int)
         white = (255, 255, 255)
         black = (0, 0, 0)
-        
+
         for x, y in kpts0:
             cv2.circle(out, (x, y), 2, black, -1, lineType=cv2.LINE_AA)
             cv2.circle(out, (x, y), 1, white, -1, lineType=cv2.LINE_AA)
@@ -31,29 +45,50 @@ def make_matching_plot_fast(image0, image1, kpts0, kpts1,
     color = (np.array(color[:, :3]) * 255).astype(int)[:, ::-1]
     for (x0, y0), (x1, y1), c in zip(mkpts0, mkpts1, color):
         c = c.tolist()
-        cv2.line(out, (x0, y0), (x1 + margin + W0, y1), 
-                 color=c, thickness=1, lineType=cv2.LINE_AA)
+        cv2.line(
+            out,
+            (x0, y0),
+            (x1 + margin + W0, y1),
+            color=c,
+            thickness=1,
+            lineType=cv2.LINE_AA,
+        )
         cv2.circle(out, (x0, y0), 2, c, -1, lineType=cv2.LINE_AA)
-        cv2.circle(out, (x1 + margin + W0, y1), 2, c, -1,
-                   lineType=cv2.LINE_AA)
-    
+        cv2.circle(out, (x1 + margin + W0, y1), 2, c, -1, lineType=cv2.LINE_AA)
+
     # FIXME: vis num_matches_to_show pairs
     if num_matches_to_show:
         pass
 
-    scale = min(H / 640., 2.0) * 1.2 # scale
-    Ht = int(30 * scale) # text height
+    scale = min(H / 640.0, 2.0) * 1.2  # scale
+    Ht = int(30 * scale)  # text height
     text_color_fg = (0, 225, 255)
     text_color_bg = (0, 0, 0)
     for i, t in enumerate(text):
-        cv2.putText(out, t, (int(8*scale), Ht*(i+1)), cv2.FONT_HERSHEY_DUPLEX,
-                    1.0*scale, text_color_bg, 3, cv2.LINE_AA)
-        cv2.putText(out, t, (int(8*scale), Ht*(i+1)), cv2.FONT_HERSHEY_DUPLEX,
-                    1.0*scale, text_color_fg, 1, cv2.LINE_AA)
-        
-    cv2.namedWindow('vis', 0)
-    cv2.resizeWindow('vis', 800, 800)
-    cv2.imshow('vis', out)
+        cv2.putText(
+            out,
+            t,
+            (int(8 * scale), Ht * (i + 1)),
+            cv2.FONT_HERSHEY_DUPLEX,
+            1.0 * scale,
+            text_color_bg,
+            3,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            out,
+            t,
+            (int(8 * scale), Ht * (i + 1)),
+            cv2.FONT_HERSHEY_DUPLEX,
+            1.0 * scale,
+            text_color_fg,
+            1,
+            cv2.LINE_AA,
+        )
+
+    cv2.namedWindow("vis", 0)
+    cv2.resizeWindow("vis", 800, 800)
+    cv2.imshow("vis", out)
     cv2.waitKey(0)
 
 
@@ -63,31 +98,30 @@ def vis_match_pairs(pred, feats0, feats1, name0, name1):
 
     image0_path = name0
     image1_path = name1
-    
+
     image0 = cv2.imread(image0_path)
     image0 = cv2.cvtColor(image0, cv2.COLOR_RGB2GRAY)
     image1 = cv2.imread(image1_path)
     image1 = cv2.cvtColor(image1, cv2.COLOR_RGB2GRAY)
-    
-    matches = pred['matches0'][0].detach().cpu().numpy()
+
+    matches = pred["matches0"][0].detach().cpu().numpy()
     valid = matches > -1
-    
-    kpts0, kpts1 = feats0['keypoints'].__array__(), feats1['keypoints'].__array__()
+
+    kpts0, kpts1 = feats0["keypoints"].__array__(), feats1["keypoints"].__array__()
     mkpts0, mkpts1 = kpts0[valid], kpts1[matches[valid]]
-    
-    conf = pred['matching_scores0'][0].detach().cpu().numpy()
+
+    conf = pred["matching_scores0"][0].detach().cpu().numpy()
     mconf = conf[valid]
     color = cm.jet(mconf)
 
     make_matching_plot_fast(
-        image0, image1, kpts0, kpts1,
-        mkpts0, mkpts1, color, text=[]
+        image0, image1, kpts0, kpts1, mkpts0, mkpts1, color, text=[]
     )
 
 
 def reproj(K, pose, pts_3d):
-    """ 
-    Reproj 3d points to 2d points 
+    """
+    Reproj 3d points to 2d points
     @param K: [3, 3] or [3, 4]
     @param pose: [3, 4] or [4, 4]
     @param pts_3d: [n, 3]
@@ -99,12 +133,12 @@ def reproj(K, pose, pts_3d):
         K_homo = np.concatenate([K, np.zeros((3, 1))], axis=1)
     else:
         K_homo = K
-    
+
     if pose.shape == (3, 4):
         pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
     else:
         pose_homo = pose
-    
+
     pts_3d = pts_3d.reshape(-1, 3)
     pts_3d_homo = np.concatenate([pts_3d, np.ones((pts_3d.shape[0], 1))], axis=1)
     pts_3d_homo = pts_3d_homo.T
@@ -112,21 +146,28 @@ def reproj(K, pose, pts_3d):
     reproj_points = K_homo @ pose_homo @ pts_3d_homo
     reproj_points = reproj_points[:] / reproj_points[2:]
     reproj_points = reproj_points[:2, :].T
-    return reproj_points # [n, 2]
+    return reproj_points  # [n, 2]
 
 
 def ransac_PnP(K, pts_2d, pts_3d, scale=1):
-    """ solve pnp """
-    dist_coeffs = np.zeros(shape=[8, 1], dtype='float64')
-    
+    """solve pnp"""
+    dist_coeffs = np.zeros(shape=[8, 1], dtype="float64")
+
     pts_2d = np.ascontiguousarray(pts_2d.astype(np.float64))
-    pts_3d = np.ascontiguousarray(pts_3d.astype(np.float64)) 
+    pts_3d = np.ascontiguousarray(pts_3d.astype(np.float64))
     K = K.astype(np.float64)
-    
+
     pts_3d *= scale
     try:
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs, reprojectionError=5,
-                                                    iterationsCount=10000, flags=cv2.SOLVEPNP_EPNP)
+        _, rvec, tvec, inliers = cv2.solvePnPRansac(
+            pts_3d,
+            pts_2d,
+            K,
+            dist_coeffs,
+            reprojectionError=5,
+            iterationsCount=10000,
+            flags=cv2.SOLVEPNP_EPNP,
+        )
         # _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
 
         rotation = cv2.Rodrigues(rvec)[0]
@@ -141,35 +182,30 @@ def ransac_PnP(K, pts_2d, pts_3d, scale=1):
         return np.eye(4)[:3], np.eye(4), []
 
 
-def draw_3d_box(image, corners_2d, linewidth=3, color='g'):
-    """ Draw 3d box corners 
+def draw_3d_box(image, corners_2d, linewidth=3, color="g"):
+    """Draw 3d box corners
     @param corners_2d: [8, 2]
     """
-    lines = np.array([
-        [0, 1, 5, 4, 2, 3, 7, 6, 0, 1, 5, 4],
-        [1, 5, 4, 0, 3, 7, 6, 2, 3, 2, 6, 7]
-    ]).T
+    lines = np.array(
+        [[0, 1, 5, 4, 2, 3, 7, 6, 0, 1, 5, 4], [1, 5, 4, 0, 3, 7, 6, 2, 3, 2, 6, 7]]
+    ).T
 
-    colors = {
-        'g': (0, 255, 0),
-        'r': (0, 0, 255),
-        'b': (255, 0, 0)
-    }
+    colors = {"g": (0, 255, 0), "r": (0, 0, 255), "b": (255, 0, 0)}
     if color not in colors.keys():
         color = (42, 97, 247)
     else:
         color = colors[color]
-    
+
     for id, line in enumerate(lines):
         pt1 = corners_2d[line[0]].astype(int)
         pt2 = corners_2d[line[1]].astype(int)
         image = cv2.line(image, tuple(pt1), tuple(pt2), color, linewidth)
-    
+
     return image
 
 
 def draw_2d_box(image, corners_2d, linewidth=3):
-    """ Draw 2d box corners
+    """Draw 2d box corners
     @param corners_2d: [x_left, y_top, x_right, y_bottom]
     """
     x1, y1, x2, y2 = corners_2d.astype(int)
@@ -177,13 +213,94 @@ def draw_2d_box(image, corners_2d, linewidth=3):
         [(x1, y1), (x1, y2)],
         [(x1, y2), (x2, y2)],
         [(x2, y2), (x2, y1)],
-        [(x2, y1), (x1, y1)]
+        [(x2, y1), (x1, y1)],
     ]
 
     for pts in box_pts:
         pt1, pt2 = pts
         cv2.line(image, pt1, pt2, (0, 0, 255), linewidth)
 
+
 def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
-    vis3d = Vis3D(dump_dir, save_name, xyz_pattern=("x", "-y", "-z"))
+    vis3d = Vis3D(dump_dir, save_name)
     vis3d.add_point_cloud(pointcloud_pth, name="filtered_pointcloud")
+
+
+def compute_pca_features(
+    feature3D, feature2D_map, feature_rescal_factor=8, save_path=None
+):
+    """
+    feature2D_map: H*W*c
+    feature3D: N*C
+    """
+    # PCA decrease dim of input feature:
+    pca = PCA(n_components=3, svd_solver="arpack")
+
+    H, W, C = feature2D_map.shape
+    N = feature3D.shape[0]
+    assert feature3D.shape[-1] == feature2D_map.shape[-1]
+
+    feat_concated = np.concatenate(
+        [feature3D, feature2D_map.reshape(-1, C)], axis=0
+    )  # 2N * C
+    pca_feature = pca.fit_transform(feat_concated)
+
+    # Convert decreased feature to color map:
+    pca_feature = cv2.normalize(
+        pca_feature,
+        None,
+        alpha=0,
+        beta=255,
+        norm_type=cv2.NORM_MINMAX,
+        dtype=cv2.CV_8UC3,
+    )
+    feature3D_color = pca_feature[:N]
+    feature2D_map_pca = pca_feature[N:].reshape(H, W, 3)
+    img_resized = cv2.resize(
+        feature2D_map_pca,
+        (W * feature_rescal_factor, H * feature_rescal_factor),
+        interpolation=cv2.INTER_LINEAR,
+    )  # NOTE: dsize is (W, H)
+    img_colormap = img_resized
+
+    if save_path is not None:
+        cv2.imwrite(save_path, img_colormap)
+
+    # fig, axes = plt.subplots(1, 1, dpi=200)
+    # axes.imshow(img_colormap)
+    # axes.get_yaxis().set_ticks([])
+    # axes.get_xaxis().set_ticks([])
+    # plt.tight_layout(pad=0.5)
+    return feature3D_color, img_resized
+
+
+@torch.no_grad()
+def vis_pca_features(data):
+    """
+    Update:
+        data(dict):{
+        }
+    """
+    B, N, C = data['db_3D_c'].shape
+    assert B == 1
+    query_feature_map_coarse = data["q_b_c"].cpu().numpy()[0] # H*W*C
+    feature3D_coarse = data["db_3D_c"].cpu().numpy()[0]  # N*C
+    query_feature_map_coarse_atten = data["q_atten_c"].cpu().numpy()[0]  # H*W*C
+    feature3D_coarse_atten = data["db_3D_atten_c"].cpu().numpy()[0]  # N*C
+    point_coord = data["keypoints3d"].cpu().numpy()[0]  # N*3
+
+    feature3D_color_before, feature2D_color_before = compute_pca_features(
+        feature3D_coarse, query_feature_map_coarse
+    )
+
+    feature3D_color_after, feature2D_color_after = compute_pca_features(
+        feature3D_coarse_atten, query_feature_map_coarse_atten
+    )
+
+    return {
+        "feature3D_color_before": feature3D_color_before,
+        "feature2D_color_before": feature2D_color_before,
+        "feature3D_color_after": feature3D_color_after,
+        "feature2D_color_after": feature2D_color_after,
+        "point_cloud": point_coord
+    }

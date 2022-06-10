@@ -1,12 +1,12 @@
 # @package _global_
 
 type: merge_anno
-task_name: gats_loftr
+task_name: loftr_train_geometric
 match_type: 'softmax'
 split: 'train'
 
 data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
-sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3'
+sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error'
 merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
 
 # names: 

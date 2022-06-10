@@ -33,10 +33,12 @@ def extract_matches(data, match_model, metrics_configs):
         "pose_gt": data["query_pose_gt"][0].cpu().numpy(),
         "intrinsic": data["query_intrinsic"][0].cpu().numpy(),
         "image_path": data["query_image_path"],
+        "time": end_time - start_time
     }
 
     if "ADD" in data:
         result_data.update({"ADD_metric": data["ADD"]})
+        result_data.update({"proj2D_metric": data["proj2D"]})
 
     del data
     torch.cuda.empty_cache()
@@ -75,6 +77,7 @@ def inference_gats_loftr_worker(
 
 
 # @ray.remote(num_cpus=1, num_gpus=0.5)  # release gpu after finishing
-@ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+@ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
+# @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
 def inference_gats_loftr_worker_ray_wrapper(*args, **kwargs):
     return inference_gats_loftr_worker(*args, **kwargs)

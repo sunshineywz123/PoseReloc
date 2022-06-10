@@ -1,4 +1,5 @@
 from functools import partial
+from tabnanny import verbose
 from pytorch3d import transforms
 import torch
 import torch.nn as nn
@@ -9,7 +10,7 @@ from torch.utils.data import DataLoader
 import time
 import ray
 
-# from submodules.DeepLM import Solve as SecondOrderSolve
+from submodules.DeepLM import Solve as SecondOrderSolve
 from .first_order_solver import FirstOrderSolve
 
 from .residual import pose_ba_residual, depth_residual
@@ -37,6 +38,8 @@ class Optimizer(nn.Module):
         self.solver_type = cfgs["solver_type"]
         self.residual_mode = cfgs["residual_mode"]
         self.distance_loss_scale = cfgs["distance_loss_scale"]
+        self.distance_map_temp = cfgs["distance_map_temp"]
+        self.distance_map_do_softmax = cfgs["distance_map_do_softmax"]
         # self.optimize_lr = {"depth": 1e-4, "pose": 1e-4, "BA": 5e-5}  # Baseline
         self.optimize_lr = cfgs["optimize_lr"]
         self.optim_procedure = cfgs["optim_procedure"]
@@ -177,6 +180,7 @@ class Optimizer(nn.Module):
         else:
             iter_obj = enumerate(optimization_procedures)
 
+        begin_optimize_t = time.time()
         for i, procedure in iter_obj:
             if procedure == "depth":
                 logger.info(
@@ -257,6 +261,8 @@ class Optimizer(nn.Module):
             # Refinement
             partial_paras = {
                 "distance_loss_scale": self.distance_loss_scale,
+                "distance_map_temp": self.distance_map_temp,
+                "distance_map_do_softmax": self.distance_map_do_softmax,
                 "mode": self.residual_mode,
             }
             if self.solver_type == "SecondOrder":
@@ -267,6 +273,7 @@ class Optimizer(nn.Module):
                     variables=variables,
                     constants=constants,
                     indices=indices,
+                    verbose=self.verbose,
                     fn=partial(residual_format, **partial_paras),
                 )
             elif self.solver_type == "FirstOrder":
@@ -296,6 +303,10 @@ class Optimizer(nn.Module):
             # Update results
             for idx, variable_name in enumerate(variables_name):
                 aggregated_dict[variable_name] = optimized_variables[idx]
+
+        stop_optimize_t = time.time()
+        if self.verbose:
+            logger.info(f"Optimization consumes:{stop_optimize_t - begin_optimize_t}")
 
         if initial_residual is not None and final_residual is not None:
             logger.info(

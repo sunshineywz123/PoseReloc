@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import copy
+from time import time
 
 from ray.actor import ActorHandle
 
@@ -21,6 +22,7 @@ from .feature_aggregation import feature_aggregation_and_update
 cfgs = {
     "coarse_colmap_data": {
         "img_resize": 512,  # For OnePose
+        # "img_resize": 256,  # For OnePose
         # "img_resize": 1600, # For InLoc
         # "img_resize": 640, # For InLoc
         "df": 8,
@@ -32,17 +34,18 @@ cfgs = {
     "fine_matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
+            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_no_fine_loftr.py",
             "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
             "seed": 666,
         },
         "visualize": False,  # Visualize fine feature map and corresponds
         # [None, 'fine_match_backbone', 'fine_match_attention'] Save for later 2D-3D match use, None means don't extract feature
         "extract_feature_method": "fine_match_backbone",
-        "use_warpped_feature": True,
+        "use_warpped_feature": False,
         # "extract_feature_method": 'fine_match_attention',
         "ray": {
             "slurm": False,
-            "n_workers": 4, # 4 for onepose
+            "n_workers": 4,  # 4 for onepose
             "n_cpus_per_worker": 1,
             "n_gpus_per_worker": 0.25,
             # "n_gpus_per_worker": 1, # 0.25 for onepose
@@ -57,9 +60,12 @@ cfgs = {
         "residual_mode": "feature_metric_error",  # ["feature_metric_error", "geometry_error"]
         # "residual_mode": "geometry_error",  # ["feature_metric_error", "geometry_error"]
         "distance_loss_scale": 10,  # only available for featuremetric error mode
+        "distance_map_temp": 1.0,
+        "distance_map_do_softmax": False,
         # For OnePose
         "optimize_lr": {
-            "depth": 1e-2,
+            # "depth": 1e-2, # for feature metric error
+            "depth": 3e-2, # for geometric error
             "pose": 1e-5,
             "BA": 1e-5,
         },  # Only available for first order solver
@@ -92,11 +98,29 @@ def post_optimization(
     pre_sfm=False,
     visualize_dir=None,
     vis3d_pth=None,
-    verbose=True
+    verbose=True,
+    args=None,
 ):
     # Overwrite some configs
-    cfgs["coarse_colmap_data"]['verbose'] = verbose
-    cfgs["optimizer"]['verbose'] = verbose
+    cfgs["coarse_colmap_data"]["verbose"] = verbose
+    cfgs["optimizer"]["verbose"] = verbose
+    if args is not None:
+        cfgs["coarse_colmap_data"]["feature_track_assignment_strategy"] = args[
+            "coarse_colmap_data"
+        ]["feature_track_assignment_strategy"]
+        cfgs["optimizer"]["residual_mode"] = args["optimizer"]["residual_mode"]
+        cfgs["optimizer"]["optimize_lr"]['depth'] = args["optimizer"]["optimize_lr"]['depth']
+
+        if 'distance_map_temp' in args["optimizer"]:
+            cfgs["optimizer"]["distance_map_temp"] = args["optimizer"]["distance_map_temp"]
+        if "distance_map_do_softmax" in args['optimizer']:
+            cfgs["optimizer"]["distance_map_do_softmax"] = args["optimizer"]["distance_map_do_softmax"]
+
+        if 'solver_type' in args['optimizer']:
+            cfgs['optimizer']['solver_type'] = args['optimizer']['solver_type']
+
+    # print(cfgs)
+    # print(args)
 
     # Construct scene data
     colmap_image_dataset = CoarseColmapDataset(
@@ -124,13 +148,17 @@ def post_optimization(
     save_path = osp.join(match_out_pth.rsplit("/", 2)[0], "fine_matches.pkl")
     if not osp.exists(save_path) or cfgs["fine_match_debug"]:
         logger.info(f"Fine matching begin!")
+        begin_fine_matcher_t = time()
         fine_match_results_dict = fine_matcher(
             cfgs["fine_matcher"],
             matching_pairs_dataset,
             visualize_dir,
             use_ray=fine_match_use_ray,
-            verbose=verbose
+            verbose=verbose,
         )
+        stop_fine_matcher_t = time()
+        if verbose:
+            logger.info(f"Fine matching consums:{stop_fine_matcher_t - begin_fine_matcher_t}")
         save_obj(fine_match_results_dict, save_path)
     else:
         logger.info(f"Fine matches exists! Load from {save_path}")
@@ -167,9 +195,8 @@ def post_optimization(
             feature_out_pth=feature_out_pth,
             image_lists=image_lists,
             aggregation_method=cfgs["feature_aggregation_method"],
-            verbose=verbose
+            verbose=verbose,
         )
-
 
     return state, pose_error_before_refine, pose_error_after_refine
 

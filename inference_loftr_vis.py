@@ -1,0 +1,197 @@
+from typing import ChainMap
+import ray
+import torch
+import hydra
+from tqdm import tqdm
+import os
+import os.path as osp
+import numpy as np
+from loguru import logger
+import math
+import pandas as pd
+
+from omegaconf.dictconfig import DictConfig
+
+from src.inference.inference_gats_loftr.inference_gats_loftr_vis import inference_gats_loftr_vis
+from src.utils.ray_utils import ProgressBar, chunks
+
+
+@torch.no_grad()
+def inference(cfg):
+    # Load all test objects
+    data_dirs = cfg.data_dir
+
+    if isinstance(data_dirs, str):
+        # Parse object directory
+        # assert isinstance(data_dirs, str)
+        num_val_seq = cfg.num_val_seq
+        exception_obj_name_list = cfg.exception_obj_names
+        top_k_obj = cfg.top_k_obj
+        logger.info(
+            f"Process all objects in directory:{data_dirs}, process: {num_val_seq if num_val_seq is not None else 'all'} sequences"
+        )
+        if num_val_seq is not None:
+            assert num_val_seq != 0
+            num_val_seq = -1 * num_val_seq
+        
+        if "want_seq_id" in cfg:
+            num_val_seq = 0
+            want_seq_id = cfg.want_seq_id
+        else:
+            want_seq_id = None
+
+        object_names = os.listdir(data_dirs)[top_k_obj :]
+        data_dirs_list = []
+
+        if cfg.ids is not None:
+            # Use data ids
+            id2full_name = {name[:4]: name for name in object_names if "-" in name}
+            object_names = [id2full_name[id] for id in cfg.ids if id in id2full_name]
+
+        for object_name in object_names:
+            if "-" not in object_name:
+                continue
+
+            if object_name in exception_obj_name_list:
+                continue
+            sequence_names = sorted(os.listdir(osp.join(data_dirs, object_name)))
+            sequence_names = [
+                sequence_name
+                for sequence_name in sequence_names
+                if "-" in sequence_name
+            ][num_val_seq:]
+
+            obj_short_name = object_name.split('-', 2)[1]
+            sequence_ids = [
+                sequence_name.split('-',1)[1]
+                for sequence_name in sequence_names
+                if "-" in sequence_name
+            ][num_val_seq:]
+
+            if want_seq_id is not None:
+                assert str(want_seq_id) in sequence_ids
+                sequence_names = ['-'.join([obj_short_name, str(want_seq_id)])]
+
+            print(sequence_names)
+            data_dirs_list.append(
+                " ".join([osp.join(data_dirs, object_name)] + sequence_names)
+            )
+    else:
+        raise NotImplementedError
+
+    data_dirs = data_dirs_list  # [obj_name]
+
+    name2metrics = inference_worker(data_dirs, cfg)
+
+    # Parse metrics:
+    gathered_metrics = {}
+    for name, metrics in name2metrics.items():
+        for metric_name, metric in metrics.items():
+            if metric_name not in gathered_metrics:
+                gathered_metrics[metric_name] = [metric]
+            else:
+                gathered_metrics[metric_name].append(metric)
+        
+    # Dump metrics:
+    # name2metrics = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['5cm@5degree'])}
+    os.makedirs(cfg.output.txt_dir, exist_ok=True)
+    with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'w') as f:
+        for name, metrics in name2metrics.items():
+            f.write(f'{name}: \n')
+            for metric_name, metric in metrics.items():
+                f.write(f"{metric_name}: {metric}  ")
+            f.write('\n ---------------- \n')
+    
+    with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'a') as f:
+        for metric_name, metric in gathered_metrics.items():
+            print(f'{metric_name}:')
+            # metric_parsed = pd.DataFrame(metric)
+            # print(metric_parsed.describe())
+            metric_np = np.array(metric)
+            metric_mean = np.mean(metric)
+            print(metric_mean)
+            print('---------------------')
+
+            f.write('Summary: \n')
+            f.writelines(str(metric_mean))
+        
+def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
+    logger.info(
+        f"Worker {worker_id} will process: {[(data_dir.split(' ')[0]).split('/')[-1][:4] for data_dir in data_dirs]}, total: {len(data_dirs)} objects"
+    )
+    data_dirs = tqdm(data_dirs) if pba is None else data_dirs
+
+    obj_name2metrics = {}
+    for data_dir in data_dirs:
+        logger.info(f"Processing {data_dir}.")
+
+        # Load obj name and inference sequences
+        root_dir, sub_dirs = data_dir.split(" ")[0], data_dir.split(" ")[1:]
+        sfm_mapping_sub_dir = '-'.join([sub_dirs[0].split("-")[0], '1'])
+        num_img_in_mapping_seq = len(os.listdir(osp.join(root_dir, sfm_mapping_sub_dir, 'color')))
+        obj_name = root_dir.split("/")[-1]
+        sfm_base_path = cfg.sfm_base_dir
+
+        # Get all inference image path
+        all_image_paths = []
+        for sub_dir in sub_dirs:
+            color_dir = osp.join(root_dir, sub_dir, "color")
+            img_names = os.listdir(color_dir)
+            if len(img_names) == num_img_in_mapping_seq:
+                logger.warning(f"Same num of images in test sequence:{sub_dir}")
+            image_paths = [osp.join(color_dir, img_name) for img_name in img_names]
+            all_image_paths += image_paths
+
+        if 'aim_img_ids' in cfg:
+            all_image_paths = [osp.join(color_dir, str(id)+'.png') for id in cfg['aim_img_ids']]
+
+        if 'sample_n_for_test' in cfg:
+            if cfg.sample_n_for_test is not None:
+                # For debug:
+                interval = len(all_image_paths) // cfg.sample_n_for_test
+                all_image_paths = all_image_paths[::interval]
+
+        if len(all_image_paths) == 0:
+            logger.info(f"No png image in {root_dir}")
+            if pba is not None:
+                pba.update.remote(1)
+            continue
+
+        sfm_results_dir = osp.join(
+            sfm_base_path,
+            "outputs_"
+            + cfg.match_type
+            + "_"
+            + cfg.network.detection
+            + "_"
+            + cfg.network.matching,
+            obj_name,
+        )
+
+        if cfg.output.visual_vis3d:
+            os.makedirs(cfg.output.vis_dir, exist_ok=True)
+            vis3d_pth = osp.join(cfg.output.vis_dir, obj_name)
+        else:
+            vis3d_pth = None
+
+        metrics = inference_gats_loftr_vis(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose, vis3d_pth=vis3d_pth)
+        obj_name2metrics[obj_name] = metrics
+        if pba is not None:
+            pba.update.remote(1)
+    
+    return obj_name2metrics
+
+
+
+@ray.remote
+def inference_worker_ray_wrapper(*args, **kwargs):
+    return inference_worker(*args, **kwargs)
+
+
+@hydra.main(config_path="configs/", config_name="config.yaml")
+def main(cfg: DictConfig):
+    globals()[cfg.type](cfg)
+
+
+if __name__ == "__main__":
+    main()

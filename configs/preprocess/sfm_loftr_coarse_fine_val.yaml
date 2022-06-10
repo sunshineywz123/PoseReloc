@@ -126,13 +126,13 @@ dataset:
     # - '0591'
 
     # # Hard case:
-    # - "0600"
-    # - '0601'
+    - "0600"
+    - '0601'
     # - '0602'
     # - '0603'
-    # - '0604'
-    # - '0606'
-    # - '0607'
+    - '0604'
+    - '0606'
+    - '0607'
     # - '0608'
     # - '0610'
     # - '0612'
@@ -146,11 +146,11 @@ dataset:
     # - '0620'
     # - '0621'
     # - '0622'
-    # - '0623'
+    - '0623'
     # - '0624'
     # - '0625'
     # - '0626'
-    # - '0627'
+    - '0627'
     # - '0628'
     # - '0629'
     # - '0630'
@@ -161,18 +161,18 @@ dataset:
     # - '0636'
     # - '0637'
     # - '0638'
-    # - '0639'
-    # - '0640'
-    # - '0641'
+    - '0639'
+    - '0640'
+    - '0641'
 
-    # YCBV:
-    - '0700'
-    - '0701'
-    - '0702'
-    # LM: 
-    - '0801'
-    - '0807'
-    - '0808'
+    # # YCBV:
+    # - '0700'
+    # - '0701'
+    # - '0702'
+    # # LM: 
+    # - '0801'
+    # - '0807'
+    # - '0808'
 
 
   exception_obj_names:
@@ -189,10 +189,10 @@ network:
   matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
-  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
-  down_ratio: 15 # 5 original
+  gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
+  down_ratio: 5 # 5 original
   gap: 3
-  covis_num: 12 # 8 original
+  covis_num: 8 # 8 original
   track_length: 8
 
 post_process:

@@ -51,7 +51,7 @@ def read_transformation(trans_file):
 
     return scale, rot_vec, trans_vec
 
-def get_refine_box(orig_box_file, trans_box_file):
+def get_refine_box(orig_box_file, trans_box_file=None):
     position, extent, quaternions = read_box(orig_box_file)
 
     corners_homo = np.array([
@@ -67,10 +67,12 @@ def get_refine_box(orig_box_file, trans_box_file):
     ]).T #[4, 9]
 
     transformation = np.eye(4)
-    scale, rot_vec, trans_vec = read_transformation(trans_box_file)
-    rotation = cv2.Rodrigues(rot_vec)[0]
-    transformation[:3, :3] = rotation
-    transformation[:3, 3:] = trans_vec.reshape(3, 1)
+    scale = 1
+    if trans_box_file is not None:
+        scale, rot_vec, trans_vec = read_transformation(trans_box_file)
+        rotation = cv2.Rodrigues(rot_vec)[0]
+        transformation[:3, :3] = rotation
+        transformation[:3, 3:] = trans_vec.reshape(3, 1)
 
     corners_homo[:3, :] *= 0.5
     refine_corners = corners_homo.copy()

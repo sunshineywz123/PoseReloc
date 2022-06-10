@@ -21,10 +21,11 @@ from .inference_gats_loftr_worker import (
 args = {
     "ray": {
         "slurm": False,
-        "n_workers": 4,
+        # "n_workers": 1,
+        "n_workers": 1,
         # "n_cpus_per_worker": 1,
         "n_cpus_per_worker": 1,
-        "n_gpus_per_worker": 0.25,
+        "n_gpus_per_worker": 1,
         "local_mode": False,
     },
 }
@@ -37,7 +38,7 @@ def build_model(model_configs, ckpt_path):
     for k in list(state_dict.keys()):
         state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
 
-    match_model.load_state_dict(state_dict, strict=True)
+    match_model.load_state_dict(state_dict, strict=False)
     match_model.eval()
     return match_model
 
@@ -112,17 +113,22 @@ def inference_gats_loftr(
     # Parse results:
     R_errs = []
     t_errs = []
+    time = []
     if 'ADD_metric' in results[0]:
         add_metric = []
+        proj2d_metric = []
     else:
         add_metric = None
+        proj2d_metric = None
     
     # Gather results metrics:
     for result in results:
         R_errs.append(result['R_errs'])
         t_errs.append(result['t_errs'])
+        time.append(result['time'])
         if add_metric is not None:
             add_metric.append(result['ADD_metric'])
+            proj2d_metric.append(result['proj2D_metric'])
     
     # Write results to vis3d
     if vis3d_pth is not None:
@@ -132,8 +138,9 @@ def inference_gats_loftr(
     # Aggregate metrics: 
     pose_errs = {'R_errs': R_errs, "t_errs": t_errs}
     if add_metric is not None:
-        pose_errs.update({'ADD_metric': add_metric})
+        pose_errs.update({'ADD_metric': add_metric, "proj2D_metric": proj2d_metric})
     metrics = aggregate_metrics(pose_errs, cfg['model']['eval_metrics']['pose_thresholds'])
+    metrics.update({'time': np.mean(time)})
 
     # TODO: add visualize
     return metrics
