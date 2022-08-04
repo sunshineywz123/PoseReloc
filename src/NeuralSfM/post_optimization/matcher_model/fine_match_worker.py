@@ -78,13 +78,14 @@ def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
     # mconfs = data["mconf"].cpu().numpy()
 
     # Get feature response map
-    feat_f0_unfold = data["feat_f0_unfold"]
-    feat_f1_unfold = data["feat_f1_unfold"]
-    query_features = sample_feature_from_unfold_featuremap(feat_f0_unfold)
-    distance_map = torch.linalg.norm(
-        query_features.unsqueeze(1) - feat_f1_unfold, dim=-1, keepdim=True
-    )  # L*WW*1
-    distance_map = distance_map.cpu().numpy()
+    # feat_f0_unfold = data["feat_f0_unfold"]
+    # feat_f1_unfold = data["feat_f1_unfold"]
+    # query_features = sample_feature_from_unfold_featuremap(feat_f0_unfold)
+    # distance_map = torch.linalg.norm(
+    #     query_features.unsqueeze(1) - feat_f1_unfold, dim=-1, keepdim=True
+    # )  # L*WW*1
+    # distance_map = distance_map.cpu().numpy()
+    distance_map = np.zeros((mkpts1_f.shape[0], 25, 1))
 
     if extract_feature_method == "fine_match_backbone":
         feature0 = data["feat_ext0"].cpu().numpy()

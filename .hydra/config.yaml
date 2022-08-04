@@ -50,24 +50,45 @@ callbacks:
 work_dir: ${hydra:runtime.cwd}
 data_dir: ${work_dir}/data
 print_config: true
-type: align
-data_base_dir: /nas/users/hexingyi/onepose_hard_data
-output_temp_dir: /nas/users/hexingyi/onepose_data_temp_output
+type: mvs
+data_base_dir: /cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data
+sfm_base_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3
+output_base_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_mvs
+match_type: softmax
 redo: true
-full_img: false
-suffix: ''
+enable_loftr_post_refine: true
+use_global_ray: false
+use_local_ray: false
+debug: true
+ray:
+  slurm: false
+  n_workers: 2
+  n_cpus_per_worker: 5
+  n_gpus_per_worker: 1
+  local_mode: false
 dataset:
-  data_dir:
-  - ${data_base_dir}/0659-demoorange3-others demoorange3-1 demoorange3-2
-  outputs_dir: ${output_temp_dir}/{}
+  max_num_kp3d: 15000
+  max_num_kp2d: 10000
+  data_dir: ${data_base_dir}
+  top_k_obj: null
+  num_seq: 1
+  ids:
+  - '0604'
+  exception_obj_names:
+  - null
+  sfm_dir: ${sfm_base_dir}
+  outputs_dir: ${output_base_dir}
 network:
-  detection: superpoint
+  detection: loftr
   detection_model_path: weight/superpoint_v1.pth
-  matching: superglue
+  matching: loftr
   matching_model_path: weight/superglue_outdoor.pth
 sfm:
-  covis_num: 12
+  down_ratio: 5
   gap: 3
-  max_rotation: 55
-  min_rotation: 30
+  covis_num: 8
+  track_length: 8
+post_process:
+  filter_bbox_before_filter_track_length: true
+verbose: false
 disable_lightning_logs: true

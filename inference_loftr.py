@@ -155,10 +155,25 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
         obj_name = root_dir.split("/")[-1]
         sfm_base_path = cfg.sfm_base_dir
 
+        if "object_detector_method" in cfg:
+            object_detector_method = cfg.object_detector_method
+        else:
+            object_detector_method = 'GT'
+        
+
         # Get all inference image path
         all_image_paths = []
         for sub_dir in sub_dirs:
-            color_dir = osp.join(root_dir, sub_dir, "color")
+
+            if object_detector_method == 'GT':
+                color_dir = osp.join(root_dir, sub_dir, "color")
+            elif object_detector_method == 'SPP+SPG':
+                color_dir = osp.join(root_dir, sub_dir, "color_SPP+SPG")
+            elif object_detector_method == 'loftr':
+                color_dir = osp.join(root_dir, sub_dir, "color_loftr")
+            else:
+                raise NotImplementedError
+
             img_names = os.listdir(color_dir)
             if len(img_names) == num_img_in_mapping_seq:
                 logger.warning(f"Same num of images in test sequence:{sub_dir}")

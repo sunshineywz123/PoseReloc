@@ -222,6 +222,12 @@ class LoFTR_SfM(nn.Module):
                 (data["mkpts0_c"].shape[0],), device=data["mkpts0_c"].device
             ).long()
 
+
+            data['mkpts0_c'][:, 0] = torch.clip(data['mkpts0_c'][:, 0], min=0, max=data['hw0_i'][1] - 2)
+            data['mkpts0_c'][:, 1] = torch.clip(data['mkpts0_c'][:, 1], min=0, max=data['hw0_i'][0] - 2)
+            data['mkpts1_c'][:, 0] = torch.clip(data['mkpts1_c'][:, 0], min=0, max=data['hw1_i'][1] - 2)
+            data['mkpts1_c'][:, 1] = torch.clip(data['mkpts1_c'][:, 1], min=0, max=data['hw1_i'][0] - 2)
+
             scale = data["hw0_i"][0] / data["hw0_c"][0]
             scale0 = (
                 scale * data["scale0"][b_ids][:, [1, 0]] if "scale0" in data else scale
@@ -253,19 +259,19 @@ class LoFTR_SfM(nn.Module):
                 {"m_bids": b_ids, "b_ids": b_ids, "i_ids": i_ids, "j_ids": j_ids}
             )
 
-        # 4. fine-level refinement
-        with self.profiler.record_function("LoFTR/fine-refinement"):
-            feat_f0_unfold, feat_f1_unfold = self.fine_preprocess(
-                feat_f0, feat_f1, feat_c0, feat_c1, data, feats0=feats0, feats1=feats1
-            )
-            feat_f0_raw, feat_f1_raw = feat_f0_unfold.clone(), feat_f1_unfold.clone()
-            # at least one coarse level predicted
-            if feat_f0_unfold.size(0) != 0 and self.enable_fine_loftr:
-                feat_f0_unfold, feat_f1_unfold = self.loftr_fine(
-                    feat_f0_unfold, feat_f1_unfold
-                )
-
         if not self.extract_coarse_feats_mode:
+            # 4. fine-level refinement
+            with self.profiler.record_function("LoFTR/fine-refinement"):
+                feat_f0_unfold, feat_f1_unfold = self.fine_preprocess(
+                    feat_f0, feat_f1, feat_c0, feat_c1, data, feats0=feats0, feats1=feats1
+                )
+                feat_f0_raw, feat_f1_raw = feat_f0_unfold.clone(), feat_f1_unfold.clone()
+                # at least one coarse level predicted
+                if feat_f0_unfold.size(0) != 0 and self.enable_fine_loftr:
+                    feat_f0_unfold, feat_f1_unfold = self.loftr_fine(
+                        feat_f0_unfold, feat_f1_unfold
+                    )
+
             # 5. match fine-level
             with self.profiler.record_function("LoFTR/fine-matching"):
                 # TODO: add `cfg.FINE_MATCHING.ENABLE`
@@ -292,9 +298,12 @@ class LoFTR_SfM(nn.Module):
             # data.update({"feats0":feats0, "feats1":feats1}) # backbone features ['coarse', 'fine']
             # data.update({"feat_c0": feat_c0, "feat_c1": feat_c1}) # coarse feature after loftr feature coarse
             # data.update({'feat_f0' : feat_f0, 'feat_f1' : feat_f1}) # fine feature backbone
-            data.update(
-                {"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold}
-            )
+
+            # data.update(
+            #     {"feat_f0_unfold": feat_f0_unfold, "feat_f1_unfold": feat_f1_unfold}
+            # )
+            pass
+
             # self.pose_depth_refinement(data, fine_preprocess=self.fine_preprocess_unfold_none_grid, loftr_fine=self.loftr_fine)
 
         # Extract fine_feature (optional):

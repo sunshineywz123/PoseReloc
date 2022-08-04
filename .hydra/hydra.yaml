@@ -109,11 +109,10 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +preprocess=align_xy
-    - redo=True
+    - +preprocess=mvs_loftr_coarse_fine_s59
   job:
-    name: verify
-    override_dirname: +preprocess=align_xy,redo=True
+    name: run
+    override_dirname: +preprocess=mvs_loftr_coarse_fine_s59
     id: ???
     num: ???
     config_name: config.yaml
@@ -126,19 +125,19 @@ hydra:
         exclude_keys: []
   runtime:
     version: 1.1.1
-    cwd: /home/hexingyi/code/PoseReloc
+    cwd: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc
     config_sources:
     - path: hydra.conf
       schema: pkg
       provider: hydra
-    - path: /home/hexingyi/code/PoseReloc/configs
+    - path: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/configs
       schema: file
       provider: main
     - path: ''
       schema: structured
       provider: schema
     choices:
-      preprocess: align_xy
+      preprocess: mvs_loftr_coarse_fine_s59
       logger: null
       callbacks: default_callbacks.yaml
       datamodule: mnist_datamodule.yaml

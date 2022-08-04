@@ -11,6 +11,7 @@ from src.utils.data_io import save_h5, load_h5
 from .coarse_matcher_utils import Match2Kpts
 from .coarse_match_worker import *
 from ..dataset.loftr_coarse_dataset import LoftrCoarseDataset
+from .patch2pix_merger import patch2pix_merger
 
 cfgs = {
     "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
@@ -19,8 +20,13 @@ cfgs = {
     # "data": {"img_resize": 640, "df": 8, "shuffle": True}, # For Scannet
     "matcher": {
         "model": {
+            "method": 'LoFTR', # [LoFTR, DRCNet]
+            # "method": 'DRCNet', # [LoFTR, DRCNet, patch2pix]
+            # "method": 'patch2pix', # [LoFTR, DRCNet, patch2pix]
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
+            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
             "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
+            "DRC_weight_path": "weight/dualrc-net_orth.pth.tar",
             "seed": 666,
         },
         "pair_name_split": " ",
@@ -115,52 +121,55 @@ def loftr_coarse_matching(
             save_h5(matches, cache_dir)
             logger.info(f"Raw matches cached: {cache_dir}")
 
-        # Combine keypoints
-        n_imgs = len(dataset.img_dir)
-        pb = ProgressBar(n_imgs, "Combine keypoints") if verbose else None
-        all_kpts = Match2Kpts(
-            matches, dataset.img_dir, name_split=cfgs["matcher"]["pair_name_split"]
-        )
-        sub_kpts = chunks(all_kpts, math.ceil(n_imgs / cfg_ray["n_workers"]))
-        obj_refs = [
-            keypoints_worker_ray_wrapper.remote(sub_kpt, pb.actor if pb is not None else None, verbose)
-            for sub_kpt in sub_kpts
-        ]
-        pb.print_until_done() if pb is not None else None
-        keypoints = dict(ChainMap(*ray.get(obj_refs)))
-        logger.info("Combine keypoints finish!")
+        if cfgs['matcher']['model']['method'] is not 'patch2pix':
+            # Combine keypoints
+            n_imgs = len(dataset.img_dir)
+            pb = ProgressBar(n_imgs, "Combine keypoints") if verbose else None
+            all_kpts = Match2Kpts(
+                matches, dataset.img_dir, name_split=cfgs["matcher"]["pair_name_split"]
+            )
+            sub_kpts = chunks(all_kpts, math.ceil(n_imgs / cfg_ray["n_workers"]))
+            obj_refs = [
+                keypoints_worker_ray_wrapper.remote(sub_kpt, pb.actor if pb is not None else None, verbose)
+                for sub_kpt in sub_kpts
+            ]
+            pb.print_until_done() if pb is not None else None
+            keypoints = dict(ChainMap(*ray.get(obj_refs)))
+            logger.info("Combine keypoints finish!")
 
-        # Convert keypoints match to keypoints indexs
-        pb = ProgressBar(len(matches), "Updating matches...") if verbose else None
-        _keypoints_ref = ray.put(keypoints)
-        obj_refs = [
-            update_matches_ray_wrapper.remote(
-                sub_matches,
-                _keypoints_ref,
-                pb.actor if pb is not None else None,
-                verbose=verbose,
-                pair_name_split=cfgs["matcher"]["pair_name_split"],
-            )
-            for sub_matches in split_dict(
-                matches, math.ceil(len(matches) / cfg_ray["n_workers"])
-            )
-        ]
-        pb.print_until_done() if pb is not None else None
-        updated_matches = dict(ChainMap(*ray.get(obj_refs)))
+            # Convert keypoints match to keypoints indexs
+            pb = ProgressBar(len(matches), "Updating matches...") if verbose else None
+            _keypoints_ref = ray.put(keypoints)
+            obj_refs = [
+                update_matches_ray_wrapper.remote(
+                    sub_matches,
+                    _keypoints_ref,
+                    pb.actor if pb is not None else None,
+                    verbose=verbose,
+                    pair_name_split=cfgs["matcher"]["pair_name_split"],
+                )
+                for sub_matches in split_dict(
+                    matches, math.ceil(len(matches) / cfg_ray["n_workers"])
+                )
+            ]
+            pb.print_until_done() if pb is not None else None
+            updated_matches = dict(ChainMap(*ray.get(obj_refs)))
 
-        # Post process keypoints:
-        keypoints = {k: v for k, v in keypoints.items() if isinstance(v, dict)}
-        pb = ProgressBar(len(keypoints), "Post-processing keypoints...") if verbose else None
-        obj_refs = [
-            transform_keypoints_ray_wrapper.remote(sub_kpts, pb.actor if pb is not None else None, verbose)
-            for sub_kpts in split_dict(
-                keypoints, math.ceil(len(keypoints) / cfg_ray["n_workers"])
-            )
-        ]
-        pb.print_until_done() if pb is not None else None
-        kpts_scores = ray.get(obj_refs)
-        final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
-        final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
+            # Post process keypoints:
+            keypoints = {k: v for k, v in keypoints.items() if isinstance(v, dict)}
+            pb = ProgressBar(len(keypoints), "Post-processing keypoints...") if verbose else None
+            obj_refs = [
+                transform_keypoints_ray_wrapper.remote(sub_kpts, pb.actor if pb is not None else None, verbose)
+                for sub_kpts in split_dict(
+                    keypoints, math.ceil(len(keypoints) / cfg_ray["n_workers"])
+                )
+            ]
+            pb.print_until_done() if pb is not None else None
+            kpts_scores = ray.get(obj_refs)
+            final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
+            final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
+        else:
+            final_keypoints, updated_matches = patch2pix_merger(matches, cfgs["matcher"]["pair_name_split"], qt_psize=16)
 
     else:
         # Matcher runner
@@ -176,38 +185,41 @@ def loftr_coarse_matching(
             save_h5(matches, cache_dir)
             logger.info(f"Raw matches cached: {cache_dir}")
 
-        # Combine keypoints
-        n_imgs = len(dataset.img_dir)
-        logger.info("Combine keypoints!")
-        all_kpts = Match2Kpts(
-            matches, dataset.img_dir, name_split=cfgs["matcher"]["pair_name_split"]
-        )
-        sub_kpts = chunks(all_kpts, math.ceil(n_imgs / 1))  # equal to only 1 worker
-        obj_refs = [keypoint_worker(sub_kpt, verbose=verbose) for sub_kpt in sub_kpts]
-        keypoints = dict(ChainMap(*obj_refs))
-
-        # Convert keypoints match to keypoints indexs
-        logger.info("Update matches")
-        obj_refs = [
-            update_matches(
-                sub_matches,
-                keypoints,
-                verbose=verbose,
-                pair_name_split=cfgs["matcher"]["pair_name_split"],
+        if cfgs['matcher']['model']['method'] is not 'patch2pix':
+            # Combine keypoints
+            n_imgs = len(dataset.img_dir)
+            logger.info("Combine keypoints!")
+            all_kpts = Match2Kpts(
+                matches, dataset.img_dir, name_split=cfgs["matcher"]["pair_name_split"]
             )
-            for sub_matches in split_dict(matches, math.ceil(len(matches) / 1))
-        ]
-        updated_matches = dict(ChainMap(*obj_refs))
+            sub_kpts = chunks(all_kpts, math.ceil(n_imgs / 1))  # equal to only 1 worker
+            obj_refs = [keypoint_worker(sub_kpt, verbose=verbose) for sub_kpt in sub_kpts]
+            keypoints = dict(ChainMap(*obj_refs))
 
-        # Post process keypoints:
-        keypoints = {k: v for k, v in keypoints.items() if isinstance(v, dict)}
-        logger.info("Post-processing keypoints...")
-        kpts_scores = [
-            transform_keypoints(sub_kpts, verbose=verbose)
-            for sub_kpts in split_dict(keypoints, math.ceil(len(keypoints) / 1))
-        ]
-        final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
-        final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
+            # Convert keypoints match to keypoints indexs
+            logger.info("Update matches")
+            obj_refs = [
+                update_matches(
+                    sub_matches,
+                    keypoints,
+                    verbose=verbose,
+                    pair_name_split=cfgs["matcher"]["pair_name_split"],
+                )
+                for sub_matches in split_dict(matches, math.ceil(len(matches) / 1))
+            ]
+            updated_matches = dict(ChainMap(*obj_refs))
+
+            # Post process keypoints:
+            keypoints = {k: v for k, v in keypoints.items() if isinstance(v, dict)}
+            logger.info("Post-processing keypoints...")
+            kpts_scores = [
+                transform_keypoints(sub_kpts, verbose=verbose)
+                for sub_kpts in split_dict(keypoints, math.ceil(len(keypoints) / 1))
+            ]
+            final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
+            final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
+        else:
+            final_keypoints, updated_matches = patch2pix_merger(matches, cfgs["matcher"]["pair_name_split"], qt_psize=16)
 
     if not run_sfm_later:
         # OnePose friendly format
@@ -234,6 +246,9 @@ def loftr_coarse_matching(
 
                 grp = match_file.create_group(pair)
                 grp.create_dataset("matches", data=matches)
+                grp.create_dataset("matching_scores", data=np.ones((matches.shape[0],)))
+
+                grp.create_dataset("matches0", data=matches)
     else:
         # Reformat keypoints_dict and matches_dict
         # from (abs_img_path0 abs_img_path1) -> (img_name0, img_name1)

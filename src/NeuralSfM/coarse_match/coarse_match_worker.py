@@ -15,6 +15,8 @@ from ..loftr_config.default import get_cfg_defaults
 from ..loftr_for_sfm.loftr_sfm import LoFTR_SfM
 from ..extractors import build_extractor
 from ..loftr_for_sfm.utils.detector_wrapper import DetectorWrapper, DetectorWrapperTwoView
+from ..drc_net import DRCNet
+from ..patch2pix import Patch2Pix
 
 
 def names_to_pair(name0, name1):
@@ -40,30 +42,37 @@ def build_model(args):
         )
     )
 
-    match_cfg = {
-        "loftr_backbone": lower_config(cfg.LOFTR_BACKBONE),
-        "loftr_coarse": lower_config(cfg.LOFTR_COARSE),
-        "loftr_match_coarse": lower_config(cfg.LOFTR_MATCH_COARSE),
-        "loftr_fine": lower_config(cfg.LOFTR_FINE),
-        "loftr_match_fine": lower_config(cfg.LOFTR_MATCH_FINE),
-        "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
-    }
-    matcher = LoFTR_SfM(config=match_cfg)
-    # load checkpoints
-    state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
-    for k in list(state_dict.keys()):
-        state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
-    try:
-        matcher.load_state_dict(state_dict, strict=True)
-    except RuntimeError as _:
-        state_dict, updated = update_state_dict(
-            STATE_DICT_MAPPER, state_dict=state_dict
-        )
-        assert updated
-        matcher.load_state_dict(state_dict, strict=True)
+    if args['method'] == 'LoFTR':
+        match_cfg = {
+            "loftr_backbone": lower_config(cfg.LOFTR_BACKBONE),
+            "loftr_coarse": lower_config(cfg.LOFTR_COARSE),
+            "loftr_match_coarse": lower_config(cfg.LOFTR_MATCH_COARSE),
+            "loftr_fine": lower_config(cfg.LOFTR_FINE),
+            "loftr_match_fine": lower_config(cfg.LOFTR_MATCH_FINE),
+            "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
+        }
+        matcher = LoFTR_SfM(config=match_cfg)
+        # load checkpoints
+        state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
+        for k in list(state_dict.keys()):
+            state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
+        try:
+            matcher.load_state_dict(state_dict, strict=True)
+        except RuntimeError as _:
+            state_dict, updated = update_state_dict(
+                STATE_DICT_MAPPER, state_dict=state_dict
+            )
+            assert updated
+            matcher.load_state_dict(state_dict, strict=True)
 
-    detector.eval()
-    matcher.eval()
+        detector.eval()
+        matcher.eval()
+    elif args['method'] == 'DRCNet':
+        matcher = DRCNet(args['DRC_weight_path'], use_cuda=True, half_precision=False)
+    elif args['method'] == 'patch2pix':
+        matcher = Patch2Pix()
+    else:
+        raise NotImplementedError
 
     return detector, matcher
 
@@ -72,9 +81,14 @@ def extract_preds(data):
     """extract predictions assuming bs==1"""
     m_bids = data["m_bids"].cpu().numpy()
     assert (np.unique(m_bids) == 0).all()
-    mkpts0 = data["mkpts0_f"].cpu().numpy()
-    mkpts1 = data["mkpts1_f"].cpu().numpy()
-    mconfs = data["mconf"].cpu().numpy()
+    mkpts0 = data["mkpts0_f"].cpu().numpy() # N*2
+    mkpts1 = data["mkpts1_f"].cpu().numpy() # N*2
+    mconfs = data["mconf"].cpu().numpy() # N
+
+    # Round mkpts1 to 1/2 grid:
+    # For rebuttal loftr version sfm
+    # mkpts0 = np.round(mkpts0 / 2) * 2
+    # mkpts1 = np.round(mkpts1 / 2) * 2
 
     detector_kpts_mask = (
         data["detector_kpts_mask"].cpu().numpy()

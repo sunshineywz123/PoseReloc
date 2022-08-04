@@ -16,7 +16,7 @@ use_local_ray: True
 
 ray:
   slurm: False
-  n_workers: 2
+  n_workers: 8
   n_cpus_per_worker: 5
   n_gpus_per_worker: 1
   local_mode: False
@@ -283,6 +283,7 @@ network:
   detection: loftr
   matching: loftr
 
+object_detector_method: loftr # ['GT', "SPP+SPG", "loftr"]
 data_dir: ${data_base_dir}
 top_k_obj: null
 num_val_seq: 1 # last n objects
@@ -374,29 +375,21 @@ ids:
     # - '0601'
     # - '0603'
     # - '0604'
-    # # - '0605' # pingpang too hard!
     # - '0626'
     # - '0627'
     # - '0628'
     # - '0629'
     # - '0630'
     # - '0631'
-    # # - '0632' # chair too hard
-    # # From train objects
     # - '0600'
     # - '0602'
     # - '0606'
     # - '0607'
     # - '0608'
     # - '0610'
-
     # - '0612'
     # - '0613'
-    # # # - '0614'
     # - '0615'
-    # # # - '0616'
-    # # # - '0617'
-
     # - '0618'
     # - '0619'
     # - '0620'
@@ -414,7 +407,6 @@ ids:
     # - '0639'
     # - '0640'
     # - '0641'
-
     # - '0642'
     # - '0643'
     # - '0644'

@@ -1,2 +1,1 @@
-- +preprocess=align_xy
-- redo=True
+- +preprocess=mvs_loftr_coarse_fine_s59

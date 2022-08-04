@@ -69,22 +69,39 @@ class GATs_loftr_inference_dataset(Dataset):
         return avg_anno_3d_path, clt_anno_3d_path, idxs_path
 
     def get_intrin_by_color_pth(self, img_path):
+        image_dir_name = osp.basename(osp.dirname(img_path))
+        object_2D_detector = "GT"
+        if "_" in image_dir_name and "_full" not in image_dir_name:
+            object_2D_detector = image_dir_name.split("_", 1)[1]
+        
+        if object_2D_detector == "GT":
+            intrin_name = 'intrin_ba'
+        elif object_2D_detector == 'SPP+SPG':
+            intrin_name = 'intrin_SPP+SPG'
+        elif object_2D_detector == "loftr":
+            intrin_name = 'intrin_loftr'
+        else:
+            raise NotImplementedError
+
         img_ext = osp.splitext(img_path)[1]
-        intrin_path = img_path.replace("/color/", "/intrin_ba/").replace(img_ext, ".txt")
+        intrin_path = img_path.replace("/"+image_dir_name+"/", "/"+intrin_name+"/").replace(img_ext, ".txt")
         assert osp.exists(intrin_path), f"{intrin_path}"
         K_crop = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K_crop
 
     def get_intrin_original_by_color_pth(self, img_path):
+        image_dir_name = osp.basename(osp.dirname(img_path))
+
         img_ext = osp.splitext(img_path)[1]
-        intrin_path = img_path.replace("/color/", "/intrin/").replace(img_ext, ".txt")
+        intrin_path = img_path.replace("/"+image_dir_name+"/", "/intrin/").replace(img_ext, ".txt")
         assert osp.exists(intrin_path), f"{intrin_path}"
         K = torch.from_numpy(np.loadtxt(intrin_path))  # [3*3]
         return K
 
     def get_gt_pose_by_color_pth(self, img_path):
+        image_dir_name = osp.basename(osp.dirname(img_path))
         img_ext = osp.splitext(img_path)[1]
-        gt_pose_path = img_path.replace("/color/", "/poses_ba/").replace(img_ext, ".txt")
+        gt_pose_path = img_path.replace("/" + image_dir_name + "/", "/poses_ba/").replace(img_ext, ".txt")
         assert osp.exists(gt_pose_path), f"{gt_pose_path}"
         pose_gt = torch.from_numpy(np.loadtxt(gt_pose_path))  # [4*4]
         return pose_gt
@@ -210,21 +227,22 @@ class GATs_loftr_inference_dataset(Dataset):
         self.w_i = query_img.shape[2]
         self.h_c = int(self.h_i * self.coarse_scale)
         self.w_c = int(self.w_i * self.coarse_scale)
-
+        
+        image_dir_name = osp.basename(osp.dirname(image_path))
         if self.load_img_mask:
             img_ext = osp.splitext(image_path)[1]
             reproj_box3d = np.loadtxt(
-                image_path.replace("/color/", "/reproj_box/").replace(
+                image_path.replace('/'+image_dir_name+'/', "/reproj_box/").replace(
                     img_ext, ".txt"
                 )
             ).astype(int)
             x0, y0 = reproj_box3d.min(0)
             x1, y1 = reproj_box3d.max(0)
 
-            original_img = cv2.imread(image_path.replace("/color/", "/color_full/"))
+            original_img = cv2.imread(image_path.replace('/'+image_dir_name+'/', "/color_full/"))
             assert (
                 original_img is not None
-            ), f"color full path: {image_path.replace('/color/', '/color_full/')} not exists"
+            ), f"color full path: {image_path.replace('/'+image_dir_name+'/', '/color_full/')} not exists"
             origin_h, origin_w = original_img.shape[:2]  # H, W before crop
             original_img_fake = np.ones((origin_h, origin_w))  # All white
             box = np.array([x0, y0, x1, y1])

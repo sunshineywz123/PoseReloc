@@ -27,8 +27,8 @@ def parse_args():
         default="/nas/users/hexingyi/transfer/onepose_sfm_v3/outputs_softmax_loftr_loftr",
     )
     parser.add_argument(
-        # "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
-        "--obj_ids", nargs="+", default=["0801", "0802", "0804", "0805","0806", "0808", "0809" ],
+        "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
+        # "--obj_ids", nargs="+", default=["0801", "0802", "0804", "0805","0806", "0808", "0809" ],
     )
     parser.add_argument(
         "--threshold", nargs="+", type=int, default=[1, 3, 5], help="threshold unit: mm"
@@ -53,6 +53,7 @@ def compute_pointcloud_accu_and_complete(
     gt_pointcloud, _ = sample_points_on_cad(gt_mesh_path, max_gt_num)
     pred_pointcloud = o3d.io.read_point_cloud(pred_pointcloud_path)
     pred_pointcloud = np.asarray(pred_pointcloud.points)  # M*3
+    print(f'Total: {pred_pointcloud.shape[0]} 3D points')
 
     # Compute distance:
     completeness_multiple_thr = {}

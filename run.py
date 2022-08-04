@@ -19,8 +19,10 @@ from pathlib import Path
 from omegaconf import DictConfig
 import subprocess
 
+
 from src.utils.colmap.read_write_model import read_model, write_model
 from src.utils.ray_utils import ProgressBar, chunks
+from src.pixsfm.run_pixsfm import pixsfm, pixsfm_ray_wrapper
 
 
 def parseScanData(cfg):
@@ -181,6 +183,7 @@ def mvs_core(cfg, outputs_dir_root, sfm_dir_root, obj_name):
         print("Patch match stereo begin")
         cmd = ["colmap", "patch_match_stereo"]
         cmd += ["--workspace_path", dense_dir]
+        cmd += ["--PatchMatchStereo.gpu_index", '-1']
         subprocess.run(cmd)
 
         print("Stereo fusion begin")
@@ -434,7 +437,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
             Path(outputs_dir).mkdir(exist_ok=True, parents=True)
 
             if (
-                not osp.exists(osp.join(deep_sfm_dir, "model_coarse"))
+                not osp.exists(osp.join(deep_sfm_dir, "model"))
                 or cfg.overwrite_coarse
             ):
                 logger.info("LoFTR coarse mapping begin...")
@@ -483,35 +486,45 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
 
                 time_start = time()
                 generate_empty.generate_model(img_lists, empty_dir)
-                if cfg.use_global_ray:
-                    # Need to ask for gpus!
-                    triangulation_results = triangulation.main_ray_wrapper.remote(
-                        deep_sfm_dir,
-                        empty_dir,
-                        outputs_dir,
-                        covis_pairs_out,
-                        feature_out,
-                        matches_out,
-                        match_model=cfg.network.matching,
-                        image_dir=None,
-                        verbose=cfg.verbose,
-                    )
-                    results = ray.get(triangulation_results)
+
+                if 'use_pixsfm' in cfg and cfg.use_pixsfm:
+                    # Use pixsfm to optimize loftr coarse points:
+                    cfg.enable_loftr_post_refine = False
+                    if cfg.use_global_ray:
+                        results = pixsfm_ray_wrapper.remote(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=False, patch_size=8)
+                        ray.get(results)
+                    else:
+                        pixsfm(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=True, patch_size=8)
                 else:
-                    triangulation.main(
-                        deep_sfm_dir,
-                        empty_dir,
-                        outputs_dir,
-                        covis_pairs_out,
-                        feature_out,
-                        matches_out,
-                        match_model=cfg.network.matching,
-                        image_dir=None,
-                        verbose=cfg.verbose,
-                    )
-                time_end = time()
-                if cfg.verbose:
-                    logger.info(f"triangulation takes:{time_end - time_start}")
+                    if cfg.use_global_ray:
+                        # Need to ask for gpus!
+                        triangulation_results = triangulation.main_ray_wrapper.remote(
+                            deep_sfm_dir,
+                            empty_dir,
+                            outputs_dir,
+                            covis_pairs_out,
+                            feature_out,
+                            matches_out,
+                            match_model=cfg.network.matching,
+                            image_dir=None,
+                            verbose=cfg.verbose,
+                        )
+                        results = ray.get(triangulation_results)
+                    else:
+                        triangulation.main(
+                            deep_sfm_dir,
+                            empty_dir,
+                            outputs_dir,
+                            covis_pairs_out,
+                            feature_out,
+                            matches_out,
+                            match_model=cfg.network.matching,
+                            image_dir=None,
+                            verbose=cfg.verbose,
+                        )
+                    time_end = time()
+                    if cfg.verbose:
+                        logger.info(f"triangulation takes:{time_end - time_start}")
 
                 os.system(
                     f"mv {feature_out} {osp.splitext(feature_out)[0] + '_coarse' + osp.splitext(feature_out)[1]}"
@@ -553,6 +566,24 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     )
                     if state == False:
                         logger.error("colmap coarse is empty!")
+            elif 'use_pixsfm' in cfg and cfg.use_pixsfm:
+                # FIXME: change here!
+                logger.info("Extract coarse and fine feature for pixsfm...")
+                state = extract_coarse_fine_features.extract_coarse_fine_features(
+                    img_lists,
+                    covis_pairs_out,
+                    colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
+                    refined_model_save_dir=None,
+                    match_out_pth=matches_out,
+                    feature_out_pth=feature_out,
+                    fine_match_use_ray=cfg.use_local_ray,
+                    visualize_dir=visualize_dir,
+                    vis3d_pth=vis3d_pth,
+                    verbose=cfg.verbose,
+                )
+                if state == False:
+                    logger.error("colmap coarse is empty!")
+                pass
             else:
                 logger.info("No post optimization, extract coarse and fine feature for coarse matches...")
                 state = extract_coarse_fine_features.extract_coarse_fine_features(
@@ -569,6 +600,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 )
                 if state == False:
                     logger.error("colmap coarse is empty!")
+                pass
 
 
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):

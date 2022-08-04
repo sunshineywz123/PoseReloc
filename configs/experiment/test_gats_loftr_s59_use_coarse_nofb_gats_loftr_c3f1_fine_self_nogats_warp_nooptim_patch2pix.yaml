@@ -4,10 +4,10 @@ type: inference
 
 
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_path2pix"
 
 match_type: softmax
-task_name: test_loftr_gats_test_hard_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_bop
+task_name: test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_fine_self_nogats_warp_no_pad_nooptim_patch2pix
 suffix: ""
 feature_method: "average"
 
@@ -16,7 +16,7 @@ use_local_ray: True
 
 ray:
   slurm: False
-  n_workers: 2
+  n_workers: 8
   n_cpus_per_worker: 5
   n_gpus_per_worker: 1
   local_mode: False
@@ -25,7 +25,7 @@ ray:
 model:
   # _target_: src.models.spg_model.LitModelSPG
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/models/checkpoints/train_coarse_thr_0.4_layernorm_n_head_8_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_nogat_loftr_c3f1_warp/epoch=12.ckpt
+  pretrained_ckpt: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/models/checkpoints/train_coarse_thr_0.4_layernorm_n_head_8_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_nogat_loftr_c3f1_warp_fine_self/epoch=12.ckpt
 
   loftr:
     loftr_backbone:
@@ -146,7 +146,7 @@ model:
       d_model: 128
       nhead: 8
       # layer_names: ["self", "cross"]
-      layer_names: ["self", "cross"]
+      layer_names: ["self"]
       layer_iter_n: 1
       dropout: 0.0
       attention: "linear"
@@ -221,13 +221,13 @@ model:
 
   eval_metrics:
     point_cloud_rescale: 1000
-    pnp_reprojection_error: 7 # tune 5 10 14
-    model_unit: 'm'
-    eval_ADD_metric: True
-    # ADDS: False
-    ADDS: True
+    # pnp_reprojection_error: 8
+    pnp_reprojection_error: 3.3
     pose_thresholds: [1, 3, 5, 7]
-    use_pycolmap_ransac: True
+    model_unit: 'm'
+    eval_ADD_metric: False
+    ADDS: False
+    use_pycolmap_ransac: False
     enable_post_optimization: False
     post_optimization_configs:
       # residual_mode: 'feature_metric_error'
@@ -269,8 +269,7 @@ datamodule:
 
     # 2D part
     img_pad: False
-    img_resize: [256, 256]
-    # img_resize: [512, 512]
+    img_resize: [512, 512]
     df: 8
     coarse_scale: 0.125
 
@@ -287,6 +286,7 @@ network:
 data_dir: ${data_base_dir}
 top_k_obj: null
 num_val_seq: 1 # last n objects
+want_seq_id: 2
 ids:
     # - '0408'
     # - '0409'
@@ -375,29 +375,21 @@ ids:
     - '0601'
     - '0603'
     - '0604'
-    # - '0605' # pingpang too hard!
     - '0626'
     - '0627'
     - '0628'
     - '0629'
     - '0630'
     - '0631'
-    # - '0632' # chair too hard
-    # From train objects
     - '0600'
     - '0602'
     - '0606'
     - '0607'
     - '0608'
     - '0610'
-
     - '0612'
     - '0613'
-    # # - '0614'
     - '0615'
-    # # - '0616'
-    # # - '0617'
-
     - '0618'
     - '0619'
     - '0620'
@@ -415,28 +407,11 @@ ids:
     - '0639'
     - '0640'
     - '0641'
-
     - '0642'
     - '0643'
     - '0644'
     - '0645'
     - '0646'
-
-    # - '0801'
-    # - '0802'
-    # - '0804'
-    # - '0805'
-    # - '0806'
-    # - '0808'
-    # - '0809'
-
-    - '0810'  # syn
-    - '0811'
-
-    # - '0812'
-    # - '0813'
-    # - '0814'
-    # - '0815'
 
     # BOP objects:
     # - '0700'
