@@ -6,6 +6,7 @@ import os.path as osp
 import math
 import matplotlib.cm as cm
 import cv2
+from loguru import logger
 from einops import repeat
 from kornia.utils.grid import create_meshgrid
 from src.utils.plot_utils import plot_image_pair, plot_matches
@@ -43,11 +44,16 @@ def draw_matches(data_dict, match_dict, save_path=None):
         plt.savefig(save_path, bbox_inches="tight", pad_inches=0.2)
     plt.close()
 
-def draw_local_heatmaps(data_dict, distance_map, center_location, save_path=None):
+def draw_local_heatmaps(data_dict, distance_map, center_location, save_dir=None):
     """
     distance_map: N*ww*1
     """
-    image_path1 = data_dict["img_name1"]
+    logger.info(f"Plot heatmaps!")
+    try:
+        image_path0 = data_dict["img_name0"]
+        image_path1 = data_dict["img_name1"]
+    except:
+        image_path0, image_path1 = data_dict['pair_key']
     image1 = np.asarray(Image.open(image_path1))
     h, w = image1.shape[:2]
 
@@ -68,9 +74,9 @@ def draw_local_heatmaps(data_dict, distance_map, center_location, save_path=None
 
     img_blend_with_heatmap = blend_img_heatmap(image1, colored_response_map, alpha=0.5)
 
-    if save_path is not None:
-        os.makedirs(save_path.rsplit('/', 1)[0], exist_ok=True)
-        Image.fromarray(img_blend_with_heatmap).save(save_path)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+        Image.fromarray(img_blend_with_heatmap).save(osp.join(save_dir, f"loftr_local_patch_{osp.splitext(osp.basename(image_path0))[0]}-{osp.splitext(osp.basename(image_path1))[0]}.png"))
 
 
 def visualize_colmap_3D(images, cameras, point3Ds, image_path, save_path):

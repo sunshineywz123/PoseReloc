@@ -277,20 +277,18 @@ def matchWorker(
             assert (
                 visualize_dir is not None
             ), f"Please provide visualize saving directory!"
-            draw_matches(
-                data,
-                results_dict[pair_name],
-                save_path=osp.join(
-                    visualize_dir, "test_match_pair", pair_name + ".png"
-                ),
-            )
+            # draw_matches(
+            #     data,
+            #     results_dict[pair_name],
+            #     save_path=osp.join(
+            #         visualize_dir, "test_match_pair", pair_name + ".png"
+            #     ),
+            # )
             draw_local_heatmaps(
                 data,
                 distance_map,
                 mkpts1_c,
-                save_path=osp.join(
-                    visualize_dir, "test_local_heatmaps", pair_name + ".png"
-                ),
+                save_path="loftr_local_patch.png"
             )
 
     return results_dict

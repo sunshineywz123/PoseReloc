@@ -1,14 +1,14 @@
 default: &default
     class: 'Patch2PixRefined'
     ckpt: 'pretrained/patch2pix/patch2pix_pretrained.pth'
-    imsize: 1024
+    imsize: 512
 coarse_default: &coarse_default
     name: 'SuperGlue'
     weights: 'outdoor'    
     sinkhorn_iterations: 50
     max_keypoints: 4096
     nms_radius: 4
-    imsize: 1024
+    imsize: 512
 inloc:
     <<: *default
     match_threshold: 0.1
@@ -32,7 +32,7 @@ aachen:
     covis_cluster: False
     coarse:
         <<: *coarse_default
-        match_threshold: 0.1
+        match_threshold: 0.7
 aachen_v1.1:
     <<: *default
     match_threshold: 0.0 # Save all matches
@@ -45,4 +45,4 @@ aachen_v1.1:
     covis_cluster: True
     coarse:
         <<: *coarse_default
-        match_threshold: 0.1
+        match_threshold: 0.7

@@ -494,6 +494,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                         results = pixsfm_ray_wrapper.remote(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=False, patch_size=8)
                         ray.get(results)
                     else:
+
                         pixsfm(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=True, patch_size=8)
                 else:
                     if cfg.use_global_ray:
@@ -567,7 +568,10 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     if state == False:
                         logger.error("colmap coarse is empty!")
             elif 'use_pixsfm' in cfg and cfg.use_pixsfm:
-                # FIXME: change here!
+                # Plot pixsfm features:
+                # from src.utils.plot_utils import plot_response_map
+                # plot_response_map(feature_out, osp.join(deep_sfm_dir, "model", "s2dnet_featuremaps_sparse.h5"), matches_out, pairs_path=covis_pairs_out, save_dir="visualize/pixsfm")
+
                 logger.info("Extract coarse and fine feature for pixsfm...")
                 state = extract_coarse_fine_features.extract_coarse_fine_features(
                     img_lists,
@@ -585,21 +589,21 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     logger.error("colmap coarse is empty!")
                 pass
             else:
-                logger.info("No post optimization, extract coarse and fine feature for coarse matches...")
-                state = extract_coarse_fine_features.extract_coarse_fine_features(
-                    img_lists,
-                    covis_pairs_out,
-                    colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
-                    refined_model_save_dir=None,
-                    match_out_pth=matches_out,
-                    feature_out_pth=feature_out,
-                    fine_match_use_ray=cfg.use_local_ray,
-                    visualize_dir=visualize_dir,
-                    vis3d_pth=vis3d_pth,
-                    verbose=cfg.verbose,
-                )
-                if state == False:
-                    logger.error("colmap coarse is empty!")
+                # logger.info("No post optimization, extract coarse and fine feature for coarse matches...")
+                # state = extract_coarse_fine_features.extract_coarse_fine_features(
+                #     img_lists,
+                #     covis_pairs_out,
+                #     colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
+                #     refined_model_save_dir=None,
+                #     match_out_pth=matches_out,
+                #     feature_out_pth=feature_out,
+                #     fine_match_use_ray=cfg.use_local_ray,
+                #     visualize_dir=visualize_dir,
+                #     vis3d_pth=vis3d_pth,
+                #     verbose=cfg.verbose,
+                # )
+                # if state == False:
+                #     logger.error("colmap coarse is empty!")
                 pass
 
 

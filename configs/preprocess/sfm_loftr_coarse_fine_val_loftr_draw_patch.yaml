@@ -4,15 +4,14 @@ type: sfm
 work_dir: ${hydra:runtime.cwd}
 data_base_dir: /cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data
 # data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
-output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_plot_feature_patch"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_loftr_draw_patch_visualize"
 match_type: "softmax"
 redo: True
-use_pixsfm: True
-enable_loftr_post_refine: False
+enable_loftr_post_refine: True
 
-overwrite_all: False
+overwrite_all: True
 overwrite_coarse: False
-overwrite_fine: False
+overwrite_fine: True
 
 use_global_ray: False
 use_local_ray: False
@@ -129,53 +128,53 @@ dataset:
     # # Hard case:
     # - '0600'
     # - '0601'
-    # # - '0602'
-    # # - '0603'
-    # - '0604'
+    # - '0602'
+    # - '0603'
+    - '0604'
     # - '0606'
     # - '0607'
-    # # - '0608'
-    # # - '0610'
-    # # - '0612'
-    # # - '0613'
-    # # - '0614'
-    # # - '0615'
-    # # - '0616'
-    # # - '0617'
-    # # - '0618'
+    # - '0608'
+    # - '0610'
+    # - '0612'
+    # - '0613'
+    # - '0614'
+    # - '0615'
+    # - '0616'
+    # - '0617'
+    # - '0618'
     # - '0619'
-    # # - '0620'
-    - '0621'
-    # # - '0622'
+    # - '0620'
+    # - '0621'
+    # - '0622'
     # - '0623'
-    # # - '0624'
-    # # - '0625'
-    # # - '0626'
+    # - '0624'
+    # - '0625'
+    # - '0626'
     # - '0627'
-    # # - '0628'
-    # # - '0629'
-    # # - '0630'
-    # # - '0631'
-    # # - '0633'
-    # # - '0634'
-    # # - '0635'
-    # # - '0636'
-    # # - '0637'
-    # # - '0638'
+    # - '0628'
+    # - '0629'
+    # - '0630'
+    # - '0631'
+    # - '0633'
+    # - '0634'
+    # - '0635'
+    # - '0636'
+    # - '0637'
+    # - '0638'
     # - '0639'
     # - '0640'
     # - '0641'
-    # # - '0642'
-    # # - '0643'
-    # # - '0644'
-    # # - '0645'
-    # # - '0646'
-    # # - '0653'
-    # # - '0656'
-    # # - '0657'
-    # # - '0658'
-    # # - '0659'
-    # # - '0650'
+    # - '0642'
+    # - '0643'
+    # - '0644'
+    # - '0645'
+    # - '0646'
+    # - '0653'
+    # - '0656'
+    # - '0657'
+    # - '0658'
+    # - '0659'
+    # - '0650'
 
     # # YCBV:
     # - '0700'
@@ -208,7 +207,7 @@ network:
 
 sfm:
   gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
-  down_ratio: 5 # 5 original 5 for experiment, FIXME: use 100 for debug
+  down_ratio: 5 # 5 original
   gap: 3
   covis_num: 8 # 8 original
   track_length: 8

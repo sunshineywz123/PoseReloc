@@ -4,7 +4,7 @@ from pathlib import Path
 from pixsfm.refine_hloc import PixSfM
 
 def pixsfm(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=False, patch_size=8):
-    conf = {"dense_features": {'patch_size': patch_size},"BA": {"optimizer": {
+    conf = {"dense_features": {'patch_size': patch_size, "use_cache": True, "cache_format": 'chunked', "load_cache_on_init": True},"BA": {"optimizer": {
         "refine_focal_length": False,
         "refine_extra_params": False,  # distortion parameters
         "refine_extrinsics": False,    # camera poses

@@ -10,6 +10,9 @@ import math
 from kornia.utils.grid import create_meshgrid
 from einops import repeat
 from PIL import Image
+import h5py
+import os.path as osp
+from pathlib import Path
 
 matplotlib.use("Agg")
 
@@ -683,4 +686,86 @@ def draw_reprojection_pair(
             figures["heatmap"].append(fig)
 
         return figures
+
+def names_to_pair(name0, name1):
+    return '_'.join((name0.replace('/', '-'), name1.replace('/', '-')))
+
+def plot_response_map(keypoint_h5_path, feature_patch_h5_path, match_h5_path, pairs_path, save_dir=""):
+    if not osp.exists(feature_patch_h5_path):
+        logger.warning(f"{feature_patch_h5_path} not exists!")
+        return
+
+    # Load keypoints:
+    keypoint_file = h5py.File(str(keypoint_h5_path), 'r')
+    # Load matches:
+    match_file = h5py.File(str(match_h5_path), 'r')
+    # Load features:
+    feature_file = h5py.File(str(feature_patch_h5_path), 'r')
+
+    with open(str(pairs_path), 'r') as f:
+        pairs = [p.split(' ') for p in f.read().split('\n')]
+    
+    for id, (name0, name1) in enumerate(pairs):
+        pair = names_to_pair(name0, name1)
+        matches = match_file[pair]['matches'].__array__()
+
+        keypoints0 = keypoint_file[name0]['keypoints'].__array__()
+        keypoints1 = keypoint_file[name1]['keypoints'].__array__()
+
+        features_id0 = feature_file[name0]["keypoint_ids"].__array__()
+        features_id1 = feature_file[name1]["keypoint_ids"].__array__()
+        features_patch0 = feature_file[name0]["patches"].__array__()
+        features_patch1 = feature_file[name1]["patches"].__array__()
+
+        mkpts0, mkpts1 = keypoints0[matches[:, 0]], keypoints1[matches[:, 1]]
+        m_feat_patches0, m_feat_patches1 = [], []
+        for kpt_id0, kpt_id1 in matches:
+            # Get features:
+            patch_idx0 = np.argwhere(features_id0 == kpt_id0)[0,0]
+            patch_idx1 = np.argwhere(features_id1 == kpt_id1)[0,0]
+            feature_patch0, feature_patch1 = features_patch0[patch_idx0], features_patch1[patch_idx1]
+            m_feat_patches0.append(feature_patch0)
+            m_feat_patches1.append(feature_patch1)
+        m_feat_patches0, m_feat_patches1 = np.stack(m_feat_patches0), np.stack(m_feat_patches1)
+
+        m_feature_query = m_feat_patches0[:, [4], [4], :][:, None]
+        sim_matrix = np.linalg.norm(m_feat_patches1 - m_feature_query, axis=-1)
+        sim_matrix_max = np.max(sim_matrix, axis=-1, keepdims=True)
+        sim_matrix_min = np.min(sim_matrix, axis=-1, keepdims=True)
+        sim_matrix_normalized = (sim_matrix - sim_matrix_min) / (
+            sim_matrix_max - sim_matrix_min + 1e-4
+        )
+        # image0 = np.array(Image.open(name0))
+        image1 = np.array(Image.open(name1))
+
+        W = 8
+        grid = (
+            (create_meshgrid(W, W, normalized_coordinates=False,) - W // 2)
+            .cpu()
+            .numpy()
+        )
+
+        coordinate_grid = (mkpts1[:, None, None, :] + grid).astype(
+            np.int
+        )  # L*W*W*2
+        h, w = image1.shape[:2]
+
+        response_map = np.zeros((h, w))
+        response_map[
+            coordinate_grid[..., 1], coordinate_grid[..., 0]
+        ] = sim_matrix_normalized  # h*w
+        response_map = np.uint8(255 * response_map)
+        colored_response_map = jet_colors[response_map]  # h*w*3
+        img_blend_with_heatmap = blend_img_heatmap(
+            image1, colored_response_map, alpha=0.5
+        )
+        fig = plot_single_image(img_blend_with_heatmap, dpi=300, size=6)
+        if save_dir is not None:
+            Path(save_dir).mkdir(parents=True, exist_ok=True)
+            plt.savefig(osp.join(save_dir, f"pixsfm_{osp.splitext(osp.basename(name0))[0]}-{osp.splitext(osp.basename(name1))[0]}.png"), bbox_inches="tight", pad_inches=0)
+
+        a = 1
+
+
+    # Plot local response map
 

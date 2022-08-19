@@ -27,7 +27,8 @@ def parse_args():
         default="/nas/users/hexingyi/transfer/onepose_sfm_v3/outputs_softmax_loftr_loftr",
     )
     parser.add_argument(
-        "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
+        "--obj_ids", nargs="+", default=['0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
+        # "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
         # "--obj_ids", nargs="+", default=["0801", "0802", "0804", "0805","0806", "0808", "0809" ],
     )
     parser.add_argument(
@@ -108,6 +109,7 @@ if __name__ == "__main__":
                 model_unit=args.model_unit,
             )
 
+            print(f"Obj id:{obj_id}, {accuracy_dict}")
             for metric_name, metric in accuracy_dict.items():
                 if metric_name not in gathered_accuracy_metrics:
                     gathered_accuracy_metrics[metric_name] = [metric]

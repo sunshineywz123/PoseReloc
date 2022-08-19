@@ -4,13 +4,13 @@ type: sfm
 work_dir: ${hydra:runtime.cwd}
 data_base_dir: /cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data
 # data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
-output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_patch2pix16"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_patch2pix8"
 match_type: "softmax"
 redo: True
 use_pixsfm: False
 enable_loftr_post_refine: False
 
-overwrite_all: False
+overwrite_all: True
 overwrite_coarse: False
 overwrite_fine: True
 

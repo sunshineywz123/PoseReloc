@@ -17,6 +17,8 @@ from ..extractors import build_extractor
 from ..loftr_for_sfm.utils.detector_wrapper import DetectorWrapper, DetectorWrapperTwoView
 from ..drc_net import DRCNet
 from ..patch2pix import Patch2Pix
+from src.NeuralSfM.post_optimization.matcher_model.utils import sample_feature_from_unfold_featuremap
+from src.NeuralSfM.post_optimization.visualization.draw_plots import draw_local_heatmaps
 
 
 def names_to_pair(name0, name1):
@@ -69,8 +71,8 @@ def build_model(args):
         matcher.eval()
     elif args['method'] == 'DRCNet':
         matcher = DRCNet(args['DRC_weight_path'], use_cuda=True, half_precision=False)
-    elif args['method'] == 'patch2pix':
-        matcher = Patch2Pix()
+    elif 'patch2pix' in args['method']:
+        matcher = Patch2Pix(args['method'])
     else:
         raise NotImplementedError
 
@@ -88,14 +90,28 @@ def extract_preds(data):
     # Round mkpts1 to 1/2 grid:
     # For rebuttal loftr version sfm
     # mkpts0 = np.round(mkpts0 / 2) * 2
-    # mkpts1 = np.round(mkpts1 / 2) * 2
+    # mkpts0 = np.round(mkpts0 / 2) * 2
+
+    mkpts1 = np.round(mkpts1 / 8) * 8
+
+    # Get feature response map for visualization
+    if 'feat_f0_unfold' in data:
+        feat_f0_unfold = data["feat_f0_unfold"]
+        feat_f1_unfold = data["feat_f1_unfold"]
+        query_features = sample_feature_from_unfold_featuremap(feat_f0_unfold)
+        distance_map = torch.linalg.norm(
+            query_features.unsqueeze(1) - feat_f1_unfold, dim=-1, keepdim=True
+        )  # L*WW*1
+        distance_map = distance_map.cpu().numpy()
+    else:
+        distance_map = np.zeros((mkpts1.shape[0], 25, 1))
 
     detector_kpts_mask = (
         data["detector_kpts_mask"].cpu().numpy()
         if "detector_kpts_mask" in data
         else np.zeros_like(mconfs)
     )
-    return mkpts0, mkpts1, mconfs, detector_kpts_mask
+    return mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map
 
 def extract_inliers(data, args):
     """extract inlier matches assume bs==1.
@@ -132,12 +148,12 @@ def extract_matches(data, detector=None, matcher=None, ransac_args=None, inlier_
     matcher(data)
 
     # 2. run RANSAC and extract inliers
-    mkpts0, mkpts1, mconfs, detector_kpts_mask = (
+    mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map = (
         extract_inliers(data, ransac_args) if inlier_only else extract_preds(data)
     )
     del data
     torch.cuda.empty_cache()
-    return (mkpts0, mkpts1, mconfs, detector_kpts_mask)
+    return (mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map)
 
 
 @torch.no_grad()
@@ -155,13 +171,13 @@ def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
         subset_ids = subset_ids
 
     # match all permutations
-    for subset_id in subset_ids:
+    for id, subset_id in enumerate(subset_ids):
         data = dataset[subset_id]
         f_name0, f_name1 = data['pair_key']
         data_c = {
             k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in data.items()
         }
-        mkpts0, mkpts1, mconfs, detector_kpts_mask = extract_matches(
+        mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map = extract_matches(
             data_c,
             detector=detector,
             matcher=matcher,
@@ -174,9 +190,16 @@ def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
             [mkpts0, mkpts1, mconfs[:, None]], -1
         )  # (N, 5)
 
+        # draw_local_heatmaps(
+        #     data,
+        #     distance_map,
+        #     mkpts1,
+        #     save_dir=f"visualize/loftr"
+        # )
+
         if pba is not None:
             pba.update.remote(1)
-    return matches
+    return matches 
 
 @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
 # @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing

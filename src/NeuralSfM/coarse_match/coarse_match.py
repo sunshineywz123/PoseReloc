@@ -20,11 +20,12 @@ cfgs = {
     # "data": {"img_resize": 640, "df": 8, "shuffle": True}, # For Scannet
     "matcher": {
         "model": {
-            "method": 'LoFTR', # [LoFTR, DRCNet]
+            "method": "LoFTR",
             # "method": 'DRCNet', # [LoFTR, DRCNet, patch2pix]
             # "method": 'patch2pix', # [LoFTR, DRCNet, patch2pix]
-            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
-            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
+            # "method": 'patch2pix_superglue',
+            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
+            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
             "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
             "DRC_weight_path": "weight/dualrc-net_orth.pth.tar",
             "seed": 666,
@@ -39,7 +40,7 @@ cfgs = {
             "conf_thr": 0.99999,
         },
     },
-    "coarse_match_debug": True,
+    "coarse_match_debug": False,
     "ray": {
         "slurm": False,
         "n_workers": 4, # 4 for onepose
@@ -121,7 +122,7 @@ def loftr_coarse_matching(
             save_h5(matches, cache_dir)
             logger.info(f"Raw matches cached: {cache_dir}")
 
-        if cfgs['matcher']['model']['method'] is not 'patch2pix':
+        if 'patch2pix' not in cfgs['matcher']['model']['method']:
             # Combine keypoints
             n_imgs = len(dataset.img_dir)
             pb = ProgressBar(n_imgs, "Combine keypoints") if verbose else None
@@ -169,7 +170,7 @@ def loftr_coarse_matching(
             final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
             final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
         else:
-            final_keypoints, updated_matches = patch2pix_merger(matches, cfgs["matcher"]["pair_name_split"], qt_psize=16)
+            final_keypoints, updated_matches = patch2pix_merger(matches, cfgs["matcher"]["pair_name_split"], qt_psize=8)
 
     else:
         # Matcher runner
@@ -185,7 +186,7 @@ def loftr_coarse_matching(
             save_h5(matches, cache_dir)
             logger.info(f"Raw matches cached: {cache_dir}")
 
-        if cfgs['matcher']['model']['method'] is not 'patch2pix':
+        if 'patch2pix' not in cfgs['matcher']['model']['method']:
             # Combine keypoints
             n_imgs = len(dataset.img_dir)
             logger.info("Combine keypoints!")
@@ -219,7 +220,7 @@ def loftr_coarse_matching(
             final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
             final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
         else:
-            final_keypoints, updated_matches = patch2pix_merger(matches, cfgs["matcher"]["pair_name_split"], qt_psize=16)
+            final_keypoints, updated_matches = patch2pix_merger(matches, cfgs["matcher"]["pair_name_split"], qt_psize=8)
 
     if not run_sfm_later:
         # OnePose friendly format
