@@ -294,7 +294,7 @@ def matchWorker(
     return results_dict
 
 
-@ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+@ray.remote(num_cpus=1, num_gpus=0.25, max_calls=1)  # release gpu after finishing
 # @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
 def matchWorker_ray_wrapper(*args, **kwargs):
     return matchWorker(*args, **kwargs)

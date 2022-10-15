@@ -7,7 +7,7 @@ data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
 sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
 
 match_type: softmax
-task_name: cam_ready_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
+task_name: cam_ready_ablation_no_pe_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
 suffix: ""
 feature_method: "average"
 
@@ -25,7 +25,7 @@ ray:
 model:
   # _target_: src.models.spg_model.LitModelSPG
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/models/checkpoints/train_coarse_thr_0.4_layernorm_n_head_8_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_nogat_loftr_c3f1_warp/epoch=12.ckpt
+  pretrained_ckpt: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/models/checkpoints/train_coarse_thr_0.4_layernorm_n_head_8_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_nogat_loftr_c3f1_warp_no_pe/epoch=9.ckpt
 
   loftr:
     loftr_backbone:
@@ -44,14 +44,14 @@ model:
     interpol_type: "bilinear" # ['nearest', 'bilinear']
 
     keypoints_encoding:
-      enable: True
+      enable: False
       type: mlp_linear # ['mlp_cov1d', 'mlp_linear']
       descriptor_dim: 256
       keypoints_encoder: [32, 64, 128]
       norm_method: "instancenorm"
 
     positional_encoding:
-      enable: True
+      enable: False
       pos_emb_shape: [256, 256]
 
     loftr_coarse:

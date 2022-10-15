@@ -15,8 +15,8 @@ from ..loftr_config.default import get_cfg_defaults
 from ..loftr_for_sfm.loftr_sfm import LoFTR_SfM
 from ..extractors import build_extractor
 from ..loftr_for_sfm.utils.detector_wrapper import DetectorWrapper, DetectorWrapperTwoView
-from ..drc_net import DRCNet
-from ..patch2pix import Patch2Pix
+# from ..drc_net import DRCNet
+# from ..patch2pix import Patch2Pix
 from src.NeuralSfM.post_optimization.matcher_model.utils import sample_feature_from_unfold_featuremap
 from src.NeuralSfM.post_optimization.visualization.draw_plots import draw_local_heatmaps
 
@@ -92,7 +92,7 @@ def extract_preds(data):
     # mkpts0 = np.round(mkpts0 / 2) * 2
     # mkpts0 = np.round(mkpts0 / 2) * 2
 
-    mkpts1 = np.round(mkpts1 / 8) * 8
+    # mkpts1 = np.round(mkpts1 / 8) * 8
 
     # Get feature response map for visualization
     if 'feat_f0_unfold' in data:
@@ -201,7 +201,7 @@ def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
             pba.update.remote(1)
     return matches 
 
-@ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
+@ray.remote(num_cpus=1, num_gpus=0.25, max_calls=1)  # release gpu after finishing
 # @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
 def match_worker_ray_wrapper(*args, **kwargs):
     return match_worker(*args, **kwargs)

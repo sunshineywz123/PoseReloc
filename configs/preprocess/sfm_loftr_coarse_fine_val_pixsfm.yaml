@@ -4,13 +4,16 @@ type: sfm
 work_dir: ${hydra:runtime.cwd}
 data_base_dir: /cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data
 # data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
-output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_plot_feature_patch"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_plot_feature_patch"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_costmap_img512"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_costmap"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm"
 match_type: "softmax"
 redo: True
 use_pixsfm: True
 enable_loftr_post_refine: False
 
-overwrite_all: False
+overwrite_all: True
 overwrite_coarse: False
 overwrite_fine: False
 
@@ -127,13 +130,13 @@ dataset:
     # - '0591'
 
     # # Hard case:
-    # - '0600'
-    # - '0601'
+    - '0600'
+    - '0601'
     # # - '0602'
     # # - '0603'
-    # - '0604'
-    # - '0606'
-    # - '0607'
+    - '0604'
+    - '0606'
+    - '0607'
     # # - '0608'
     # # - '0610'
     # # - '0612'
@@ -145,13 +148,13 @@ dataset:
     # # - '0618'
     # - '0619'
     # # - '0620'
-    - '0621'
+    # - '0621'
     # # - '0622'
-    # - '0623'
+    - '0623'
     # # - '0624'
     # # - '0625'
     # # - '0626'
-    # - '0627'
+    - '0627'
     # # - '0628'
     # # - '0629'
     # # - '0630'
@@ -162,9 +165,9 @@ dataset:
     # # - '0636'
     # # - '0637'
     # # - '0638'
-    # - '0639'
-    # - '0640'
-    # - '0641'
+    - '0639'
+    - '0640'
+    - '0641'
     # # - '0642'
     # # - '0643'
     # # - '0644'

@@ -207,12 +207,12 @@ def dump_obj_with_feature_map(results_dict, vis3d_pth, vis3d_name, fast=True):
 
             # Draw gt 3d bbox
             reproj_box_2d_gt = reproj_(K_full, pose_gt, box3d.T)
-            # image_full = draw_3d_box(image_full, reproj_box_2d_gt, linewidth=15, color='g')
+            image_full = draw_3d_box(image_full, reproj_box_2d_gt, linewidth=15, color='g')
 
             # Draw pred 3d box
-            if pose_pred is not None:
-                reproj_box_2d_pred = reproj_(K_full, pose_pred, box3d.T)
-                image_full = draw_3d_box(image_full, reproj_box_2d_pred, linewidth=15, color='b')
+            # if pose_pred is not None:
+            #     reproj_box_2d_pred = reproj_(K_full, pose_pred, box3d.T)
+            #     image_full = draw_3d_box(image_full, reproj_box_2d_pred, linewidth=15, color='b')
 
             image_full_pil = Image.fromarray(cv2.cvtColor(image_full, cv2.COLOR_BGR2RGB))
             vis3d.add_image(image_full_pil, name='results_bbox')

@@ -27,9 +27,10 @@ def parse_args():
         default="/nas/users/hexingyi/transfer/onepose_sfm_v3/outputs_softmax_loftr_loftr",
     )
     parser.add_argument(
-        "--obj_ids", nargs="+", default=['0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
-        # "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
-        # "--obj_ids", nargs="+", default=["0801", "0802", "0804", "0805","0806", "0808", "0809" ],
+        # "--obj_ids", nargs="+", default=['0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'],
+        # "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0606', '0607', '0623', '0627', '0639', '0640', '0641'], # OnePose hard
+        "--obj_ids", nargs="+", default=["0600", '0601', '0604', '0623', '0627', '0639', '0640', '0641'], # OnePose hard
+        # "--obj_ids", nargs="+", default=["0801", "0802", "0804", "0805", "0806", "0808", "0809" ], # LINEMOD
     )
     parser.add_argument(
         "--threshold", nargs="+", type=int, default=[1, 3, 5], help="threshold unit: mm"
@@ -98,7 +99,11 @@ if __name__ == "__main__":
     for obj_id in tqdm(obj_ids):
         if obj_id in id2full_name:
             obj_full_name = id2full_name[obj_id]
-            gt_mesh_path = osp.join(database_path, obj_full_name, "model.ply")
+            # gt_mesh_path = osp.join(database_path, obj_full_name, "model_eval.ply")
+            gt_mesh_path = osp.join(database_path, obj_full_name, "model_aligned.ply")
+            if not osp.exists(gt_mesh_path):
+                logger.warning(f'model_aligned.ply of {obj_id} not exists!')
+                gt_mesh_path = osp.join(database_path, obj_full_name, "model.ply")
             sfm_pointcloud_path = osp.join(
                 sfm_base_path, obj_full_name, "box_filter.ply"
             )

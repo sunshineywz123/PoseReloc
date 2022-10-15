@@ -24,8 +24,8 @@ cfgs = {
             # "method": 'DRCNet', # [LoFTR, DRCNet, patch2pix]
             # "method": 'patch2pix', # [LoFTR, DRCNet, patch2pix]
             # "method": 'patch2pix_superglue',
-            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
-            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
+            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
+            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
             "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
             "DRC_weight_path": "weight/dualrc-net_orth.pth.tar",
             "seed": 666,

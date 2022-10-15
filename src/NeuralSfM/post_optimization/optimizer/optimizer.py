@@ -336,6 +336,6 @@ class Optimizer(nn.Module):
             "point_cloud_ids": point_cloud_ids.cpu().numpy(),  # [n_point_clouds]
         }
 
-    @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
+    @ray.remote(num_cpus=1, num_gpus=1, max_calls=1)  # release gpu after finishing
     def start_optimize_ray_wrapper(self):
         return self.start_optimize()

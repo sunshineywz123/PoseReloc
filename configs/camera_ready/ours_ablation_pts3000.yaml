@@ -7,7 +7,7 @@ data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
 sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
 
 match_type: softmax
-task_name: cam_ready_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
+task_name: cam_ready_ablation_pt3000_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
 suffix: ""
 feature_method: "average"
 
@@ -263,9 +263,9 @@ datamodule:
     num_leaf: 8
     shape2d: 2000 # Not used
     shape3d_train: 10000 # NOTE: Changed from 11000 to 12000
-    shape3d_val: 10000 # 15000
+    shape3d_val: 3000 # 15000
     load_3d_coarse: True
-    pad3D: False
+    pad3D: True
 
     # 2D part
     img_pad: False

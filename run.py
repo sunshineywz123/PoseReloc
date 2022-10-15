@@ -491,11 +491,10 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     # Use pixsfm to optimize loftr coarse points:
                     cfg.enable_loftr_post_refine = False
                     if cfg.use_global_ray:
-                        results = pixsfm_ray_wrapper.remote(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=False, patch_size=8)
+                        results = pixsfm_ray_wrapper.remote(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=False, patch_size=8, img_resize=512)
                         ray.get(results)
                     else:
-
-                        pixsfm(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=True, patch_size=8)
+                        pixsfm(img_lists, deep_sfm_dir, empty_dir, covis_pairs_out, feature_out, matches_out, use_costmaps=True, patch_size=8, img_resize=512)
                 else:
                     if cfg.use_global_ray:
                         # Need to ask for gpus!

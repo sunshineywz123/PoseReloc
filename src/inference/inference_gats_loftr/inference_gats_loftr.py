@@ -22,10 +22,10 @@ args = {
     "ray": {
         "slurm": False,
         # "n_workers": 1,
-        "n_workers": 1,
+        "n_workers": 2,
         # "n_cpus_per_worker": 1,
         "n_cpus_per_worker": 1,
-        "n_gpus_per_worker": 1,
+        "n_gpus_per_worker": 0.5,
         "local_mode": False,
     },
 }

@@ -4,6 +4,7 @@ import trimesh
 import os
 import matplotlib.cm as cm
 from PIL import Image
+from pathlib import Path
 
 os.environ["PYOPENGL_PLATFORM"] = "egl"
 
@@ -103,12 +104,15 @@ def convert_pose2T(pose):
         else:
             return pose
 
-def render_cad_model_to_depth(cat_model_path, K, pose, H, W, depth_npy_save_path=None, depth_img_save_path=None, mask_img_save_path=None, depth_range_prior=None):
+def render_cad_model_to_depth(cat_model_path, K, pose, H, W, depth_npy_save_path=None, depth_img_save_path=None, mask_img_save_path=None, depth_range_prior=None, origin_img_path=None):
     """
     pose: np.array[3*4] or [4*4]
     depth_range_prior: [depth_min, depth_max]
     """
-    mesh = trimesh.load(cat_model_path)
+    if isinstance(cat_model_path, str):
+        mesh = trimesh.load(cat_model_path)
+    else:
+        mesh = cat_model_path
     renderer = Renderer() if depth_range_prior is None else Renderer(depth_range_prior=depth_range_prior)
 
     T = convert_pose2T(pose)
@@ -116,8 +120,14 @@ def render_cad_model_to_depth(cat_model_path, K, pose, H, W, depth_npy_save_path
     rgb, depth = renderer(H, W, K, T_inv, mesh)
     
     if depth_img_save_path is not None:
+        Path(depth_img_save_path).parent.mkdir(parents=True, exist_ok=True)
         depth_color_image = depth2color(depth)
-        depth_color_image.save(depth_img_save_path)
+        if origin_img_path is not None:
+            origin_img = Image.open(origin_img_path)
+            depth_blend_img = Image.blend(origin_img, depth_color_image, 0.4)
+            depth_blend_img.save(depth_img_save_path)
+        else:
+            depth_color_image.save(depth_img_save_path)
     
     if mask_img_save_path is not None:
         mask = np.zeros((depth.shape[0], depth.shape[1]))

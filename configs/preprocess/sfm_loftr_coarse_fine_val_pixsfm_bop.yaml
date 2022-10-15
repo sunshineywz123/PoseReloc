@@ -2,16 +2,18 @@
 
 type: sfm
 work_dir: ${hydra:runtime.cwd}
-data_base_dir: "/nas/users/hexingyi/scan_data"
+data_base_dir: /cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data
 # data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
-output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_plot_feature_patch"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm_costmap_img512"
 match_type: "softmax"
-redo: True
-enable_loftr_post_refine: True
+redo: False
+use_pixsfm: True
+enable_loftr_post_refine: False
 
-overwrite_all: True
+overwrite_all: False
 overwrite_coarse: False
-overwrite_fine: True
+overwrite_fine: False
 
 use_global_ray: False
 use_local_ray: False
@@ -24,7 +26,7 @@ ray:
   n_gpus_per_worker: 1
   local_mode: False
 dataset:
-  max_num_kp3d: 15000 # 25000 for demo
+  max_num_kp3d: 10000 # 25000 for demo
   max_num_kp2d: 10000
 
   data_dir: ${data_base_dir}
@@ -126,56 +128,77 @@ dataset:
     # - '0591'
 
     # # Hard case:
-    - '0601'
-    - '0603'
-    - '0604'
-    - '0626'
-    - '0627'
-    - '0628'
-    - '0629'
-    - '0630'
-    - '0631'
-    - '0600'
-    - '0602'
-    - '0606'
-    - '0607'
-    - '0608'
-    - '0610'
-    - '0612'
-    - '0613'
-    - '0615'
-    - '0618'
-    - '0619'
-    - '0620'
-    - '0621'
-    - '0622'
-    - '0623'
-    - '0624'
-    - '0625'
-    - '0633'
-    - '0634'
-    - '0635'
-    - '0636'
-    - '0637'
-    - '0638'
-    - '0639'
-    - '0640'
-    - '0641'
-    - '0642'
-    - '0643'
-    - '0644'
-    - '0645'
-    - '0646'
-
+    # - '0600'
+    # - '0601'
+    # # - '0602'
+    # # - '0603'
+    # - '0604'
+    # - '0606'
+    # - '0607'
+    # # - '0608'
+    # # - '0610'
+    # # - '0612'
+    # # - '0613'
+    # # - '0614'
+    # # - '0615'
+    # # - '0616'
+    # # - '0617'
+    # # - '0618'
+    # - '0619'
+    # # - '0620'
+    # - '0621'
+    # # - '0622'
+    # - '0623'
+    # # - '0624'
+    # # - '0625'
+    # # - '0626'
+    # - '0627'
+    # # - '0628'
+    # # - '0629'
+    # # - '0630'
+    # # - '0631'
+    # # - '0633'
+    # # - '0634'
+    # # - '0635'
+    # # - '0636'
+    # # - '0637'
+    # # - '0638'
+    # - '0639'
+    # - '0640'
+    # - '0641'
+    # # - '0642'
+    # # - '0643'
+    # # - '0644'
+    # # - '0645'
+    # # - '0646'
+    # # - '0653'
+    # # - '0656'
+    # # - '0657'
+    # # - '0658'
+    # # - '0659'
+    # # - '0650'
 
     # # YCBV:
     # - '0700'
     # - '0701'
     # - '0702'
     # # LM: 
-    # - '0801'
-    # - '0807'
-    # - '0808'
+
+    - '0801'
+    - '0802'
+    - '0804'
+    - '0805'
+    - '0806'
+    - '0808'
+    - '0809'
+
+    # - '0810'
+    # - '0811'
+
+    # - '0812'
+    # - '0813'
+    # - '0814'
+    # - '0815'
 
     ## Demo:
     # - '0900'
@@ -198,10 +221,10 @@ network:
   matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
-  gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
-  down_ratio: 5 # 5 original
+  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
+  down_ratio: 1 # 5 original
   gap: 3
-  covis_num: 8 # 8 original
+  covis_num: 30 # 8 original
   track_length: 8
 
 post_optim:
@@ -209,7 +232,7 @@ post_optim:
     # feature_track_assignment_strategy: 'balance'
     feature_track_assignment_strategy: 'greedy'
   optimizer:
-    solver_type: 'SecondOrder' # 'FirstOrder'
+    solver_type: 'SecondOrder'
     residual_mode: "geometry_error"
     optimize_lr:
       depth: 0.03
@@ -217,7 +240,7 @@ post_optim:
 
 post_process:
   filter_bbox_before_filter_track_length: True
-  skip_bbox_filter: False
+  skip_bbox_filter: True
 
 verbose: False
 

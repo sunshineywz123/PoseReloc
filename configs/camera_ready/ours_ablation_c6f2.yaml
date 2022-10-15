@@ -25,7 +25,7 @@ ray:
 model:
   # _target_: src.models.spg_model.LitModelSPG
   _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
-  pretrained_ckpt: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/models/checkpoints/train_coarse_thr_0.4_layernorm_n_head_8_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_nogat_loftr_c3f1_warp/epoch=12.ckpt
+  pretrained_ckpt: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/models/checkpoints/train_coarse_thr_0.4_layernorm_n_head_8_finew5_fix_backbone_no_hard_train_7000_3d_use_coarse_nofb_no_fineatt_pe_linear_nogat_loftr_c6f2/epoch=15.ckpt
 
   loftr:
     loftr_backbone:
@@ -64,7 +64,7 @@ model:
       # layer_names: ['Pe', 'self', 'cross']
       # layer_names: ["self", "cross"]
       layer_names: ["self", "cross"]
-      layer_iter_n: 3
+      layer_iter_n: 6
       dropout: 0.
       attention: "linear"
       norm_method: "layernorm"
@@ -147,7 +147,7 @@ model:
       nhead: 8
       # layer_names: ["self", "cross"]
       layer_names: ["self", "cross"]
-      layer_iter_n: 1
+      layer_iter_n: 2
       dropout: 0.0
       attention: "linear"
       norm_method: layernorm

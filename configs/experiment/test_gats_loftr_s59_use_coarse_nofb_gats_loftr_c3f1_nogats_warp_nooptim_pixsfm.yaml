@@ -4,10 +4,10 @@ type: inference
 
 
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_pixsfm"
 
 match_type: softmax
-task_name: cam_ready_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
+task_name: cam_ready_pixsfm_3dmodel_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim
 suffix: ""
 feature_method: "average"
 
