@@ -22,6 +22,9 @@ from .feature_aggregation import feature_aggregation_and_update
 cfgs = {
     "coarse_colmap_data": {
         "img_resize": 512,  # For OnePose
+        # "img_resize": 1200,  # For OnePose
+        # "img_resize": 720,  # For OnePose
+        # "img_resize": 720,  # For OnePose
         # "img_resize": 256,  # For OnePose
         # "img_resize": 1600, # For InLoc
         # "img_resize": 640, # For InLoc

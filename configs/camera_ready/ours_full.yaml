@@ -8,6 +8,7 @@ sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
 
 match_type: softmax
 task_name: cam_ready_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
+# task_name: cam_ready_test_speed
 suffix: ""
 feature_method: "average"
 
@@ -283,7 +284,8 @@ network:
   detection: loftr
   matching: loftr
 
-object_detector_method: SPP+SPG # ['GT', "SPP+SPG", "loftr"]
+# object_detector_method: SPP+SPG # ['GT', "SPP+SPG", "loftr"]
+object_detector_method: "GT" # ['GT', "SPP+SPG", "loftr"]
 data_dir: ${data_base_dir}
 top_k_obj: null
 num_val_seq: 1 # last n objects

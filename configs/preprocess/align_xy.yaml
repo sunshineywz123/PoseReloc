@@ -3,8 +3,10 @@
 type: align
 work_dir: ${hydra:runtime.cwd}
 data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
+# data_base_dir: '/nas/users/hexingyi/2022_cvta_objects'
 output_temp_dir: '/nas/users/hexingyi/onepose_data_temp_output'
 redo: False
+# full_img: False
 full_img: False
 suffix: ""
 
@@ -16,7 +18,19 @@ dataset:
         # - ${data_base_dir}/0656-demoduck-others demoduck-1 demoduck-2
         # - ${data_base_dir}/0657-demoorange-others demoorange-1 demoorange-2
         # - ${data_base_dir}/0658-demoorange2-others demoorange2-1 demoorange2-2
-        - ${data_base_dir}/0659-demoorange3-others demoorange3-1 demoorange3-2
+        # - ${data_base_dir}/0659-demoorange3-others demoorange3-1 demoorange3-2
+        # - ${data_base_dir}/0500-bose-others bose-1 bose-2
+        # - ${data_base_dir}/0501-hushoushuang-others hushoushuang-1 hushoushuang-2
+        # - ${data_base_dir}/0502-penbox-others penbox-1 penbox-2
+        # - ${data_base_dir}/0503-hushoushuangnew-others hushoushuangnew-1 hushoushuangnew-2
+        # - ${data_base_dir}/0504-penboxnew-others penboxnew-1 penboxnew-2
+        # - ${data_base_dir}/0505-penboxnew2-others penboxnew2-1 penboxnew2-2
+        # - ${data_base_dir}/0506-hushoushuang3-others hushoushuang3-1 hushoushuang3-2
+        # - ${data_base_dir}/0507-penbox3-others penbox3-1 penbox3-2
+        # - ${data_base_dir}/0508-hushoushuang4-others hushoushuang4-1 hushoushuang4-2
+        # - ${data_base_dir}/0509-shoe-others shoe-1 shoe-2
+        # - ${data_base_dir}/0510-shoehor-others shoehor-1 shoehor-2
+        - ${data_base_dir}/0511-shoehor840-others shoehor840-1 shoehor840-2
         # - ${data_base_dir}/0650-demotoyrobot-others demotoyrobot-1 demotoyrobot-2
         # - ${data_base_dir}/0642-hikrobotbox-box hikrobotbox-1 hikrobotbox-2
         # - ${data_base_dir}/0643-blackcharger-others blackcharger-1 blackcharger-2

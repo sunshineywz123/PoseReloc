@@ -73,7 +73,8 @@ def import_data(img_lists, do_ba=False):
             if do_ba:
                 intrin_dir = osp.join(base_dir, 'intrin')
             else:
-                intrin_dir = osp.join(base_dir, 'intrin_ba')
+                # intrin_dir = osp.join(base_dir, 'intrin_ba')
+                intrin_dir = osp.join(base_dir, 'intrin')
                 if not osp.exists(intrin_dir):
                     logger.warning(f"intrin dir :{intrin_dir} not exists, use 'intrin' instead!")
                     intrin_dir = osp.join(base_dir, 'intrin')
@@ -81,7 +82,7 @@ def import_data(img_lists, do_ba=False):
             K = get_intrin_from_txt(img_index, intrin_dir)
             fx, fy, cx, cy = K[0][0], K[1][1], K[0, 2], K[1, 2]
         elif img_type == 'color_full':
-            intrin_file = osp.join(base_dir, 'intrinsics.txt')
+            intrin_file = osp.join(base_dir, 'origin_intrin', f"{img_index}.txt")
             K, K_homo = get_K(intrin_file)
             fx, fy, cx, cy = K[0][0], K[1][1], K[0][2], K[1][2]
         else:

@@ -4,7 +4,9 @@ type: inference
 
 
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/2022_cvta_objects"
 sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error_cvta"
 
 match_type: softmax
 task_name: dataset_images
@@ -372,55 +374,60 @@ ids:
     # - '0595'
 
     # # test hard
-    - '0601'
-    - '0603'
-    - '0604'
-    # - '0605' # pingpang too hard!
-    - '0626'
-    - '0627'
-    - '0628'
-    - '0629'
-    - '0630'
-    - '0631'
-    # # - '0632' # chair too hard
-    # # From train objects
-    - '0600'
-    - '0602'
-    - '0606'
-    - '0607'
-    - '0608'
-    - '0610'
+    # - '0601'
+    # - '0603'
+    # - '0604'
+    # # - '0605' # pingpang too hard!
+    # - '0626'
+    # - '0627'
+    # - '0628'
+    # - '0629'
+    # - '0630'
+    # - '0631'
+    # # # - '0632' # chair too hard
+    # # # From train objects
+    # - '0600'
+    # - '0602'
+    # - '0606'
+    # - '0607'
+    # - '0608'
+    # - '0610'
 
-    - '0612'
-    - '0613'
-    # # - '0614'
-    - '0615'
-    # # - '0616'
-    # # - '0617'
+    # - '0612'
+    # - '0613'
+    # # # - '0614'
+    # - '0615'
+    # # # - '0616'
+    # # # - '0617'
 
-    - '0618'
-    - '0619'
-    - '0620'
-    - '0621'
-    - '0622'
-    - '0623'
-    - '0624'
-    - '0625'
-    - '0633'
-    - '0634'
-    - '0635'
-    - '0636'
-    - '0637'
-    - '0638'
-    - '0639'
-    - '0640'
-    - '0641'
+    # - '0618'
+    # - '0619'
+    # - '0620'
+    # - '0621'
+    # - '0622'
+    # - '0623'
+    # - '0624'
+    # - '0625'
+    # - '0633'
+    # - '0634'
+    # - '0635'
+    # - '0636'
+    # - '0637'
+    # - '0638'
+    # - '0639'
+    # - '0640'
+    # - '0641'
 
-    - '0642'
-    - '0643'
-    - '0644'
-    - '0645'
-    - '0646'
+    # - '0642'
+    # - '0643'
+    # - '0644'
+    # - '0645'
+    # - '0646'
+    # - '0507'
+    # - '0508'
+    # - '0509'
+    - '0510'
+    # - '0511'
 
     # BOP objects:
     # - '0700'
@@ -501,6 +508,8 @@ ids:
     # - '0625'
 exception_obj_names: 
     -
+
+sample_n_for_test: 20
 
 verbose: False
 

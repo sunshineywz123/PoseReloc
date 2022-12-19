@@ -1,0 +1,65 @@
+# @package _global_
+
+type: merge_anno
+task_name: null
+match_type: 'softmax'
+split: 'train'
+
+data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
+sfm_dir: '/nas/users/hexingyi/onepose_sfm'
+merge_output_dir: '/nas/users/hexingyi/onepose_merged'
+
+# names: 
+#     - '007-bluemoon-bottle'
+#     - '017-porcelain-bottle'
+#     - '020-dove-box'
+#     - '021-porcelain-bottle'
+#     - '023-porcelain-others'
+#     # - '0409-aptamil-box'
+#     - '0410-huiyuan-box'
+#     - '0411-doveshampoo-others'
+#     - '0412-pikachubowl-others'
+#     - '0413-juliecookies-box'
+#     # - '0414-babydiapers-others'
+#     # - '0415-captaincup-others'
+#     - '0416-tongyinoodles-others'
+#     - '0417-kangshifunoodles-others'
+#     - '0418-cookies1-others'
+#     - '0419-cookies2-others'
+#     # - '0420-liuliumei-others'
+#     # - '0421-cannedfish-others'
+#     # - '0422-qvduoduo-box'
+#     # - '0423-oreo-box'
+#     # - '0424-chocbox-box'
+#     # - '0425-vitacare-others'
+#     # - '0426-prunes-others'
+#     # - '0427-raisins-others'
+#     # - '0428-carrotmeat-others'
+#     # - '0430-carrotmeat-others'
+#     # - '0436-sedge-others'
+#     # - '0437-twinings-others'
+#     # - '0443-wheatbear-others'
+#     # - '0444-weizen-others'
+#     # - '0445-pistonhead-others'
+#     # - '0404-koppla-box'
+
+names: ${data_base_dir}
+exception_obj_names: 
+    -
+top_k_obj: null
+
+
+
+network:
+    detection: loftr
+    matching: loftr
+
+datamodule:
+    data_dir: ${sfm_dir}
+
+    out_path: ${merge_output_dir}/${task_name}/${split}.json
+
+
+hydra:
+    run:
+        dir: ${work_dir}

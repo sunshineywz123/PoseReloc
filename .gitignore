@@ -242,3 +242,5 @@ models
 command
 *.png
 pretrained
+.history
+.hydra/**

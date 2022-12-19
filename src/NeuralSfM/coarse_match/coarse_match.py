@@ -15,6 +15,8 @@ from .patch2pix_merger import patch2pix_merger
 
 cfgs = {
     "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
+    # "data": {"img_resize": 1200, "df": 8, "shuffle": True},  # For OnePose
+    # "data": {"img_resize": 720, "df": 8, "shuffle": True},  # For OnePose
     # "data": {"img_resize": 256, "df": 8, "shuffle": True},  # For OnePose_bop
     # "data": {"img_resize": 1600, "df": 8, "shuffle": True}, # For Inloc
     # "data": {"img_resize": 640, "df": 8, "shuffle": True}, # For Scannet

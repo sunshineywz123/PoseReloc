@@ -2,10 +2,9 @@
 
 type: mvs
 work_dir: ${hydra:runtime.cwd}
-data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
-sfm_base_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_v3'
-# output_base_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_mvs'
-output_base_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_mvs_debug'
+data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/2022_cvta_objects"
+sfm_base_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error_cvta'
+output_base_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_mvs_cvta'
 match_type: "softmax"
 redo: True
 enable_loftr_post_refine: True
@@ -112,42 +111,18 @@ dataset:
 
     # # Some hard objects:
     # # These are known good!
-    # - '0600'
-    # - '0601'
-    # - '0602'
-    # - '0603'
-    # - '0604'
-    # - '0606'
-    # - '0607'
-    # - '0623'
-    # - '0627'
-    - '0639'
-    # - '0640'
-    # - '0641'
-    # - '0606'
-    # - '0607'
-    # - '0608'
-    # - '0610'
-
-    # - '0612'
-    # - '0613'
-    # - '0614'
-    # - '0615'
-    # - '0616'
-    # - '0617'
-
-    # - '0618'
-    # - '0619'
-    # - '0620'
-    # - '0621'
-    # - '0622'
-    # - '0623'
-    # - '0624'
-    # - '0625'
-    # - '0627'
-    # - '0639'
-    # - '0640'
-    # - '0641'
+    # - '0500'
+    # - '0501'
+    # - '0502'
+    # - '0503'
+    # - '0504'
+    # - '0505'
+    # - '0506'
+    # - '0507'
+    # - "0508"
+    # - '0509'
+    # - '0510'
+    - '0511'
   exception_obj_names:
     -
 

@@ -1,0 +1,3 @@
+[submodule "neus"]
+	path = neus
+	url = git@github.com:hxy-123/neus.git

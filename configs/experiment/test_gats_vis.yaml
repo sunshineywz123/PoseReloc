@@ -284,7 +284,7 @@ data_dir: ${data_base_dir}
 top_k_obj: null
 num_val_seq: 1 # last n objects
 # want_seq_id: 4 # 4 for LM, 2 for others
-want_seq_id: 7 # 4 for LM, 2 for others
+want_seq_id: 2 # 4 for LM, 2 for others
 ids:
     # - '0408'
     # - '0409'
@@ -372,7 +372,7 @@ ids:
     # # test hard
     # - '0601'
     # - '0603'
-    # - '0604'
+    - '0604'
     # # - '0605' # pingpang too hard!
     # - '0626'
     # - '0627'
@@ -435,7 +435,7 @@ ids:
 
     ## demo objects
     # - '0901'
-    - '0940'
+    # - '0940'
 
     # Train objects
     # - '0410'
@@ -515,7 +515,7 @@ exception_obj_names:
     -
 
 verbose: False
-# sample_n_for_test: 30
+sample_n_for_test: 30
 # aim_img_ids:
 #   - 725 # banana 1
 #   - 302 # banana 28

@@ -9,8 +9,10 @@ from src.utils.metric_utils import compute_query_pose_errors
 @torch.no_grad()
 def extract_matches(data, match_model, metrics_configs):
     # 1. Run inference
+    torch.cuda.synchronize()
     start_time = time()
-    match_model(data, return_fine_unfold_feat=True)
+    match_model(data, return_fine_unfold_feat=False)
+    torch.cuda.synchronize()
     end_time = time()
     # logger.info(f"consume: {end_time - start_time}")
 

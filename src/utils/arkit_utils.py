@@ -86,9 +86,10 @@ def get_arkit_default_path(data_dir):
     Path(out_box_dir).mkdir(parents=True, exist_ok=True)
 
     orig_intrin_file = osp.join(data_dir, 'Frames.txt')
-    final_intrin_file = osp.join(data_dir, 'intrinsics.txt')
+    final_intrin_path = osp.join(data_dir, 'origin_intrin')
+    Path(final_intrin_path).mkdir(parents=True, exist_ok=True)
 
-    intrin_dir = osp.join(data_dir, 'intrin')
+    intrin_dir = osp.join(data_dir, 'intrin') # cropped images
     Path(intrin_dir).mkdir(parents=True, exist_ok=True)
 
     M_dir = osp.join(data_dir, 'M')
@@ -103,7 +104,7 @@ def get_arkit_default_path(data_dir):
         'reproj_box_dir': reproj_box_dir,
         'out_pose_dir': out_pose_dir,
         'orig_intrin_file': orig_intrin_file,
-        'final_intrin_file': final_intrin_file,
+        'final_intrin_path': final_intrin_path,
         'intrin_dir': intrin_dir,
         'M_dir': M_dir
     }
@@ -174,8 +175,7 @@ def reproj(K_homo, pose, points3d_homo):
 
 
 def parse_video(paths, downsample_rate=5, bbox_3d_homo=None, hw=512):
-    orig_intrin_file = paths['final_intrin_file']
-    K, K_homo = get_K(orig_intrin_file)
+    orig_intrin_path = paths['final_intrin_path']
     
     intrin_dir = paths['intrin_dir']
     cap = cv2.VideoCapture(paths['video_file'])
@@ -186,6 +186,7 @@ def parse_video(paths, downsample_rate=5, bbox_3d_homo=None, hw=512):
             break
         # if index != 0 and index % downsample_rate == 0: # TODO: check index == 0
         if index % downsample_rate == 0:
+            K, K_homo = get_K(osp.join(orig_intrin_path, f"{index}.txt"))
             img_name = osp.join(paths['color_dir'], '{}.png'.format(index))
             save_intrin_path = osp.join(intrin_dir, '{}.txt'.format(index))
 
@@ -203,7 +204,7 @@ def parse_video(paths, downsample_rate=5, bbox_3d_homo=None, hw=512):
             K_crop, K_crop_homo = data_utils.get_K_crop_resize(box, K, resize_shape)
             image_crop, trans1 = data_utils.get_image_crop_resize(image, box, resize_shape)
 
-            box_new = np.array([0, 0, x1-x0, y1-y0])  
+            box_new = np.array([0, 0, x1-x0, y1-y0])
             resize_shape = np.array([hw, hw])
             K_crop, K_crop_homo = data_utils.get_K_crop_resize(box_new, K_crop, resize_shape)
             try:
@@ -240,16 +241,13 @@ def data_process(data_dir, downsample_rate=5, hw=512):
         lines = [l.strip() for l in f.readlines() if len(l) > 0 and l[0] != '#']
     eles = [[float(e) for e in l.split(',')] for l in lines]
     data = np.array(eles)
-    fx, fy, cx, cy = np.average(data, axis=0)[2:]
-    with open(paths['final_intrin_file'], 'w') as f:
-        f.write('fx: {0}\nfy: {1}\ncx: {2}\ncy: {3}'.format(fx, fy, cx, cy))
     
     bbox_3d, bbox_3d_homo = get_bbox3d(paths['box_path'])
-    K_homo = np.array([
-        [fx, 0, cx, 0],
-        [0, fy, cy, 0],
-        [0,  0,  1, 0]
-    ])
+
+    for index, intrin in enumerate(data[:, 2:]):
+        fx, fy, cx, cy = intrin
+        with open(osp.join(paths['final_intrin_path'], f'{index}.txt'), 'w') as f:
+            f.write('fx: {0}\nfy: {1}\ncx: {2}\ncy: {3}'.format(fx, fy, cx, cy))
 
     with open(paths['pose_file'], 'r') as f:
         lines = [l.strip() for l in f.readlines()]
@@ -270,6 +268,8 @@ def data_process(data_dir, downsample_rate=5, hw=512):
                     [0, -1,  0],
                     [0,  0, -1]
                 ])
+
+                K, K_homo = get_K(osp.join(paths['final_intrin_path'], f"{index}.txt"))
 
                 T_ow = parse_box(paths['box_path'])
                 T_cw = affines.compose(position, rot_mat, np.ones(3))
@@ -321,6 +321,7 @@ if __name__ == "__main__":
     # ln_data()
     # data_root = './data/scan_data'
     data_root = '/nas/users/hexingyi/onepose_hard_data'
+    # data_root = "/nas/users/hexingyi/2022_cvta_objects"
     seq_dirs = [
         # '0408-colorbox-box', '0409-aptamil-box', '0410-huiyuan-box',
         # '0411-doveshampoo-others', '0412-pikachubowl-others', '0413-juliecookies-box',
@@ -455,14 +456,29 @@ if __name__ == "__main__":
         # "0657-demoorange-others"
         # "0658-demoorange2-others"
         # "0659-demoorange3-others"
-        "0900-toyrobot-others",
+        # "0900-toyrobot-others",
         # "0901-demoteabox-others"
         # "0940-diaosu2-others",
         # "0940-diaosu2-others",
         # "parse_video"
+        # "0500-bose-others",
+        # "0501-hushoushuang-others",
+        # "0502-penbox-others"
+        # "0503-hushoushuangnew-others"
+        # "0504-penboxnew-others"
+        # "0505-penboxnew2-others"
+        # "0506-hushoushuang3-others",
+        # "0507-penbox3-others"
+        # "0508-hushoushuang4-others",
+        # "0509-shoe-others"
+        # "0510-shoehor-others"
+        "0511-shoehor840-others"
     ]
     deal_first = True
     deal_last = True
+    # resize_hw = 512 # 512 orginal
+    # resize_hw = 840 # 512 orginal
+    resize_hw = 512 # 512 orginal
     for seq_dir in seq_dirs:
         data_dir = osp.join(data_root, seq_dir)
         subdirs = os.listdir(data_dir)
@@ -492,9 +508,9 @@ if __name__ == "__main__":
 
                 print('=> processing: ', subdir)
                 if int(subdir_id) == max_id and deal_last:
-                    data_process(osp.join(data_dir, subdir), downsample_rate=1, hw=512)
+                    data_process(osp.join(data_dir, subdir), downsample_rate=1, hw=resize_hw)
                 elif int(subdir_id) == min_id and deal_first:
-                    data_process(osp.join(data_dir, subdir), downsample_rate=1, hw=512)
+                    data_process(osp.join(data_dir, subdir), downsample_rate=1, hw=resize_hw)
                 else:
-                    data_process(osp.join(data_dir, subdir), downsample_rate=5, hw=512)
+                    data_process(osp.join(data_dir, subdir), downsample_rate=5, hw=resize_hw)
                  

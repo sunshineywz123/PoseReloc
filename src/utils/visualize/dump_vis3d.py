@@ -72,7 +72,10 @@ def dump_obj(results_dict, vis3d_pth, vis3d_name):
         box_trans_path = osp.join(obj_base_path, all_seq_name[0], 'Box_trans.txt')
         box_path = osp.join(obj_base_path, all_seq_name[0], 'Box.txt')
         
-        intrin_full_path = osp.join(seq_base_path, 'intrinsics.txt')
+        if osp.exists(osp.join(seq_base_path, 'intrinsics.txt')):
+            intrin_full_path = osp.join(seq_base_path, 'intrinsics.txt')
+        else:
+            intrin_full_path = image_path.replace('/color/', '/origin_intrin/').replace('.png', '.txt')
         image_full_path = image_path.replace('/color/', '/color_full/')
 
         if osp.exists(image_full_path):
@@ -80,6 +83,7 @@ def dump_obj(results_dict, vis3d_pth, vis3d_name):
                 box_trans_path = None
                 logger.warning(f"Box_trans.txt not exists in:{box_trans_path}")
             box3d = get_refine_box(box_path, box_trans_path)
+            np.savetxt(osp.join(obj_base_path, all_seq_name[0], 'Box_transformed.txt'), box3d.T[:-1])
             K_full, K_full_homo = parse_K(intrin_full_path)
             image_full = cv2.imread(image_full_path)
 
@@ -111,7 +115,7 @@ def dump_obj(results_dict, vis3d_pth, vis3d_name):
             image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
             vis3d.add_image(image_pil, name='results_bbox')
 
-def dump_obj_with_feature_map(results_dict, vis3d_pth, vis3d_name, fast=True):
+def dump_obj_with_feature_map(results_dict, vis3d_pth, vis3d_name, fast=False):
     vis3d = Vis3D(vis3d_pth, vis3d_name)
     if osp.exists(osp.join(vis3d_pth,vis3d_name)):
         rmtree(osp.join(vis3d_pth,vis3d_name))
@@ -179,7 +183,10 @@ def dump_obj_with_feature_map(results_dict, vis3d_pth, vis3d_name, fast=True):
         box_trans_path = osp.join(obj_base_path, all_seq_name[0], 'Box_trans.txt')
         box_path = osp.join(obj_base_path, all_seq_name[0], 'Box.txt')
         
-        intrin_full_path = osp.join(seq_base_path, 'intrinsics.txt')
+        if osp.exists(osp.join(seq_base_path, 'intrinsics.txt')):
+            intrin_full_path = osp.join(seq_base_path, 'intrinsics.txt')
+        else:
+            intrin_full_path = image_path.replace('/color/', '/origin_intrin/').replace('.png', '.txt')
         image_full_path = image_path.replace('/color/', '/color_full/')
 
         # Add: pointcloud:
@@ -198,6 +205,7 @@ def dump_obj_with_feature_map(results_dict, vis3d_pth, vis3d_name, fast=True):
                 logger.warning(f"Box_trans.txt not exists in:{box_trans_path}")
 
             box3d = get_refine_box(box_path, box_trans_path)
+            np.savetxt(osp.join(obj_base_path, all_seq_name[0], 'Box_transformed.txt'), box3d.T[:-1])
             img_ext = osp.splitext(image_path)[1]
             # For LINEMOD:
             # K_full = np.loadtxt(image_path.replace('/color/', '/intrin/').replace(img_ext, '.txt'))
