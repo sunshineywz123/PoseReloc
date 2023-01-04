@@ -1,79 +1,37 @@
-from itertools import chain
-from loguru import logger
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from einops.einops import rearrange, repeat
-from src.utils.profiler import PassThroughProfiler
+from einops.einops import rearrange
+import sys
+sys.path.append('third_party/LoFTR/src')
 
-from .backbone import build_backbone, _extract_backbone_feats, _split_backbone_feats, _get_feat_dims
-from .loftr_module import LocalFeatureTransformer, FinePreprocess, build_rejector, build_coarse_prior
-from .utils.position_encoding_persistent import PositionEncodingSine # for trained model reason
-from .utils.coarse_matching import CoarseMatching
-from .utils.fine_matching import FineMatching
-from .utils.selective_kernel import build_ssk_merge
-from .utils.guided_matching_fine import build_guided_matching
-from src.utils.misc import upper_config  # TODO: Remove the out of package import
-from src.utils.torch_utils import torch_speed_test
+from loftr.backbone import build_backbone
+from loftr.utils.position_encoding import PositionEncodingSine
+from loftr.loftr_module import LocalFeatureTransformer, FinePreprocess
+from loftr.utils.coarse_matching import CoarseMatching
+from loftr.utils.fine_matching import FineMatching
+
+from .utils.sample_feature_from_featuremap import sample_feature_from_featuremap
 
 
-class Matcher_LoFTR(nn.Module):
-    def __init__(self, config={}, profiler=None, debug=False):
+class LoFTR_for_OnePose_Plus(nn.Module):
+    def __init__(self, config, enable_fine_matching=True):
         super().__init__()
         # Misc
         self.config = config
-        self.profiler = profiler or PassThroughProfiler()
-        self.debug = debug
-        self.enable_fine_loftr = config['loftr_fine']['enable']
+        self.enable_fine_matching = enable_fine_matching
 
         # Modules
-        self.backbone = build_backbone(config["loftr_backbone"])
-        self.pos_encoding = PositionEncodingSine(config["loftr_coarse"]["d_model"],
-                                                 max_shape=config["loftr_coarse"]["pos_emb_shape"])
-        self.loftr_coarse = LocalFeatureTransformer(config["loftr_coarse"])
-        self.coarse_matching = CoarseMatching(config['loftr_match_coarse'],
-                                              config['loftr_match_fine']['detector'],
-                                              profiler=self.profiler)
-        # TODO: Multi-Scale DeiT Feature for Fine-Level
-        self.fine_preprocess = FinePreprocess(config['loftr_fine'], config['loftr_coarse']['d_model'],
-                                              cf_res=config['loftr_backbone']['resolution'],
-                                              feat_ids=config['loftr_backbone']['resnetfpn']['output_layers'],
-                                              feat_dims=_get_feat_dims(config['loftr_backbone']))
-        self.loftr_fine = LocalFeatureTransformer(config["loftr_fine"])
-        self.fine_matching = FineMatching(config['loftr_match_fine'], _full_cfg=upper_config(config))
-        # Optional Modules
-        self.coarse_prior = build_coarse_prior(config['loftr_coarse'])
-        self.fine_rejector = build_rejector(config['loftr_fine'])
-        self.coarse_ssk_merge = build_ssk_merge(config['loftr_coarse'])
-        self.guided_matching = build_guided_matching(config['loftr_guided_matching'])
+        self.backbone = build_backbone(config)
+        self.pos_encoding = PositionEncodingSine(
+            config['coarse']['d_model'],
+            temp_bug_fix=config['coarse']['temp_bug_fix'])
+        self.loftr_coarse = LocalFeatureTransformer(config['coarse'])
+        self.coarse_matching = CoarseMatching(config['match_coarse'])
+        self.fine_preprocess = FinePreprocess(config)
+        self.loftr_fine = LocalFeatureTransformer(config["fine"])
+        self.fine_matching = FineMatching()
 
-        # TODO: this should be removed in the future @zehong
-        # fixed pretrained coarse weights
-        self.loftr_coarse_pretrained = config['loftr_coarse']['pretrained']
-        if self.loftr_coarse_pretrained is not None:
-            ckpt = torch.load(self.loftr_coarse_pretrained, 'cpu')['state_dict']
-            for k in list(ckpt.keys()):
-                if 'loftr_coarse' in k:
-                    newk = k[k.find('loftr_coarse')+len('loftr_coarse')+1:]
-                    ckpt[newk] = ckpt[k]
-                if 'coarse_matching' in k:
-                    newk = k[k.find('coarse_matching')+len('coarse_matching')+1:]
-                    self.coarse_matching.load_state_dict({newk: ckpt[k]})
-                    self.coarse_matching.requires_grad_(False)
-                ckpt.pop(k)
-            self.loftr_coarse.load_state_dict(ckpt)
-            for param in self.loftr_coarse.parameters():
-                param.requires_grad = False
-        
-        # Disable grads when use gt mode (for convenience, inference without backprop, but better to disable)
-        if config['loftr_match_coarse']['_gt']:
-            for param in self.loftr_coarse.parameters():
-                param.requires_grad = False
-        if config['loftr_match_fine']['_gt']:
-            for param in chain(map(lambda x: x.parameters(), [self.loftr_fine, self.fine_preprocess, self.fine_matching])):
-                param.requires_grad = False
-
-    def forward(self, data):
+    def forward(self, data, **kwargs):
         """ 
         Update:
             data (dict): {
@@ -83,93 +41,134 @@ class Matcher_LoFTR(nn.Module):
                 'mask1'(optional) : (torch.Tensor): (N, H, W)
             }
         """
-        # TODO: this should be removed in the future @zehong
-        if self.loftr_coarse_pretrained:
-            self.loftr_coarse.eval()
+        # 1. Local Feature CNN
+        data.update({
+            'bs': data['image0'].size(0),
+            'hw0_i': data['image0'].shape[2:], 'hw1_i': data['image1'].shape[2:]
+        })
 
-        # 1. local feature backbone
-        with self.profiler.record_function("LoFTR/backbone"):
-            data.update({
-                'bs': data['image0'].size(0),
-                'hw0_i': data['image0'].shape[2:], 'hw1_i': data['image1'].shape[2:]
-            })
-            if data['hw0_i'] == data['hw1_i']:  # faster & better BN convergence
-                feats = self.backbone(torch.cat([data['image0'], data['image1']], dim=0))
-                feats0, feats1 = _split_backbone_feats(feats, data['bs'])
-            else:  # handle input of different shapes
-                feats0, feats1 = map(self.backbone, [data['image0'], data['image1']])
-                
-            feat_b_c0, feat_f0 = _extract_backbone_feats(feats0, self.config['loftr_backbone'])
-            feat_b_c1, feat_f1 = _extract_backbone_feats(feats1, self.config['loftr_backbone'])
-            data.update({
-                'hw0_c': feat_b_c0.shape[2:], 'hw1_c': feat_b_c1.shape[2:],
-                'hw0_f': feat_f0.shape[2:], 'hw1_f': feat_f1.shape[2:]
-            })
+        if data['hw0_i'] == data['hw1_i']:  # faster & better BN convergence
+            feats_c, feats_f = self.backbone(torch.cat([data['image0'], data['image1']], dim=0))
+            (feat_c0, feat_c1), (feat_f0, feat_f1) = feats_c.split(data['bs']), feats_f.split(data['bs'])
+        else:  # handle different input shapes
+            (feat_c0, feat_f0), (feat_c1, feat_f1) = self.backbone(data['image0']), self.backbone(data['image1'])
 
-        # 2. coarse-level loftr module
-        with self.profiler.record_function("LoFTR/coarse-loftr"):
+        data.update({
+            'hw0_c': feat_c0.shape[2:], 'hw1_c': feat_c1.shape[2:],
+            'hw0_f': feat_f0.shape[2:], 'hw1_f': feat_f1.shape[2:]
+        })
+
+        feat_c0_backbone = feat_c0.clone()
+        feat_c1_backbone = feat_c1.clone()
+        feat_f0_backbone = feat_f0.clone()
+        feat_f1_backbone = feat_f1.clone()
+
+        if 'mkpts0_c' not in data:
+            # 2. coarse-level loftr module
             # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
-            feat_c0 = rearrange(self.pos_encoding(feat_b_c0), 'n c h w -> n (h w) c')
-            feat_c1 = rearrange(self.pos_encoding(feat_b_c1), 'n c h w -> n (h w) c')
-                        
-            # handle padding mask, for MegaDepth dataset
-            mask_c0 = mask_c1 = None
+            feat_c0 = rearrange(self.pos_encoding(feat_c0), 'n c h w -> n (h w) c')
+            feat_c1 = rearrange(self.pos_encoding(feat_c1), 'n c h w -> n (h w) c')
+
+            mask_c0 = mask_c1 = None  # mask is useful in training
             if 'mask0' in data:
                 mask_c0, mask_c1 = data['mask0'].flatten(-2), data['mask1'].flatten(-2)
-            # NOTE: feat_c0 & feat_c1 are conv features residually modulated by LoFTR: x + sum_i(self_i + cross_i)
             feat_c0, feat_c1 = self.loftr_coarse(feat_c0, feat_c1, mask_c0, mask_c1)
-            # logger.info('Profiling LoFTR model...')
-            # torch_speed_test(self.loftr_coarse, [feat_c0, feat_c1, mask_c0, mask_c1], model_name='loftr_coarse')
 
-        with self.profiler.record_function("LoFTR/ssk-merge"):
-            pass
-            # TODO: concat along batch-dim if possible
-            # TODO: Remove
-            # feat_c0 = rearrange(feat_c0, 'n (h w) c -> n c h w', h=data['hw0_c'][0], w=data['hw0_c'][1])
-            # feat_c1 = rearrange(feat_c1, 'n (h w) c -> n c h w', h=data['hw1_c'][0], w=data['hw1_c'][1])
-            # feat_c0 = self.coarse_ssk_merge(feat_b_c0, feat_c0)
-            # feat_c1 = self.coarse_ssk_merge(feat_b_c1, feat_c1)
-            # feat_c0, feat_c1 = map(lambda x: rearrange(x, 'n c h w -> n (h w) c'), [feat_c0, feat_c1])
-            
-        with self.profiler.record_function("LoFTR/coarse-prior"):
-            # option1: convolution (3x3-3x3-1x1-1x1) with detached loftr feature 
-            self.coarse_prior(feat_c0, feat_c1, data)
-
-        # TODO: estimate dustin prototypes separately with feat_c0 & feat_c1 (AvgPool + MLP)
-        # with self.profiler.record_function("LoFTR/coarse-prototype"):
-        #     self.coarse_prototype(feat_c0, feat_c1, data)
-
-        # 3. match coarse-level
-        with self.profiler.record_function("LoFTR/coarse-matching"):
+            # 3. match coarse-level
             self.coarse_matching(feat_c0, feat_c1, data, mask_c0=mask_c0, mask_c1=mask_c1)
+        else:
+            # Only fine with coarse provided
+            # Convert coarse match to b_ids, i_ids, j_ids
+            # NOTE: only allow batch_size == 1
+            b_ids = torch.zeros(
+                (data["mkpts0_c"].shape[0],), device=data["mkpts0_c"].device
+            ).long()
 
-        if not self.config['loftr_match_fine']['enable']:
-            data.update({
-                'mkpts0_f': data['mkpts0_c'],
-                'mkpts1_f': data['mkpts1_c'],
-            })
-            return
-        
-        # 4. fine-level refinement
-        with self.profiler.record_function("LoFTR/fine-refinement"):
-            feat_f0_unfold, feat_f1_unfold = self.fine_preprocess(feat_f0, feat_f1, feat_c0, feat_c1, data,
-                                                                  feats0=feats0, feats1=feats1)
-            feat_f0_raw, feat_f1_raw = feat_f0_unfold.clone(), feat_f1_unfold.clone()
-            # at least one coarse level predicted
-            if feat_f0_unfold.size(0) != 0 and self.enable_fine_loftr:
+            data['mkpts0_c'][:, 0] = torch.clip(data['mkpts0_c'][:, 0], min=0, max=data['hw0_i'][1] - 2)
+            data['mkpts0_c'][:, 1] = torch.clip(data['mkpts0_c'][:, 1], min=0, max=data['hw0_i'][0] - 2)
+            data['mkpts1_c'][:, 0] = torch.clip(data['mkpts1_c'][:, 0], min=0, max=data['hw1_i'][1] - 2)
+            data['mkpts1_c'][:, 1] = torch.clip(data['mkpts1_c'][:, 1], min=0, max=data['hw1_i'][0] - 2)
+
+            scale = data["hw0_i"][0] / data["hw0_c"][0]
+            scale0 = (
+                scale * data["scale0"][b_ids][:, [1, 0]] if "scale0" in data else scale
+            )
+            scale1 = (
+                scale * data["scale1"][b_ids][:, [1, 0]] if "scale1" in data else scale
+            )
+
+            mkpts0_coarse_scaled = torch.round(data["mkpts0_c"] / scale0)
+            mkpts1_coarse_scaled = torch.round(data["mkpts1_c"] / scale1)
+            i_ids = (
+                mkpts0_coarse_scaled[:, 1] * data["hw0_c"][1]
+                + mkpts0_coarse_scaled[:, 0]
+            ).long()
+            j_ids = (
+                mkpts1_coarse_scaled[:, 1] * data["hw1_c"][1]
+                + mkpts1_coarse_scaled[:, 0]
+            ).long()
+
+            feat_c0, feat_c1 = None, None
+
+            data.update(
+                {"m_bids": b_ids, "b_ids": b_ids, "i_ids": i_ids, "j_ids": j_ids, 'mconf': torch.ones_like(b_ids)}
+            )
+
+        if self.enable_fine_matching:
+            # 4. fine-level refinement
+            feat_f0_unfold, feat_f1_unfold = self.fine_preprocess(feat_f0, feat_f1, feat_c0, feat_c1, data)
+            if feat_f0_unfold.size(0) != 0:  # at least one coarse level predicted
                 feat_f0_unfold, feat_f1_unfold = self.loftr_fine(feat_f0_unfold, feat_f1_unfold)
 
-        # 5. match fine-level
-        with self.profiler.record_function("LoFTR/fine-matching"):
-            # TODO: add `cfg.FINE_MATCHING.ENABLE`
+            # 5. match fine-level
             self.fine_matching(feat_f0_unfold, feat_f1_unfold, data)
+        else:
+            data.update(
+                {"mkpts0_f": data["mkpts0_c"], "mkpts1_f": data["mkpts1_c"],}
+            )
 
-        # 6. (optional) fine-level rejection (with post loftr local feature)
-        with self.profiler.record_function("LoFTR/fine-rejection"):
-            feat_f0_rej, feat_f1_rej = (feat_f0_unfold, feat_f1_unfold) if self.config['loftr_fine']['rejector']['post_loftr'] \
-                                        else (feat_f0_raw, feat_f1_raw)
-            self.fine_rejector(feat_f0_rej, feat_f1_rej, data)
-        
-        # 7. (optional) Guided matching of existing detections
-        with self.profiler.record_function("LoFTR/guided-matching"):
-            self.guided_matching(data)
+        # 6. extract and return features (optional):
+        if "extract_coarse_feature" in kwargs:
+            if kwargs["extract_coarse_feature"]:
+                # NOTE: Use mkpts0/1_f is not a bug, try to use their nearest coarse feature
+                feat_coarse_b_0 = sample_feature_from_featuremap(
+                    feat_c0_backbone,
+                    data["mkpts0_f"],
+                    imghw=data["scale0"].squeeze(0)
+                    * torch.tensor(data["hw0_i"]).to(data["scale0"]),
+                    sample_mode="nearest",
+                )
+                feat_coarse_b_1 = sample_feature_from_featuremap(
+                    feat_c1_backbone,
+                    data["mkpts1_f"],
+                    imghw=data["scale1"].squeeze(0)
+                    * torch.tensor(data["hw1_i"]).to(data["scale1"]),
+                    sample_mode="nearest",
+                )
+                data.update(
+                    {
+                        "feat_coarse_b_0": feat_coarse_b_0,
+                        "feat_coarse_b_1": feat_coarse_b_1,
+                    }
+                )
+        if "extract_fine_feature" in kwargs:
+            if kwargs["extract_fine_feature"]:
+                feat_ext0 = sample_feature_from_featuremap(
+                    feat_f0_backbone,
+                    data["mkpts0_f"],
+                    imghw=data["scale0"].squeeze(0)
+                    * torch.tensor(data["hw0_i"]).to(data["scale0"]),
+                )
+                feat_ext1 = sample_feature_from_featuremap(
+                    feat_f1_backbone,
+                    data["mkpts1_f"],
+                    imghw=data["scale1"].squeeze(0)
+                    * torch.tensor(data["hw1_i"]).to(data["scale1"]),
+                )
+                data.update({"feat_ext0": feat_ext0, "feat_ext1": feat_ext1})
+
+    def load_state_dict(self, state_dict, *args, **kwargs):
+        for k in list(state_dict.keys()):
+            if k.startswith('matcher.'):
+                state_dict[k.replace('matcher.', '', 1)] = state_dict.pop(k)
+        return super().load_state_dict(state_dict, *args, **kwargs)

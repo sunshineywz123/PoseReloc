@@ -22,7 +22,7 @@ cfgs = {
         "feature_track_assignment_strategy": "greedy",
         "verbose": False,
     },
-    "fine_match_debug": False,
+    "fine_match_debug": True,
     "fine_matcher": {
         "model": {
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",

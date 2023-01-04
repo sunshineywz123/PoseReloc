@@ -18,20 +18,10 @@ cfgs = {
     "matcher": {
         "model": {
             "method": "LoFTR",
-            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
-            # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
             "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
             "seed": 666,
         },
         "pair_name_split": " ",
-        "inlier_only": False,
-        "ransac": {
-            "geo_model": "F",
-            "ransac_method": "DEGENSAC",
-            "pixel_thr": 1.0,
-            "max_iters": 10000,
-            "conf_thr": 0.99999,
-        },
     },
     "coarse_match_debug": False,
     "ray": {
@@ -111,7 +101,6 @@ def detector_free_coarse_matching(
             matches = dict(ChainMap(*results))
             logger.info("Matcher finish!")
 
-            # over write anyway
             save_h5(matches, cache_dir)
             logger.info(f"Raw matches cached: {cache_dir}")
 

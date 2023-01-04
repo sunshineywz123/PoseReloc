@@ -74,7 +74,7 @@ class ConstructOptimizationData(Dataset):
             left_colmap_id, right_colmap_id = pair_name.split("-")
             fine_match_results = self.fine_match_results_dict[pair_name]
             index = np.argwhere(fine_match_results["mkpts0_idx"] == query_kpt_idx)
-            assert len(index) == 1
+            assert len(index) == 1, len(index)
             index = np.squeeze(index)
             mkpts0_c.append(fine_match_results["mkpts0_c"][index])
             mkpts1_c.append(fine_match_results["mkpts1_c"][index])

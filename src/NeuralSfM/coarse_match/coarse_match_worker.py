@@ -7,14 +7,10 @@ import torch
 import numpy as np
 from tqdm import tqdm
 
-from src.utils.misc import lower_config
 from src.utils.torch_utils import update_state_dict, STATE_DICT_MAPPER
 
 from .coarse_matcher_utils import agg_groupby_2d, extract_geo_model_inliers
-from ..loftr_config.default import get_cfg_defaults
-from ..loftr_for_sfm.loftr_sfm import LoFTR_SfM
-from ..extractors import build_extractor
-from ..loftr_for_sfm.utils.detector_wrapper import DetectorWrapper, DetectorWrapperTwoView
+from ..loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
 from src.NeuralSfM.post_optimization.matcher_model.utils import sample_feature_from_unfold_featuremap
 from src.NeuralSfM.post_optimization.visualization.draw_plots import draw_local_heatmaps
 
@@ -23,54 +19,20 @@ def names_to_pair(name0, name1):
     return '_'.join((name0.replace('/', '-'), name1.replace('/', '-')))
 
 def build_model(args):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file(args['cfg_path'])
     pl.seed_everything(args['seed'])
 
-    detector = build_extractor(lower_config(cfg.LOFTR_MATCH_FINE))
-    detector = (
-        DetectorWrapper(
-            detector,
-            cfg.LOFTR_MATCH_FINE.DETECTOR,
-            fullcfg=lower_config(cfg.LOFTR_MATCH_FINE),
-        )
-        if not cfg.LOFTR_GUIDED_MATCHING.ENABLE
-        else DetectorWrapperTwoView(
-            detector,
-            cfg.LOFTR_MATCH_FINE.DETECTOR,
-            fullcfg=lower_config(cfg.LOFTR_MATCH_FINE),
-        )
-    )
-
     if args['method'] == 'LoFTR':
-        match_cfg = {
-            "loftr_backbone": lower_config(cfg.LOFTR_BACKBONE),
-            "loftr_coarse": lower_config(cfg.LOFTR_COARSE),
-            "loftr_match_coarse": lower_config(cfg.LOFTR_MATCH_COARSE),
-            "loftr_fine": lower_config(cfg.LOFTR_FINE),
-            "loftr_match_fine": lower_config(cfg.LOFTR_MATCH_FINE),
-            "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
-        }
-        matcher = LoFTR_SfM(config=match_cfg)
+        matcher = LoFTR_for_OnePose_Plus(config=default_cfg, enable_fine_matching=False)
         # load checkpoints
         state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
         for k in list(state_dict.keys()):
             state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
-        try:
-            matcher.load_state_dict(state_dict, strict=True)
-        except RuntimeError as _:
-            state_dict, updated = update_state_dict(
-                STATE_DICT_MAPPER, state_dict=state_dict
-            )
-            assert updated
-            matcher.load_state_dict(state_dict, strict=True)
-
-        detector.eval()
+        matcher.load_state_dict(state_dict, strict=True)
         matcher.eval()
     else:
         raise NotImplementedError
 
-    return detector, matcher
+    return matcher
 
 
 def extract_preds(data):
@@ -107,54 +69,31 @@ def extract_preds(data):
     )
     return mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map
 
-def extract_inliers(data, args):
-    """extract inlier matches assume bs==1.
-    NOTE: If no inliers found, keep all matches.
-    """
-    mkpts0, mkpts1, mconfs, detector_kpts_mask = extract_preds(data)
-    K0 = data["K0"][0].cpu().numpy() if args['geo_model'] == "E" else None
-    K1 = data["K1"][0].cpu().numpy() if args['geo_model'] == "E" else None
-    if len(mkpts0) >= 8:
-        inliers = extract_geo_model_inliers(
-            mkpts0,
-            mkpts1,
-            mconfs,
-            args['geo_model'],
-            args['ransac_method'],
-            args['pixel_thr'],
-            args['max_iters'],
-            args['conf_thr'],
-            K0=K0,
-            K1=K1,
-        )
-        mkpts0, mkpts1, mconfs, detector_kpts_mask = map(
-            lambda x: x[inliers], [mkpts0, mkpts1, mconfs, detector_kpts_mask]
-        )
-        # logger.info(f"total:{inliers.shape[0]}, {inliers.sum()} inliers, filtered: {inliers.shape[0] - inliers.sum()}")
-    # assert mkpts0.shape[0] != 0
-    return mkpts0, mkpts1, mconfs, detector_kpts_mask
-
-
 @torch.no_grad()
-def extract_matches(data, detector=None, matcher=None, ransac_args=None, inlier_only=True):
+def extract_matches(data, matcher=None):
     # 1. inference
-    detector(data)
     matcher(data)
 
-    # 2. run RANSAC and extract inliers
-    mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map = (
-        extract_inliers(data, ransac_args) if inlier_only else extract_preds(data)
-    )
-    del data
-    torch.cuda.empty_cache()
-    return (mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map)
+    """extract predictions assuming bs==1"""
+    m_bids = data["m_bids"].cpu().numpy()
+    assert (np.unique(m_bids) == 0).all()
+    mkpts0 = data["mkpts0_f"].cpu().numpy() # N*2
+    mkpts1 = data["mkpts1_f"].cpu().numpy() # N*2
+    mconfs = data["mconf"].cpu().numpy() # N
 
+    # Round mkpts1 to 1/2 grid:
+    # For rebuttal loftr version sfm
+    # mkpts0 = np.round(mkpts0 / 2) * 2
+    # mkpts0 = np.round(mkpts0 / 2) * 2
+
+    # mkpts1 = np.round(mkpts1 / 8) * 8
+
+    return mkpts0, mkpts1, mconfs
 
 @torch.no_grad()
 def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
     """extract matches from part of the possible image pair permutations"""
-    detector, matcher = build_model(args['model'])
-    detector.cuda()
+    matcher = build_model(args['model'])
     matcher.cuda()
     matches = {}
 
@@ -171,12 +110,9 @@ def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
         data_c = {
             k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in data.items()
         }
-        mkpts0, mkpts1, mconfs, detector_kpts_mask, distance_map = extract_matches(
+        mkpts0, mkpts1, mconfs = extract_matches(
             data_c,
-            detector=detector,
             matcher=matcher,
-            ransac_args=args['ransac'],
-            inlier_only=args['inlier_only'],
         )
 
         # Extract matches (kpts-pairs & scores)
@@ -184,12 +120,6 @@ def match_worker(dataset, subset_ids, args, pba=None, verbose=True):
             [mkpts0, mkpts1, mconfs[:, None]], -1
         )  # (N, 5)
 
-        # draw_local_heatmaps(
-        #     data,
-        #     distance_map,
-        #     mkpts1,
-        #     save_dir=f"visualize/loftr"
-        # )
 
         if pba is not None:
             pba.update.remote(1)

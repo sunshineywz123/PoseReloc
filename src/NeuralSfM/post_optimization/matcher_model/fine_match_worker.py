@@ -5,26 +5,14 @@ import ray
 from ray.actor import ActorHandle
 from tqdm import tqdm
 
-from src.NeuralSfM.loftr_config.default import get_cfg_defaults
-from src.NeuralSfM.loftr_for_sfm import LoFTR_SfM
-from src.utils.misc import lower_config
+from src.NeuralSfM.loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
 from src.utils.torch_utils import update_state_dict, STATE_DICT_MAPPER
 
 
-def build_model(args, extract_coarse_feats_mode=False):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file(args["cfg_path"])
+def build_model(args):
     pl.seed_everything(args["seed"])
 
-    match_cfg = {
-        "loftr_backbone": lower_config(cfg.LOFTR_BACKBONE),
-        "loftr_coarse": lower_config(cfg.LOFTR_COARSE),
-        "loftr_match_coarse": lower_config(cfg.LOFTR_MATCH_COARSE),
-        "loftr_fine": lower_config(cfg.LOFTR_FINE),
-        "loftr_match_fine": lower_config(cfg.LOFTR_MATCH_FINE),
-        "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
-    }
-    matcher = LoFTR_SfM(config=match_cfg, extract_coarse_feats_mode=extract_coarse_feats_mode).eval()
+    matcher = LoFTR_for_OnePose_Plus(config=default_cfg, enable_fine_matching=True)
     # load checkpoints
     state_dict = torch.load(args["weight_path"], map_location="cpu")["state_dict"]
     for k in list(state_dict.keys()):
@@ -39,16 +27,24 @@ def build_model(args, extract_coarse_feats_mode=False):
         matcher.load_state_dict(state_dict, strict=True)
     return matcher
 
+def extract_results(
+    data,
+    matcher=None,
+    extract_feature_method=None,
+):
+    # 1. inference
+    if extract_feature_method == "fine_match_backbone":
+        matcher(data, extract_coarse_feature=True, extract_fine_feature=True)
+    else:
+        raise NotImplementedError
 
-def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
-    """extract predictions assuming bs==1"""
     m_bids = data["m_bids"].cpu().numpy()
     assert (np.unique(m_bids) == 0).all()
     mkpts0_c = data["mkpts0_c"].cpu().numpy()
     mkpts1_c = data["mkpts1_c"].cpu().numpy()
     mkpts0_f = data["mkpts0_f"].cpu().numpy()
     mkpts1_f = data["mkpts1_f"].cpu().numpy()
-    mkpts0_idx = data["mkpts0_idx"].cpu().numpy()  # from original dataset, just pass by
+    mkpts0_idx = data["mkpts0_idx"].cpu().numpy()  # NOTE: from original data, just passby
     scale0 = data["scale0"].cpu().numpy()
     scale1 = data["scale1"].cpu().numpy()
 
@@ -81,45 +77,6 @@ def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
     )
 
 
-def extract_results(
-    data,
-    matcher=None,
-    extract_feature_method=None,
-):
-    # 1. inference
-    if extract_feature_method == "fine_match_backbone":
-        matcher(data, extract_coarse_feature=True, extract_fine_feature=True)
-    else:
-        matcher(data, extract_coarse_feature=True)
-    # 2. extract matches:
-    (
-        mkpts0_c,
-        mkpts1_c,
-        mkpts0_f,
-        mkpts1_f,
-        mkpts0_idx,
-        scale0,
-        scale1,
-        feature_c0,
-        feature_c1,
-        feature0,
-        feature1,
-    ) = extract_preds(data, extract_feature_method=extract_feature_method)
-    return (
-        mkpts0_c,
-        mkpts1_c,
-        mkpts0_f,
-        mkpts1_f,
-        mkpts0_idx,
-        scale0,
-        scale1,
-        feature_c0,
-        feature_c1,
-        feature0,
-        feature1,
-    )
-
-
 # Used for two view match and pose & depth refinement
 @torch.no_grad()
 def matchWorker(
@@ -127,7 +84,6 @@ def matchWorker(
     subset_ids,
     matcher,
     extract_feature_method=None,
-    use_warpped_feature=False,
     pba: ActorHandle = None,
     verbose=True,
 ):

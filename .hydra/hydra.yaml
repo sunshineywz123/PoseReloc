@@ -109,10 +109,12 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +camera_ready=demo
+    - +camera_ready=sfm_demo
+    - use_global_ray=False
+    - use_local_ray=False
   job:
-    name: demo
-    override_dirname: +camera_ready=demo
+    name: run
+    override_dirname: +camera_ready=sfm_demo,use_global_ray=False,use_local_ray=False
     id: ???
     num: ???
     config_name: config.yaml
@@ -137,7 +139,7 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      camera_ready: demo
+      camera_ready: sfm_demo
       logger: null
       callbacks: default_callbacks.yaml
       datamodule: mnist_datamodule.yaml

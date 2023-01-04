@@ -1,2 +1,2 @@
-from .loftr import Matcher_LoFTR
-from .loftr_sfm import LoFTR_SfM
+from .loftr import LoFTR_for_OnePose_Plus
+from .utils.loftr_for_onepose_plus_cfg import default_cfg
