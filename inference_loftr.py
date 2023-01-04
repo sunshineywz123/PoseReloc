@@ -8,7 +8,6 @@ import os.path as osp
 import numpy as np
 from loguru import logger
 import math
-import pandas as pd
 
 from omegaconf.dictconfig import DictConfig
 
@@ -100,7 +99,7 @@ def inference(cfg):
         all_subsets = chunks(data_dirs, math.ceil(len(data_dirs) / cfg.ray.n_workers))
         sfm_worker_results = [
             inference_worker_ray_wrapper.remote(subset_data_dirs, cfg, pba=pb.actor, worker_id=id)
-            for id,subset_data_dirs in enumerate(all_subsets)
+            for id, subset_data_dirs in enumerate(all_subsets)
         ]
         pb.print_until_done()
         results = ray.get(sfm_worker_results)
@@ -116,7 +115,6 @@ def inference(cfg):
                 gathered_metrics[metric_name].append(metric)
         
     # Dump metrics:
-    # name2metrics = {k:v for k,v in sorted(name2metrics.items(), key= lambda item: item[1]['5cm@5degree'])}
     os.makedirs(cfg.output.txt_dir, exist_ok=True)
     with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'w') as f:
         for name, metrics in name2metrics.items():
@@ -128,8 +126,6 @@ def inference(cfg):
     with open(osp.join(cfg.output.txt_dir, 'metrics.txt'), 'a') as f:
         for metric_name, metric in gathered_metrics.items():
             print(f'{metric_name}:')
-            # metric_parsed = pd.DataFrame(metric)
-            # print(metric_parsed.describe())
             metric_np = np.array(metric)
             metric_mean = np.mean(metric)
             print(metric_mean)
@@ -159,7 +155,6 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
             object_detector_method = cfg.object_detector_method
         else:
             object_detector_method = 'GT'
-        
 
         # Get all inference image path
         all_image_paths = []
@@ -179,12 +174,6 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
                 logger.warning(f"Same num of images in test sequence:{sub_dir}")
             image_paths = [osp.join(color_dir, img_name) for img_name in img_names]
             all_image_paths += image_paths
-        
-        if 'sample_n_for_test' in cfg:
-            if cfg.sample_n_for_test is not None:
-                # For debug:
-                interval = len(all_image_paths) // cfg.sample_n_for_test
-                all_image_paths = all_image_paths[::interval]
 
         if len(all_image_paths) == 0:
             logger.info(f"No png image in {root_dir}")
@@ -203,20 +192,12 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
             obj_name,
         )
 
-        if cfg.output.visual_vis3d:
-            os.makedirs(cfg.output.vis_dir, exist_ok=True)
-            vis3d_pth = osp.join(cfg.output.vis_dir, obj_name)
-        else:
-            vis3d_pth = None
-
-        metrics = inference_gats_loftr(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose, vis3d_pth=vis3d_pth)
+        metrics = inference_gats_loftr(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose)
         obj_name2metrics[obj_name] = metrics
         if pba is not None:
             pba.update.remote(1)
     
     return obj_name2metrics
-
-
 
 @ray.remote
 def inference_worker_ray_wrapper(*args, **kwargs):

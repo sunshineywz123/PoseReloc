@@ -44,16 +44,3 @@ def parse_align_pose(ba_dir):
             [0, 0, 1]
         ])
         np.savetxt(ba_intrin_file, ba_intrinsic)
-
-
-# def update_arkit(cfg, data_dir):
-#     root_dir, sub_dirs = data_dir.split(' ')[0], data_dir.split(' ')[1:]
-
-#     for sub_dir in sub_dirs:
-#         seq_path = osp.join(root_dir, sub_dir)
-
-#         color_full_dir = osp.join(seq_path, 'color_full')
-#         intrin_full_file = osp.join(seq_path, 'intrinsics.txt')
-#         intrin_ba_full_dir = osp.join(seq_path, 'intrin_full_ba')
-
-        

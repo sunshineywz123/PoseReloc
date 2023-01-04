@@ -5,7 +5,7 @@ from torch.cuda import amp
 import pytorch_lightning as pl
 from loguru import logger
 from itertools import chain
-from src.architectures.GATs_LoFTR import GATs_LoFTR
+from src.architectures.GATs_LoFTR import OnePosePlus_model
 from src.architectures.GATs_LoFTR.utils.fine_supervision import fine_supervision
 from src.architectures.GATs_LoFTR.optimizers.optimizers import (
     build_optimizer,
@@ -22,7 +22,7 @@ class PL_GATsLoFTR(pl.LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-        self.matcher = GATs_LoFTR(self.hparams["loftr"])
+        self.matcher = OnePosePlus_model(self.hparams["loftr"])
         self.loss = LoFTRLoss(self.hparams["loss"])
         self.n_vals_plot = max(
             self.hparams["trainer"]["n_val_pairs_to_plot"]
@@ -52,14 +52,7 @@ class PL_GATsLoFTR(pl.LightningModule):
             )
 
     def training_step(self, batch, batch_idx):
-
-        if (
-            self.trainer.global_rank == 0
-            and self.global_step % self.trainer.log_every_n_steps == 0
-        ):
-            self.matcher(batch, return_fine_unfold_feat=True)
-        else:
-            self.matcher(batch)
+        self.matcher(batch)
 
         fine_supervision(batch, self.hparams)
 
@@ -78,51 +71,8 @@ class PL_GATsLoFTR(pl.LightningModule):
                 f"train/max conf_matrix", batch["conf_matrix"].max(), self.global_step
             )
 
-            if self.hparams["loftr"]["coarse_matching"]["type"] == "sinkhorn":
-                if (
-                    self.hparams["loftr"]["coarse_matching"]["skh"]["partial_impl"]
-                    == "prototype"
-                    and self.hparams["loftr"]["coarse_mathcing"]["skh"][
-                        "prototype_impl"
-                    ]
-                    == "learned"
-                ):
-                    self.logger.experiment.add_scalar(
-                        f"skh_proto_mean",
-                        self.matcher.coarse_matching.optimal_transport.bin_prototype.clone()
-                        .detach()
-                        .cpu()
-                        .mean()
-                        .data,
-                        self.global_step,
-                    )
-                elif (
-                    self.hparams["loftr"]["coarse_matching"]["skh"]["partial_impl"]
-                    == "dustbin"
-                ):
-                    self.logger.experiment[0].add_scalar(
-                        f"skh_bin_score",
-                        self.matcher.coarse_matching.optimal_transport.bin_score.clone()
-                        .detach()
-                        .cpu()
-                        .data,
-                        self.global_step,
-                    )
-            elif self.hparams["loftr"]["coarse_matching"]["type"] == "dual-softmax":
-                if self.hparams["loftr"]["coarse_matching"]["dual_softmax"][
-                    "temperature_learnable"
-                ]:
-                    self.logger.experiment[0].add_scalar(
-                        f"dual_softmax temperature",
-                        self.matcher.coarse_matching.temperature()
-                        .clone()
-                        .detach()
-                        .cpu(),
-                        self.global_step,
-                    )
             if self.hparams["trainer"]["enable_plotting"]:
-                compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"], training=self.training,)
-                figures = draw_reprojection_pair(batch, visual_color_type="distance_error")
+                figures = draw_reprojection_pair(batch, visual_color_type="conf")
                 for k, v in figures.items():
                     self.logger.experiment[0].add_figure(
                         f"train_match/{k}", v, self.global_step
@@ -138,12 +88,7 @@ class PL_GATsLoFTR(pl.LightningModule):
             )
 
     def validation_step(self, batch, batch_idx):
-        self.matcher(batch, return_fine_unfold_feat=True)
-
-        # # NOTE: GT not exists in validation stage
-        # fine_supervision(batch, self.hparams)
-        # with amp.autocast(enabled=False):
-        #     self.loss(batch)
+        self.matcher(batch)
 
         # Compute metrics
         compute_query_pose_errors(batch, configs=self.hparams["eval_metrics"], training=self.training)
@@ -153,22 +98,13 @@ class PL_GATsLoFTR(pl.LightningModule):
             "inliers": batch["inliers"],
         }
 
-        if "R_errs_c" in batch:
-            metrics.update({
-                "R_errs_coarse": batch['R_errs_c'],
-                "t_errs_coarse": batch['t_errs_c'],
-                "inliers_coarse": batch['inliers_c']
-            })
-
         # Visualize match
         val_plot_invervel = max(self.trainer.num_val_batches[0] // self.n_vals_plot, 1)
-        # figures = {"evaluation": [], "heatmap":[]}
         figures = {"evaluation": []}
         if batch_idx % val_plot_invervel == 0:
-            figures = draw_reprojection_pair(batch, visual_color_type="distance_error")
+            figures = draw_reprojection_pair(batch, visual_color_type="conf")
 
         return {
-            # "loss_scalars": batch["loss_scalars"],
             "figures": figures,
             "metrics": metrics,
         }
@@ -187,35 +123,22 @@ class PL_GATsLoFTR(pl.LightningModule):
             def flattenList(x):
                 return list(chain(*x))
 
-            # # 1. loss_scalars: dict of list, on cpu
-            # _loss_scalars = [o["loss_scalars"] for o in outputs]
-            # loss_scalars = {
-            #     k: flattenList(gather([_ls[k] for _ls in _loss_scalars]))
-            #     for k in _loss_scalars[0]
-            # }
-
-            # 2. val metrics: dict of list, numpy
+            # val metrics: dict of list, numpy:
             _metrics = [o["metrics"] for o in outputs]
             metrics = {
                 k: flattenList(gather(flattenList([_me[k] for _me in _metrics])))
                 for k in _metrics[0]
             }
 
-            # 3. figures
+            # figures:
             _figures = [o["figures"] for o in outputs]
             figures = {
                 k: flattenList(gather(flattenList([_me[k] for _me in _figures])))
                 for k in _figures[0]
             }
 
-            # tensorboard records only on rank 0
+            # tensorboard records only on rank 0:
             if self.trainer.global_rank == 0:
-                # for k, v in loss_scalars.items():
-                #     mean_v = torch.stack(v).mean()
-                #     self.logger.experiment[0].add_scalar(
-                #         f"val_{valset_idx}/avg_{k}", mean_v, global_step=cur_epoch
-                #     )
-
                 val_metrics_4tb = aggregate_metrics(
                     metrics, self.hparams["eval_metrics"]["pose_thresholds"]
                 )
@@ -235,12 +158,6 @@ class PL_GATsLoFTR(pl.LightningModule):
 
                 multi_val_metrics.append(val_metrics_4tb["3cm@3degree"])
             plt.close("all")
-
-        if self.trainer.global_rank == 0:
-            # FIXME: bug exists here, lead to the stuck of train
-            # avg_multi_val_metrics = np.mean(multi_val_metrics)
-            # self.log_dict({'cm3degree3': 1})  # ckpt monitors on this
-            pass
 
     def configure_optimizers(self):
         optimizer = build_optimizer(self, self.hparams)

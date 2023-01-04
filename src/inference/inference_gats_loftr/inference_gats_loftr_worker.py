@@ -2,19 +2,13 @@ from loguru import logger
 import ray
 import torch
 from tqdm import tqdm
-from time import time
 from src.utils.metric_utils import compute_query_pose_errors
 
 
 @torch.no_grad()
 def extract_matches(data, match_model, metrics_configs):
     # 1. Run inference
-    torch.cuda.synchronize()
-    start_time = time()
-    match_model(data, return_fine_unfold_feat=False)
-    torch.cuda.synchronize()
-    end_time = time()
-    # logger.info(f"consume: {end_time - start_time}")
+    match_model(data)
 
     # 2. Compute metrics
     compute_query_pose_errors(data, metrics_configs)
@@ -35,20 +29,16 @@ def extract_matches(data, match_model, metrics_configs):
         "pose_gt": data["query_pose_gt"][0].cpu().numpy(),
         "intrinsic": data["query_intrinsic"][0].cpu().numpy(),
         "image_path": data["query_image_path"],
-        "time": end_time - start_time
     }
 
     if "ADD" in data:
         result_data.update({"ADD_metric": data["ADD"]})
         result_data.update({"proj2D_metric": data["proj2D"]})
 
-    del data
-    torch.cuda.empty_cache()
-
     return result_data
 
 
-def inference_gats_loftr_worker(
+def inference_onepose_plus_worker(
     dataset, match_model, subset_ids, cfgs, pba=None, verbose=True
 ):
     match_model.cuda()
@@ -78,8 +68,6 @@ def inference_gats_loftr_worker(
     return results
 
 
-# @ray.remote(num_cpus=1, num_gpus=0.5)  # release gpu after finishing
 @ray.remote(num_cpus=1, num_gpus=0.5, max_calls=1)  # release gpu after finishing
-# @ray.remote(num_cpus=1, num_gpus=0.25)  # release gpu after finishing
-def inference_gats_loftr_worker_ray_wrapper(*args, **kwargs):
-    return inference_gats_loftr_worker(*args, **kwargs)
+def inference_onepose_plus_worker_ray_wrapper(*args, **kwargs):
+    return inference_onepose_plus_worker(*args, **kwargs)

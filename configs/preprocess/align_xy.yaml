@@ -2,16 +2,45 @@
 
 type: align
 work_dir: ${hydra:runtime.cwd}
-data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
+# data_base_dir: '/nas/users/hexingyi/onepose_hard_data'
+data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/neuralsfm_capture_obj'
 # data_base_dir: '/nas/users/hexingyi/2022_cvta_objects'
-output_temp_dir: '/nas/users/hexingyi/onepose_data_temp_output'
-redo: False
+output_temp_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_data_temp_output'
+redo: True
+full_img: True
 # full_img: False
-full_img: False
 suffix: ""
 
 dataset:
     data_dir:
+        # - ${data_base_dir}/1000-whitecup-others whitecup-1
+        # - ${data_base_dir}/1001-ape-others ape-1
+        # - ${data_base_dir}/1002-sonybox-others sonybox-1
+        # - ${data_base_dir}/1003-fakecam-others fakecam-1
+        # - ${data_base_dir}/1004-smallwbox-others smallwbox-1
+
+        # - ${data_base_dir}/1005-penbox-others penbox-1
+        # - ${data_base_dir}/1006-bosebox-others bosebox-1
+        # - ${data_base_dir}/1007-eyeglassbox-others eyeglassbox-1
+        # - ${data_base_dir}/1008-whitemouse-others whitemouse-1
+        # - ${data_base_dir}/1009-batterycharger-others batterycharger-1
+        # - ${data_base_dir}/1010-themos-others themos-1
+        # - ${data_base_dir}/1011-penboxvert-others penboxvert-1
+
+        # - ${data_base_dir}/1012-toy-others toy-1
+        # - ${data_base_dir}/1013-pingpangcover-others pingpangcover-1
+        # - ${data_base_dir}/1014-gengbox-others gengbox-1
+        # - ${data_base_dir}/1015-toshihiba-others toshihiba-1
+        # - ${data_base_dir}/1016-dingshuju-others dingshuju-1
+
+        - ${data_base_dir}/1017-luckincup-others luckincup-1
+        - ${data_base_dir}/1018-tiesanjiao-others tiesanjiao-1
+        - ${data_base_dir}/1019-airpodsdog-others airpodsdog-1
+        - ${data_base_dir}/1020-iphonecharger-others iphonecharger-1
+        - ${data_base_dir}/1021-hhkbhandrest-others hhkbhandrest-1
+        - ${data_base_dir}/1022-logimouse-others logimouse-1
+
+
         # - ${data_base_dir}/0612-insta-others insta-1 insta-2
         # - ${data_base_dir}/0613-batterycharger-others batterycharger-1 batterycharger-2
        
@@ -30,7 +59,7 @@ dataset:
         # - ${data_base_dir}/0508-hushoushuang4-others hushoushuang4-1 hushoushuang4-2
         # - ${data_base_dir}/0509-shoe-others shoe-1 shoe-2
         # - ${data_base_dir}/0510-shoehor-others shoehor-1 shoehor-2
-        - ${data_base_dir}/0511-shoehor840-others shoehor840-1 shoehor840-2
+        # - ${data_base_dir}/0511-shoehor840-others shoehor840-1 shoehor840-2
         # - ${data_base_dir}/0650-demotoyrobot-others demotoyrobot-1 demotoyrobot-2
         # - ${data_base_dir}/0642-hikrobotbox-box hikrobotbox-1 hikrobotbox-2
         # - ${data_base_dir}/0643-blackcharger-others blackcharger-1 blackcharger-2
@@ -267,7 +296,7 @@ network:
     matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
-    covis_num: 12
+    covis_num: 30
     gap: 3
     # rotation_threshold: 55
     max_rotation: 55

@@ -43,8 +43,6 @@ class PositionEncodingSine(nn.Module):
 
 
 # Position encoding for 2D & 3D keypoints
-
-
 class KeypointEncoding(nn.Module):
     """ Joint encoding of visual appearance and location using MLPs """
 

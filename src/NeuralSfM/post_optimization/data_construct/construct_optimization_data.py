@@ -24,7 +24,7 @@ class ConstructOptimizationData(Dataset):
             if point3D.image_ids.shape[0] > self.max_track_length:
                 self.max_track_length = point3D.image_ids.shape[0]
         
-        self.padding_data = True # padding to max track length
+        self.padding_data = True # padding to max track length for fast dataloading.
         
 
     def __len__(self):
@@ -61,18 +61,11 @@ class ConstructOptimizationData(Dataset):
         ]  # 1*3*3 intrinsics from colmap
         intrinsic1 = []  # N*3*3
 
-        # T_f0_w = convert_pose2T(
-        #     self.colmap_frame_dict[assigned_colmap_frameID]["initial_pose"]
-        # )
-        # T_w_f0 = np.linalg.inv(T_f0_w)
-        # angle_axis_relative = []  # N*6
-
         left_colmap_ids = []  # N
         right_colmap_ids = []  # N
         mkpts0_c = []  # N*2
         mkpts1_c = []  # N*2
         mkpts1_f = []  # N*2
-        distance_map = []  # N*WW*1
         scale0 = []  # N*2
         scale1 = []  # N*2
 
@@ -86,7 +79,6 @@ class ConstructOptimizationData(Dataset):
             mkpts0_c.append(fine_match_results["mkpts0_c"][index])
             mkpts1_c.append(fine_match_results["mkpts1_c"][index])
             mkpts1_f.append(fine_match_results["mkpts1_f"][index])
-            distance_map.append(fine_match_results["distance_map"][index])
             intrinsic1.append(self.colmap_frame_dict[int(right_colmap_id)]["intrinsic"])
             left_colmap_ids.append(
                 np.array([int(left_colmap_id)])
@@ -94,13 +86,6 @@ class ConstructOptimizationData(Dataset):
             right_colmap_ids.append(
                 np.array([int(right_colmap_id)])
             )  # right frame colmap id, used to index pose
-
-            # # Get relative pose
-            # T_f1_w = convert_pose2T(
-            #     self.colmap_frame_dict[int(right_colmap_id)]["initial_pose"]
-            # )
-            # T_f1_f0 = T_f1_w @ T_w_f0
-            # angle_axis_relative.append(np.squeeze(convert_T2angleAxis(T_f1_f0), axis=0))
 
             # Get scale
             scale0.append(np.squeeze(fine_match_results["scale0"], axis=0))
@@ -111,7 +96,6 @@ class ConstructOptimizationData(Dataset):
             mkpts0_c,
             mkpts1_c,
             mkpts1_f,
-            distance_map,
             scale0,
             scale1,
             left_colmap_ids,
@@ -123,7 +107,6 @@ class ConstructOptimizationData(Dataset):
                 mkpts0_c,
                 mkpts1_c,
                 mkpts1_f,
-                distance_map,
                 scale0,
                 scale1,
                 left_colmap_ids,
@@ -141,7 +124,6 @@ class ConstructOptimizationData(Dataset):
             "mkpts0_c": torch.from_numpy(mkpts0_c),  # [N*2]
             "mkpts1_c": torch.from_numpy(mkpts1_c),  # [N*2]
             "mkpts1_f": torch.from_numpy(mkpts1_f),  # [N*2]
-            "distance_map": torch.from_numpy(distance_map),  # [N*WW*1]
             "scale0": torch.from_numpy(scale0),  # [N*2]
             "scale1": torch.from_numpy(scale1),  # [N*2]
             "left_colmap_ids": torch.from_numpy(left_colmap_ids).squeeze(-1),  # np.array [N]

@@ -5,17 +5,15 @@ import math
 import numpy as np
 from loguru import logger
 import torch
-import os.path as osp
 
-from src.datasets.GATs_loftr_inference_dataset import GATs_loftr_inference_dataset
+from src.datasets.GATs_loftr_inference_dataset import OnePosePlus_inference_dataset
 from src.utils.ray_utils import ProgressBar, chunks, chunk_index, split_dict
-from src.architectures.GATs_LoFTR.GATs_LoFTR import GATs_LoFTR
+from src.architectures.GATs_LoFTR.GATs_LoFTR import OnePosePlus_model
 from src.utils.metric_utils import aggregate_metrics
 from src.utils.visualize.dump_vis3d import dump_obj
 
 from .inference_gats_loftr_worker import (
-    inference_gats_loftr_worker,
-    inference_gats_loftr_worker_ray_wrapper,
+    inference_onepose_plus_worker, inference_onepose_plus_worker_ray_wrapper
 )
 
 args = {
@@ -31,7 +29,7 @@ args = {
 }
 
 def build_model(model_configs, ckpt_path):
-    match_model = GATs_LoFTR(model_configs)
+    match_model = OnePosePlus_model(model_configs)
     # load checkpoints
     logger.info(f"Load ckpt:{ckpt_path}")
     state_dict = torch.load(ckpt_path, map_location="cpu")["state_dict"]
@@ -43,14 +41,13 @@ def build_model(model_configs, ckpt_path):
     return match_model
 
 def inference_gats_loftr(
-    sfm_results_dir, all_image_paths, cfg, use_ray=True, verbose=True, vis3d_pth=None
+    sfm_results_dir, all_image_paths, cfg, use_ray=True, verbose=True
 ):
     """
     Inference for one object
     """
-
     # Build dataset:
-    dataset = GATs_loftr_inference_dataset(
+    dataset = OnePosePlus_inference_dataset(
         sfm_results_dir,
         all_image_paths,
         load_3d_coarse=cfg.datamodule.load_3d_coarse,
@@ -90,7 +87,7 @@ def inference_gats_loftr(
         all_subset_ids = all_subset_ids
 
         obj_refs = [
-            inference_gats_loftr_worker_ray_wrapper.remote(
+            inference_onepose_plus_worker_ray_wrapper.remote(
                 dataset,
                 match_model,
                 subset_ids,
@@ -107,13 +104,12 @@ def inference_gats_loftr(
         logger.info("Matcher finish!")
     else:
         all_ids = np.arange(0, len(dataset))
-        results = inference_gats_loftr_worker(dataset, match_model, all_ids, cfg['model'], verbose=verbose)
+        results = inference_onepose_plus_worker(dataset, match_model, all_ids, cfg['model'], verbose=verbose)
         logger.info("Match and compute pose error finish!")
     
     # Parse results:
     R_errs = []
     t_errs = []
-    time = []
     if 'ADD_metric' in results[0]:
         add_metric = []
         proj2d_metric = []
@@ -125,22 +121,14 @@ def inference_gats_loftr(
     for result in results:
         R_errs.append(result['R_errs'])
         t_errs.append(result['t_errs'])
-        time.append(result['time'])
         if add_metric is not None:
             add_metric.append(result['ADD_metric'])
             proj2d_metric.append(result['proj2D_metric'])
     
-    # Write results to vis3d
-    if vis3d_pth is not None:
-        vis3d_dir, name = vis3d_pth.rsplit('/',1)
-        dump_obj(results, vis3d_dir, name)
-
     # Aggregate metrics: 
     pose_errs = {'R_errs': R_errs, "t_errs": t_errs}
     if add_metric is not None:
         pose_errs.update({'ADD_metric': add_metric, "proj2D_metric": proj2d_metric})
     metrics = aggregate_metrics(pose_errs, cfg['model']['eval_metrics']['pose_thresholds'])
-    metrics.update({'time': np.mean(time)})
 
-    # TODO: add visualize
     return metrics

@@ -3,10 +3,10 @@
 type: inference
 
 
-data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/2022_cvta_objects"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
-# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error_cvta"
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
+data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/2022_cvta_objects"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error_cvta"
 
 match_type: softmax
 task_name: dataset_images
@@ -426,6 +426,8 @@ ids:
     # - '0507'
     # - '0508'
     # - '0509'
+    - '0504'
+    - '0505'
     - '0510'
     # - '0511'
 
@@ -509,7 +511,7 @@ ids:
 exception_obj_names: 
     -
 
-sample_n_for_test: 20
+sample_n_for_test: 80
 
 verbose: False
 

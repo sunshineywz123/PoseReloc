@@ -4,6 +4,7 @@ import cv2
 import torch
 import os.path as osp
 from loguru import logger
+from time import time
 from scipy import spatial
 from tools.data_prepare.sample_points_on_cad import load_points_from_cad, sample_points_on_cad, model_diameter_from_bbox
 from .colmap.read_write_model import qvec2rotmat, read_images_binary
@@ -246,10 +247,8 @@ def ransac_PnP(
 
         pts_2d = list(np.ascontiguousarray(pts_2d.astype(np.float64))[..., None]) # List(2*1)
         pts_3d = list(np.ascontiguousarray(pts_3d.astype(np.float64))[..., None]) # List(3*1)
-        # pts_2d = pts_2d.astype(np.float64)
-        # pts_3d = pts_3d.astype(np.float64)
         K = K.astype(np.float64)
-        # Colmap pnp
+        # Colmap pnp with non-linear refinement
         focal_length = K[0, 0]
         cx = K[0, 2]
         cy = K[1, 2]
@@ -315,7 +314,7 @@ def ransac_PnP(
 
 @torch.no_grad()
 def compute_query_pose_errors(
-    data, configs, compute_gt_proj_pose_error=True, training=False
+    data, configs, training=False
 ):
     """
     Update:
@@ -325,19 +324,16 @@ def compute_query_pose_errors(
             "inliers": []
         }
     """
-    device = data["m_bids"].device
     model_unit = configs['model_unit'] if 'model_unit' in configs else 'm'
 
     m_bids = data["m_bids"].cpu().numpy()
     mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
     mkpts_query = data["mkpts_query_f"].cpu().numpy()
-    mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
     img_orig_size = (
         torch.tensor(data["q_hw_i"]).numpy() * data["query_image_scale"].cpu().numpy()
     )  # B*2
     query_K = data["query_intrinsic"].cpu().numpy()
     query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
-    # homo_warp = data['homo_warp'].cpu().numpy() if 'homo_warp' in data else None # B*3*3
 
     data.update({"R_errs": [], "t_errs": [], "inliers": []})
     data.update({"R_errs_c": [], "t_errs_c": [], "inliers_c": []})
@@ -351,7 +347,6 @@ def compute_query_pose_errors(
             query_K_origin = data["query_intrinsic_origin"].cpu().numpy()
             model_path = osp.join(image_path.rsplit('/', 3)[0], 'model_eval.ply')
             if not osp.exists(model_path):
-                # logger.warning('Model_eval.ply not exists! try to use model.ply instead!')
                 model_path = osp.join(image_path.rsplit('/', 3)[0], 'model.ply')
             diameter_file_path = osp.join(image_path.rsplit('/', 3)[0], 'diameter.txt')
             if not osp.exists(model_path):
@@ -364,7 +359,6 @@ def compute_query_pose_errors(
                     diameter = np.loadtxt(diameter_file_path)
                 else:
                     diameter = model_diameter_from_bbox(bbox)
-                    # logger.warning(f'Diameter file not exists! Diameter compute from CAD model is {diameter}')
                 
                 data.update({"ADD":[], "proj2D":[]})
 
@@ -372,21 +366,7 @@ def compute_query_pose_errors(
     for bs in range(query_K.shape[0]):
         mask = m_bids == bs
 
-        # FIXME: bug exists here!
         mkpts_query_f = mkpts_query[mask]
-        if compute_gt_proj_pose_error:
-            # Reproj mkpts:
-            R = query_pose_gt[bs][:3, :3]  # 3*3
-            t = query_pose_gt[bs][:3, [3]]  # 3*1
-            mkpts_3d_cam = R @ mkpts_3d[mask].T + t  # 3*N
-            mkpts_proj = (query_K[bs] @ mkpts_3d_cam).T  # N*3
-            mkpts_query_gt = mkpts_proj[:, :2] / mkpts_proj[:, [2]]
-
-            diff = np.linalg.norm(mkpts_query_f - mkpts_query_gt, axis=-1)
-            mkpts_query_gt[diff > 6] = mkpts_query_f[
-                diff > 6
-            ]  # Use real pred to test real diff
-
         query_pose_pred, query_pose_pred_homo, inliers, state = ransac_PnP(
             query_K[bs],
             mkpts_query_f,
@@ -397,67 +377,6 @@ def compute_query_pose_errors(
             use_pycolmap_ransac=configs["use_pycolmap_ransac"],
         )
         pose_pred.append(query_pose_pred_homo)
-
-        query_pose_pred_c, query_pose_pred_homo_c, inliers_c, state_c = ransac_PnP(
-            query_K[bs],
-            mkpts_query_c[mask],
-            mkpts_3d[mask],
-            scale=configs["point_cloud_rescale"],
-            img_hw=img_orig_size[bs].tolist(),
-            pnp_reprojection_error=configs["pnp_reprojection_error"],
-            use_pycolmap_ransac=configs["use_pycolmap_ransac"],
-        )
-
-        if configs["enable_post_optimization"] and state is not False and not training:
-            from src.NeuralSfM.loc.optimizer import Optimizer
-
-            optimizer = Optimizer(configs["post_optimization_configs"])
-            scale = data["query_image_scale"][bs].cpu().numpy()[None]  # [1*2]
-            inliers_mask = np.full(
-                (mkpts_3d[mask].shape[0],), 0, dtype=np.bool
-            )  # All False
-            if configs["post_optimization_configs"]["use_fine_pose_as_init"]:
-                initial_pose = query_pose_pred  # [3*4]
-                inliers_mask[inliers] = True
-            else:
-                initial_pose = query_pose_pred_c  # [3*4]
-                inliers_mask[inliers_c] = True
-            mkpts_3d_inlier = mkpts_3d[mask][inliers_mask]
-            mkpts_2d_c_inlier = mkpts_query_c[mask][inliers_mask]
-            mkpts_2d_f_inlier = mkpts_query_f[mask][inliers_mask]
-
-            feature_3d = data["desc3d_db_selected"][mask][inliers_mask]
-            feature_2d_window = data["query_feat_f_unfolded"][mask][inliers_mask]
-
-            query_pose_pred_refined = optimizer.start_optimize(
-                [initial_pose[:, :3], initial_pose[:, 3]],
-                query_K[bs],
-                mkpts3d=mkpts_3d_inlier,
-                mkpts2d_c=mkpts_2d_c_inlier,
-                mkpts2d_f=mkpts_2d_f_inlier,
-                scale=scale,
-                feature_3d=feature_3d,
-                feature_2d_window=feature_2d_window,
-                feature_distance_map_temperature=configs["post_optimization_configs"][
-                    "feature_distance_map_temperature"
-                ],
-                device=device,
-                point_cloud_scale=configs["point_cloud_rescale"],
-            )
-            query_pose_pred = query_pose_pred_refined
-
-            # For debug:
-            R_err_before, t_err_before = query_pose_error(
-                initial_pose, query_pose_gt[bs], unit=model_unit
-            )
-            R_err_after, t_err_after = query_pose_error(
-                query_pose_pred_refined, query_pose_gt[bs], unit=model_unit
-            )
-            R_err_decrease = R_err_before - R_err_after
-            t_err_decrease = t_err_before - t_err_after
-
-            if R_err_decrease < 0 or t_err_decrease < 0:
-                R_err_decrease = R_err_decrease
 
         if query_pose_pred is None:
             data["R_errs"].append(np.inf)
@@ -470,7 +389,6 @@ def compute_query_pose_errors(
             data["R_errs"].append(R_err)
             data["t_errs"].append(t_err)
             data["inliers"].append(inliers)
-            # import ipdb; ipdb.set_trace()
 
             if "ADD" in data:
                 add_result = add_metric(model_vertices, diameter, pose_pred=query_pose_pred, pose_target=query_pose_gt[bs], syn=adds)
@@ -479,36 +397,6 @@ def compute_query_pose_errors(
                 proj2d_result = projection_2d_error(model_vertices, pose_pred=query_pose_pred, pose_targets=query_pose_gt[bs], K=query_K_origin[bs])
                 data['proj2D'].append(proj2d_result)
 
-        if query_pose_pred_c is None:
-            data["R_errs_c"].append(np.inf)
-            data["t_errs_c"].append(np.inf)
-            data["inliers_c"].append(np.array([]).astype(np.bool))
-        else:
-            R_err, t_err = query_pose_error(query_pose_pred_c, query_pose_gt[bs], unit=model_unit)
-            data["R_errs_c"].append(R_err)
-            data["t_errs_c"].append(t_err)
-            data["inliers_c"].append(inliers_c)
-
-        if compute_gt_proj_pose_error:
-            data.update({"R_errs_gt": [], "t_errs_gt": [], "inliers_gt": []})
-            query_pose_pred_gt, query_pose_pred_homo_gt, inliers_gt, state = ransac_PnP(
-                query_K[bs],
-                mkpts_query_gt,  # FIXME: change to mkpts_query
-                mkpts_3d[mask],
-                scale=configs["point_cloud_rescale"],
-                pnp_reprojection_error=configs["pnp_reprojection_error"],
-            )
-
-            if query_pose_pred_gt is None:
-                data["R_errs_gt"].append(np.inf)
-                data["t_errs_gt"].append(np.inf)
-                data["inliers_gt"].append(np.array([]).astype(np.bool))
-            else:
-                R_err, t_err = query_pose_error(query_pose_pred_gt, query_pose_gt[bs],unit=model_unit)
-                data["R_errs_gt"].append(R_err)
-                data["t_errs_gt"].append(t_err)
-                data["inliers_gt"].append(inliers_gt)
-
     pose_pred = np.stack(pose_pred)  # [B*4*4]
     data.update({"pose_pred": pose_pred})
 
@@ -516,14 +404,7 @@ def compute_query_pose_errors(
 def aggregate_metrics(metrics, pose_thres=[1, 3, 5], proj2d_thres=5):
     """ Aggregate metrics for the whole dataset:
     (This method should be called once per dataset)
-    1. AUC of the pose error (angular) at the threshold [5, 10, 20]
-    2. Mean matching precision at the threshold 5e-4
     """
-    # filter duplicates
-    # unq_ids = OrderedDict((iden, id) for id, iden in enumerate(metrics['identifiers']))
-    # unq_ids = list(unq_ids.values())
-    # logger.info(f'Aggregating metrics over {len(unq_ids)} unique items...')
-
     R_errs = metrics["R_errs"]
     t_errs = metrics["t_errs"]
 

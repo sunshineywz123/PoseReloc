@@ -2,7 +2,7 @@ import os
 import os.path as osp
 from loguru import logger
 
-from .coarse_match.coarse_match import loftr_coarse_matching
+from .coarse_match.coarse_match import detector_free_coarse_matching
 from .coarse_sfm.coarse_sfm_runner import colmapRunner
 from .post_optimization.post_optimization import post_optimization
 
@@ -25,7 +25,7 @@ def neuralSfM(
 
     # LoFTR Coarse Matching:
     logger.info("LoFTR coarse matching begin...")
-    loftr_coarse_matching(
+    detector_free_coarse_matching(
         img_lists,
         img_pairs,
         feature_out=feature_out,

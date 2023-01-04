@@ -69,13 +69,6 @@ def align_core(cfg, img_lists, outputs_dir_root):
         global_ba.main(deep_sfm_dir, ba_dir)
         parse_align_pose(ba_dir)
 
-        # # update_intrin
-        # if cfg.full_img:
-        #     # if necessary
-        #     import ipdb; ipdb.set_trace()
-        #     update_intrin(cfg)
-
-
 @hydra.main(config_path='configs/', config_name='config.yaml')
 def main(cfg: DictConfig):
     globals()[cfg.type](cfg)

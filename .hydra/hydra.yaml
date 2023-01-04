@@ -109,10 +109,10 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +preprocess=mvs_loftr_coarse_fine_s59
+    - +camera_ready=demo
   job:
-    name: run
-    override_dirname: +preprocess=mvs_loftr_coarse_fine_s59
+    name: demo
+    override_dirname: +camera_ready=demo
     id: ???
     num: ???
     config_name: config.yaml
@@ -137,7 +137,7 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      preprocess: mvs_loftr_coarse_fine_s59
+      camera_ready: demo
       logger: null
       callbacks: default_callbacks.yaml
       datamodule: mnist_datamodule.yaml

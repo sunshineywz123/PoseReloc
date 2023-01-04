@@ -496,72 +496,22 @@ def reproj(K, pose, pts_3d):
 
 @torch.no_grad()
 def draw_reprojection_pair(
-    data, visual_color_type="conf", visual_gt=False, visual_heatmap=False
+    data, visual_color_type="conf"
 ):
     figures = {"evaluation": []}
-    # figures = {"evaluation": [], "heatmap":[]}
 
-    if visual_gt:
-        raise NotImplementedError
-        # For gt debug
-        # NOTE: only available for batch size = 1
-        query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
-        if query_image.shape[0] != 1:
-            logger.warning("Not implement visual gt for batch size != 0")
-            return
-
-        mkpts_3d = (
-            data["keypoints3d"][0, data["mkpts3D_idx_gt"][0]].cpu().numpy()
-        )  # GT mkpts3D
-        mkpts_query = data["mkpts2D_gt"][0].cpu().numpy()
-        m_bids = np.zeros((mkpts_3d.shape[0],))
-        query_K = data["query_intrinsic"].cpu().numpy()
-        query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
-        m_conf = np.zeros((mkpts_3d.shape[0],))
-
-    else:
-        m_bids = data["m_bids"].cpu().numpy()
-        query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
-        mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
-        mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
-        mkpts_query = data["mkpts_query_f"].cpu().numpy()
-        query_K = data["query_intrinsic"].cpu().numpy()
-        query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
-        m_conf = data["mconf"].cpu().numpy()
-        gt_mask = data['gt_mask'].cpu().numpy()
+    m_bids = data["m_bids"].cpu().numpy()
+    query_image = (data["query_image"].cpu().numpy() * 255).round().astype(np.int32)
+    mkpts_3d = data["mkpts_3d_db"].cpu().numpy()
+    mkpts_query_c = data["mkpts_query_c"].cpu().numpy()
+    mkpts_query = data["mkpts_query_f"].cpu().numpy()
+    query_K = data["query_intrinsic"].cpu().numpy()
+    query_pose_gt = data["query_pose_gt"].cpu().numpy()  # B*4*4
+    m_conf = data["mconf"].cpu().numpy()
 
     R_errs = data["R_errs"] if "R_errs" in data else None
     t_errs = data["t_errs"] if "t_errs" in data else None
     inliers = data["inliers"] if "inliers" in data else None
-
-    R_errs_c = data["R_errs_c"] if "R_errs_c" in data else None
-    t_errs_c = data["t_errs_c"] if "t_errs_c" in data else None
-    inliers_c = data["inliers_c"] if "inliers_c" in data else None
-
-    R_errs_gt = data["R_errs_gt"] if "R_errs_gt" in data else None
-    t_errs_gt = data["t_errs_gt"] if "t_errs_gt" in data else None
-    inliers_gt = data["inliers_gt"] if "inliers_gt" in data else None
-
-    if visual_heatmap:
-        feat3d = data["desc3d_db_selected"]
-        feat2d_unfold_f = data["query_feat_f_unfolded"]
-        M, WW, C = feat2d_unfold_f.shape
-        W = int(math.sqrt(WW))
-        sim_matrix = torch.linalg.norm(feat3d - feat2d_unfold_f, dim=-1)
-        sim_matrix = sim_matrix.cpu().numpy()
-
-        sim_matrix_max = np.max(sim_matrix, axis=-1, keepdims=True)
-        sim_matrix_min = np.min(sim_matrix, axis=-1, keepdims=True)
-        sim_matrix_normalized = (sim_matrix - sim_matrix_min) / (
-            sim_matrix_max - sim_matrix_min + 1e-4
-        )
-        sim_matrix_normalized = np.reshape(sim_matrix_normalized, (-1, W, W))
-
-        grid = (
-            (create_meshgrid(W, W, normalized_coordinates=False,) - W // 2)
-            .cpu()
-            .numpy()
-        )
 
     for bs in range(data["query_image"].size(0)):
         mask = m_bids == bs
@@ -590,26 +540,7 @@ def draw_reprojection_pair(
                 f"Num of inliers: {inliers[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers[bs])}"
             ]
 
-        if R_errs_c is not None:
-            text += [f"R_err_coarse: {R_errs_c[bs]}"]
-        if t_errs_c is not None:
-            text += [f"t_err_coarse: {t_errs_c[bs]}"]
-        if inliers_c is not None:
-            text += [
-                f"Num of inliers coarse: {inliers_c[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers_c[bs])}"
-            ]
-
-        if R_errs_gt is not None:
-            text += [f"R_err_gt: {R_errs_gt[bs]}"]
-        if t_errs_gt is not None:
-            text += [f"t_err_gt: {t_errs_gt[bs]}"]
-        if inliers_gt is not None:
-            text += [
-                f"Num of inliers gt: {inliers_gt[bs].shape[0] if not isinstance(inliers[bs], list) else len(inliers_gt[bs])}"
-            ]
-
         # Clip reprojected keypoints
-        # FIXME: bug exists here! a_max need to be original image size
         mkpts3d_reprojed[:, 0] = np.clip(
             mkpts3d_reprojed[:, 0], a_min=0, a_max=data["query_image"].shape[-1] - 1
         )  # x
@@ -648,9 +579,6 @@ def draw_reprojection_pair(
             else:
                 color = np.array([])
 
-        elif visual_color_type == "true_or_false":
-            # NOTE: only available for train to visual whether coarse match is correct
-            pass
         else:
             raise NotImplementedError
 
@@ -665,25 +593,6 @@ def draw_reprojection_pair(
             text=text,
         )
         figures["evaluation"].append(figure)
-
-        if visual_heatmap:
-            sim_matrix_normalized_masked = sim_matrix_normalized[~gt_mask][mask]
-            coordinate_grid = (mkpts_query_c[:, None, None, :] + grid).astype(
-                np.int
-            )  # L*W*W*2
-            h, w = query_image[bs][0].shape[:2]
-
-            response_map = np.zeros((h, w))
-            response_map[
-                coordinate_grid[..., 1], coordinate_grid[..., 0]
-            ] = sim_matrix_normalized_masked  # h*w
-            response_map = np.uint8(255 * response_map)
-            colored_response_map = jet_colors[response_map]  # h*w*3
-            img_blend_with_heatmap = blend_img_heatmap(
-                query_image[bs][0], colored_response_map, alpha=0.5
-            )
-            fig = plot_single_image(img_blend_with_heatmap, dpi=300, size=6)
-            figures["heatmap"].append(fig)
 
         return figures
 
@@ -763,9 +672,3 @@ def plot_response_map(keypoint_h5_path, feature_patch_h5_path, match_h5_path, pa
         if save_dir is not None:
             Path(save_dir).mkdir(parents=True, exist_ok=True)
             plt.savefig(osp.join(save_dir, f"pixsfm_{osp.splitext(osp.basename(name0))[0]}-{osp.splitext(osp.basename(name1))[0]}.png"), bbox_inches="tight", pad_inches=0)
-
-        a = 1
-
-
-    # Plot local response map
-

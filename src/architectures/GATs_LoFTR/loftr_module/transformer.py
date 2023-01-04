@@ -116,49 +116,11 @@ class LocalFeatureTransformer(nn.Module):
             ), "redraw_interval must be divisible by 2 since each attetnion layer is repeatedly called twice."
 
         encoder_layer = build_encoder_layer(config)
-        # graphAttention_layer = GraphAttentionLayer(config['d_db_feat'], config['d_db_feat'], config['GATs_dropout'], config['GATs_alpha'])
-        # self.layers = nn.ModuleList([copy.deepcopy(graphAttention_layer if i % 3 == 0 else encoder_layer) for i in range(len(self.layer_names))])
 
         module_list = []
         for layer_name in self.layer_names:
-            if layer_name == "GATs":
-                self.gats_type = config['GATs_type']
-                if self.gats_type == 'origin_gats':
-                    module_list.append(
-                        GraphAttentionLayer(
-                            in_features=config["d_db_feat"],
-                            out_features=config["d_model"],
-                            dropout=config["GATs_dropout"],
-                            alpha=config["GATs_alpha"],
-                            include_self=config['GATs_include_self'],
-                            enable_feed_forward=config["GATs_enable_feed_forward"],
-                            feed_forward_norm_method=config["GATs_feed_forward_norm_method"],
-                        )
-                    )
-                elif self.gats_type in ['loftr_attention', 'loftr_attention_self']:
-                    self.gats_include_self = config['GATs_include_self']
-                    self.gats_feat2d_db_update = config['GATs_feat2d_db_update']
-                    self.gats_enable_leaf_feat_padding_mask = config['GATs_enable_leaf_feat_padding_mask']
-                    if self.gats_type == 'loftr_attention_self':
-                        self.gats_use_mean_as_3D_feat = config['GATs_use_mean_as_3D_feat']
-                    module_list.append(copy.deepcopy(encoder_layer))
-                else:
-                    raise NotImplementedError
-            elif layer_name in ["self", "cross"]:
+            if layer_name in ["self", "cross"]:
                 module_list.append(copy.deepcopy(encoder_layer))
-            elif layer_name == "Pe":
-                module_list.append(
-                    PositionalEncodingLayer(
-                        config['d_model_2D'],
-                        config['max_shape_2D'],
-                        inp_dim_3D=3,
-                        feature_dim_3D=config['feature_dim_3D'],
-                        layers_3D=config['keypoints_encoder_3D'],
-                        norm_method_3D=config['norm_method_3D'],
-                        encoding_type_3D=config['encoding_type_3D']
-                    )
-                )
-
             else:
                 raise NotImplementedError
         self.layers = nn.ModuleList(module_list)
@@ -173,7 +135,7 @@ class LocalFeatureTransformer(nn.Module):
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
 
-    def forward(self, desc3d_db, desc2d_db, desc2d_query, data, query_mask=None, keypoints3D=None, desc2d_db_pad_mask=None, return_middle_layer_features=False):
+    def forward(self, desc3d_db, desc2d_query, query_mask=None, return_middle_layer_features=False):
         """
         Args:
            desc3d_db (torch.Tensor): [N, C, L] 
@@ -186,72 +148,9 @@ class LocalFeatureTransformer(nn.Module):
         self.device = desc3d_db.device
 
         desc3d_db = torch.einsum("bdn->bnd", desc3d_db)  # [N, L, C]
-        desc2d_db = torch.einsum("bdn->bnd", desc2d_db)  # [N, M, C]
 
         for i, (layer, name) in enumerate(zip(self.layers, self.layer_names)):
-            if name == "GATs":
-                if self.gats_type == 'origin_gats':
-                    desc3d_db = layer(desc2d_db, desc3d_db)
-                elif self.gats_type == 'loftr_attention':
-                    # Change data format
-                    b, n1, dim = desc3d_db.shape
-                    b, n2, dim = desc2d_db.shape
-                    num_leaf = int(n2 / n1)
-                    desc2d_db = desc2d_db.reshape(-1, num_leaf, dim) # [(B*N2), n_leaf, dim]
-                    desc3d_db = desc3d_db.reshape(-1, 1, dim) # [(B*N1), 1, dim]
-                    if self.gats_include_self:
-                        raise NotImplementedError
-                        desc2d_db = torch.cat([desc3d_db, desc2d_db], dim=-2) # [(B*N1), 1+num_leaf, dim]
-
-                    if self.gats_enable_leaf_feat_padding_mask and desc2d_db_pad_mask is not None:
-                        leaf_feat_padding_mask = desc2d_db_pad_mask.reshape(-1, num_leaf)
-                    else:
-                        leaf_feat_padding_mask = None
-                    
-                    # Forward
-                    src0, src1 = desc3d_db, desc2d_db
-                    desc3d_db = layer(desc3d_db, src1, source_mask=leaf_feat_padding_mask)
-                    if self.gats_feat2d_db_update:
-                        desc2d_db = layer(desc2d_db, src0, x_mask=leaf_feat_padding_mask)
-
-                    # Reformat
-                    desc3d_db = desc3d_db.view(b, n1, dim)
-                    desc2d_db = desc2d_db.view(b, n2, dim)
-                elif self.gats_type == 'loftr_attention_self':
-                    # Change data format
-                    b, n1, dim = desc3d_db.shape
-                    b, n2, dim = desc2d_db.shape
-                    num_leaf = int(n2 / n1)
-                    desc2d_db = desc2d_db.reshape(-1, num_leaf, dim) # [(B*N2), n_leaf, dim]
-                    desc3d_db = desc3d_db.reshape(-1, 1, dim) # [(B*N1), 1, dim]
-
-                    if self.gats_enable_leaf_feat_padding_mask and desc2d_db_pad_mask is not None:
-                        leaf_feat_padding_mask = desc2d_db_pad_mask.reshape(-1, num_leaf)
-                        leaf_feat_padding_mask = torch.cat([torch.ones((desc2d_db.shape[0],1), dtype=torch.bool, device=desc2d_db.device)], dim=-1) # [(B*N), 1+n_leaf]
-                    else:
-                        leaf_feat_padding_mask = None
-
-                    # Forward
-                    feat_concat = torch.cat([desc3d_db, desc2d_db], dim=1) # [(B*N), 1+n_leaf, dim]
-                    feat_concat = layer(feat_concat, feat_concat, leaf_feat_padding_mask, leaf_feat_padding_mask) # [(B*N), 1+n_leaf, dim]
-
-                    # Split:
-                    if self.gats_use_mean_as_3D_feat:
-                        desc3d_db = torch.mean(feat_concat, dim=1, keepdim=True)
-                    else:
-                        desc3d_db = feat_concat[:,:1,:]  # [(B*N), 1, dim]
-                    if self.gats_feat2d_db_update:
-                        desc2d_db = feat_concat[:,1:, :] # [(B*N), n_leaf, dim]
-
-                    # Reformat:
-                    desc3d_db = desc3d_db.reshape(b, n1, dim)
-                    desc2d_db = desc2d_db.reshape(b, n2, dim)
-                else:
-                    raise NotImplementedError
-            elif name == "Pe":
-                if keypoints3D is not None:
-                    desc3d_db, desc2d_query = layer(keypoints3D, desc3d_db, desc2d_query, data)
-            elif name == "self":
+            if name == "self":
                 src0, src1 = desc2d_query, desc3d_db
                 desc2d_query, desc3d_db = (
                     layer(desc2d_query, src0, query_mask, query_mask),
@@ -300,42 +199,6 @@ def build_encoder_layer(config):
             config["d_kernel"],
             rezero=config["rezero"],
             norm_method=config["norm_method"],
-        )
-    elif config["type"] == "LoFTR-Conv1d":
-        layer = LoFTREncoderLayerConv1d(
-            config["d_model"],
-            config["nhead"],
-            config["dropout"],
-            config["attention"],
-            config["kernel_fn"],
-            config["redraw_interval"],
-            config["d_kernel"],
-            rezero=config["rezero"],
-        )
-    elif config["type"] in ["Pre-LN", "Post-LN"]:
-        layer = TransformerEncoderLayer(
-            config["d_model"],
-            config["nhead"],
-            config["d_ffn"],  # vanilla Transformer uses a much higher FFN dim
-            config["dropout"],
-            config["attention"],
-            config["kernel_fn"],
-            config["redraw_interval"],
-            config["d_kernel"],
-            "relu",
-            config["type"] == "Pre-LN",
-        )
-    elif config["type"] == "Rezero":
-        layer = RZTXEncoderLayer(
-            config["d_model"],
-            config["nhead"],
-            config["d_ffn"],
-            config["dropout"],
-            config["attention"],
-            config["kernel_fn"],
-            config["redraw_interval"],
-            config["d_kernel"],
-            "relu",
         )
     else:
         raise ValueError()

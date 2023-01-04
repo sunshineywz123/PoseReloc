@@ -1,6 +1,4 @@
-from .resnet import ResNetFPN_8_2, ResNetFPN_16_4, ResNet18C2, ResNet18C3
-from .hybrid import HybridBackbone
-from .res2 import DoubleRes18, DoubleRes18_16_4
+from .resnet import ResNetFPN_8_2
 
 from math import log
 from functools import lru_cache
@@ -10,15 +8,8 @@ def build_backbone(config):
     if config['type'] == 'ResNetFPN':
         if config['resolution'] == [8, 2]:
             return ResNetFPN_8_2(config['resnetfpn'])
-        elif config['resolution'] == [16, 4]:
-            return ResNetFPN_16_4(config['resnetfpn'])
-    elif config['type'] == 'Hybrid':
-        return HybridBackbone(config['hybrid'], config['resolution'])
-    elif config['type'] == 'Res2':
-        if config['resolution'] == [8, 2]:
-            return DoubleRes18(config['res2'], config['resolution'])
-        elif config['resolution'] == [16, 4]:
-            return DoubleRes18_16_4(config['res2'], config['resolution'])
+        else:
+            raise NotImplementedError
     else:
         raise ValueError("reaching this line! LOFTR_BACKBONE.TYEP and RESOLUTION are not correct")
 

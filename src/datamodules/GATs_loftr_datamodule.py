@@ -1,4 +1,3 @@
-from turtle import down
 from loguru import logger
 from src.datasets.GATs_loftr_dataset import GATsLoFTRDataset
 from src.utils.utils_phoaug import build_augmentor
@@ -30,8 +29,6 @@ class GATsLoFTRDataModule(LightningDataModule):
         self.val_percent = kwargs["val_percent"]
         self.train_image_warp_adapt = kwargs['train_image_warp_adapt']
         # 3D part
-        self.num_leaf = kwargs["num_leaf"]
-        self.shape2d = kwargs["shape2d"]
         self.shape3d_train = kwargs["shape3d_train"]
         self.shape3d_val = kwargs["shape3d_val"]
         self.load_3d_coarse = kwargs["load_3d_coarse"]
@@ -40,16 +37,6 @@ class GATsLoFTRDataModule(LightningDataModule):
         self.img_resize = kwargs["img_resize"]
         self.df = kwargs["df"]
         self.coarse_scale = kwargs["coarse_scale"]
-
-        # Downsample
-        self.downsample = kwargs['downsample3d']
-        self.downsample_resolution = kwargs['downsample_resolution']
-
-        # File path substitute:
-        self.path_prefix_substitute_3D_source = kwargs['path_prefix_substitute_3D_source']
-        self.path_prefix_substitute_3D_aim = kwargs['path_prefix_substitute_3D_aim']
-        self.path_prefix_substitute_2D_source = kwargs['path_prefix_substitute_2D_source']
-        self.path_prefix_substitute_2D_aim = kwargs['path_prefix_substitute_2D_aim']
 
         # Loader parameters:
         self.train_loader_params = {
@@ -79,22 +66,14 @@ class GATsLoFTRDataModule(LightningDataModule):
         """ Load data. Set variable: self.data_train, self.data_val, self.data_test"""
         train_set = GATsLoFTRDataset(
             anno_file=self.train_anno_file,
-            num_leaf=self.num_leaf,
             img_pad=self.img_pad,
             img_resize=self.img_resize,
             coarse_scale=self.coarse_scale,
             df=self.df,
-            shape2d=self.shape2d,
             shape3d=self.shape3d_train,
             percent=self.train_percent,
             split='train',
             load_pose_gt=True,
-            path_prefix_substitute_3D_source=self.path_prefix_substitute_3D_source,
-            path_prefix_substitute_3D_aim=self.path_prefix_substitute_3D_aim,
-            path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
-            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
-            downsample=self.downsample,
-            downsample_resolution=self.downsample_resolution,
             load_3d_coarse_feature=self.load_3d_coarse,
             image_warp_adapt=self.train_image_warp_adapt,
             augmentor=self.augmentor
@@ -103,24 +82,15 @@ class GATsLoFTRDataModule(LightningDataModule):
 
         val_set = GATsLoFTRDataset(
             anno_file=self.val_anno_file,
-            # anno_file=self.train_anno_file,
             pad=True,
-            num_leaf=self.num_leaf,
             img_pad=self.img_pad,
             img_resize=self.img_resize,
             coarse_scale=self.coarse_scale,
             df=self.df,
-            shape2d=self.shape2d,
             shape3d=self.shape3d_val,
             percent=self.val_percent,
             split='val',
             load_pose_gt=True,
-            path_prefix_substitute_3D_source=self.path_prefix_substitute_3D_source,
-            path_prefix_substitute_3D_aim=self.path_prefix_substitute_3D_aim,
-            path_prefix_substitute_2D_source=self.path_prefix_substitute_2D_source,
-            path_prefix_substitute_2D_aim=self.path_prefix_substitute_2D_aim,
-            downsample=self.downsample,
-            downsample_resolution=self.downsample_resolution,
             load_3d_coarse_feature=self.load_3d_coarse
         )
 

@@ -28,16 +28,5 @@ def fine_supervision(data, config):
     gt_offset = fine_gt_location - mkpts_query
     expec_f_gt = (gt_offset) / fine_scale / radius  # [M, 2]
 
-    # # For test
-    # m_iids = data['i_ids']
-    # gt_2d_ids = data['gt_mkpts_3d_idx'][0][m_iids].long()
-    # gt_mkpts = data['keypoints2d_fine_gt'][0][gt_2d_ids]
-    # gt_mkpts[gt_2d_ids == -1] = -50
-    # gt_mkpts = gt_mkpts
-
-    # #For test:
-    # gt_offset_mask = torch.linalg.norm(gt_offset, dim=-1) < 20
-    # gt_offset_masked = gt_offset[gt_offset_mask]
-    # coarse_fine_distance = torch.linalg.norm(data['mkpts_query_f'] - data['mkpts_query_c'], axis=-1)
     
     data.update({"expec_f_gt": expec_f_gt})

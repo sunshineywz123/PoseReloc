@@ -31,7 +31,7 @@ def feature_aggregation_and_update(
     )
     fine_match_results_dict = fine_match_results_dict
 
-    logger.info("Update feature and keypoints begin...")
+    logger.info("Update feature and refined points begin...")
     if verbose:
         iter_obj = tqdm(range(len(point_cloud_assigned_imgID_kptsID_list)))
     else:
@@ -66,11 +66,9 @@ def feature_aggregation_and_update(
 
                 feature_c0 = fine_match_results["feature_c0"][index]  # [dim]
                 feature_c1 = fine_match_results["feature_c1"][index]  # [dim]
-                feature_c1_warp = fine_match_results["feature_c1_warp"][index]  # [dim]
 
                 feature0 = fine_match_results["feature0"][index]  # [dim]
                 feature1 = fine_match_results["feature1"][index]  # [dim]
-                feature1_warp = fine_match_results["feature1_warp"][index]
 
                 if keypoints_update_method is not "colmap_updated_keypoints":
                     keypoints0 = fine_match_results["mkpts0_f"][index]
@@ -80,52 +78,48 @@ def feature_aggregation_and_update(
                 query_features_c.append(feature_c0)
                 query_features_f.append(feature0)  # Multiple feature0
 
-                feat_c_dim = feature_c0.shape[0] * 2
-                feat_f_dim = feature0.shape[0] * 2
+                feat_c_dim = feature_c0.shape[0]
+                feat_f_dim = feature0.shape[0]
 
                 left_img_name = colmap_images[int(left_colmap_id)].name
-                reight_img_name = colmap_images[int(reight_colmap_id)].name
+                right_img_name = colmap_images[int(reight_colmap_id)].name
 
                 # Reference feature dim check
                 if (
-                    feature_dict_coarse[reight_img_name]["descriptors"].shape[0]
+                    feature_dict_coarse[right_img_name]["descriptors"].shape[0]
                     != feat_c_dim
                 ):
-                    num_kpts = feature_dict_coarse[reight_img_name]["keypoints"].shape[
+                    num_kpts = feature_dict_coarse[right_img_name]["keypoints"].shape[
                         0
                     ]
-                    feature_dict_coarse[reight_img_name]["descriptors"] = np.zeros(
+                    feature_dict_coarse[right_img_name]["descriptors"] = np.zeros(
                         (feat_c_dim, num_kpts)
                     )
                 if (
-                    feature_dict_fine[reight_img_name]["descriptors"].shape[0]
+                    feature_dict_fine[right_img_name]["descriptors"].shape[0]
                     != feat_f_dim
                 ):
-                    num_kpts = feature_dict_fine[reight_img_name]["keypoints"].shape[0]
-                    feature_dict_fine[reight_img_name]["descriptors"] = np.zeros(
+                    num_kpts = feature_dict_fine[right_img_name]["keypoints"].shape[0]
+                    feature_dict_fine[right_img_name]["descriptors"] = np.zeros(
                         (feat_f_dim, num_kpts)
                     )
 
                 # Update reference feature and keypoints
                 # NOTE: save fine fine feature to coarse feature dict temporary
-                feature_dict_coarse[reight_img_name]["descriptors"][
+                feature_dict_coarse[right_img_name]["descriptors"][
                     :, ref_kpt_idx
-                ] = np.concatenate(
-                    [feature_c1, feature_c1_warp], axis=0
-                )  # [(feat_dim * 2)]
+                ] = feature_c1
 
-                feature_dict_fine[reight_img_name]["descriptors"][
+                feature_dict_fine[right_img_name]["descriptors"][
                     :, ref_kpt_idx
-                ] = np.concatenate(
-                    [feature1, feature1_warp], axis=0
-                )  # [(feat_dim * 2)]
+                ] = feature1
 
                 if keypoints_update_method is not "colmap_updated_keypoints":
-                    feature_dict_fine[reight_img_name]["keypoints"][
+                    feature_dict_fine[right_img_name]["keypoints"][
                         ref_kpt_idx, :
                     ] = keypoints1
 
-        # Update query feature (the root of query tree)
+        # Update query feature:
         if feature_dict_coarse[left_img_name]["descriptors"].shape[0] != feat_c_dim:
             num_kpts = feature_dict_coarse[left_img_name]["keypoints"].shape[0]
             feature_dict_coarse[left_img_name]["descriptors"] = np.zeros(
@@ -159,8 +153,7 @@ def feature_aggregation_and_update(
             : query_features_f_agged.shape[0], query_kpt_idx
         ] = query_features_f_agged
 
-        # Update conf to 0 to mark as piller point and 1 for the rest
-        feature_dict_coarse[left_img_name]["scores"][query_kpt_idx] = 0
+        feature_dict_coarse[left_img_name]["scores"][query_kpt_idx] = 0 # Just place-holder!
         feature_dict_fine[left_img_name]["scores"][query_kpt_idx] = 0
 
         if keypoints_update_method is not "colmap_updated_keypoints":
@@ -170,7 +163,6 @@ def feature_aggregation_and_update(
                 query_kpt_idx, :
             ] = query_keypoints
         else:
-            # NOTE: Update all frames' keypoints according to colmap image keypoints which are updated by reprojection of 3D points
             for id, colmap_image in colmap_images.items():
                 image_name = colmap_image.name
                 updated_keypoints = colmap_image.xys
@@ -179,8 +171,7 @@ def feature_aggregation_and_update(
                     logger.warning(f'origin_kpts: {origin_keypoints.shape[0]}, updated_kpts: {updated_keypoints.shape[0]}')
                 feature_dict_fine[image_name]["keypoints"] = updated_keypoints
 
-    # Save results (overwrite previous)
-    # feature_save_name = '_'.join([osp.splitext(feature_out_pth)[0], aggregation_method, osp.splitext(feature_out_pth)[1]])
+    # Save results (overwrite previous):
     feature_coarse_save_pth = (
         osp.splitext(feature_out_pth)[0] + "_coarse" + osp.splitext(feature_out_pth)[1]
     )

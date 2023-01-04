@@ -1,7 +1,6 @@
 from time import time
 import torch
 import torch.optim as optim
-from loguru import logger
 
 
 def FirstOrderSolve(
@@ -11,7 +10,6 @@ def FirstOrderSolve(
     fn,
     optimization_cfgs=None,
     verbose=False,
-    tragetory_dict=None,
     return_residual_inform=False,
 ):
     """
@@ -24,8 +22,6 @@ def FirstOrderSolve(
     confidance = torch.full(
         (constants[0].shape[0],), fill_value=initial_confidance, requires_grad=False
     )
-    # confidance = None
-
     max_steps = optimization_cfgs["max_steps"]
 
     # variable, constants and optimizer initialization
@@ -54,40 +50,8 @@ def FirstOrderSolve(
         else:
             raise NotImplementedError
     else:
-        # BA scenario, set lr for pose and depth respectively
-        lr_list = [optimization_cfgs["depth_lr"], optimization_cfgs["pose_lr"]]
-        if optimizer_type == "Adam":
-            optimizer = optim.Adam(
-                [
-                    {"params": variable, "lr": lr_list[i]}
-                    for i, variable in enumerate(variables)
-                ]
-            )
-        elif optimizer_type in ["SGD", "RMSprop"]:
-            if optimizer_type == "SGD":
-                optimizerBuilder = optim.SGD
-            elif optimizer_type == "RMSprop":
-                optimizerBuilder = optim.RMSprop
-            else:
-                raise NotImplementedError
-            optimizer = optimizerBuilder(
-                [
-                    {
-                        "params": variable,
-                        "lr": lr_list[i],
-                        "momentum": optimization_cfgs["momentum"],
-                        "weight_decay": optimization_cfgs["weight_decay"],
-                    }
-                    for i, variable in enumerate(variables)
-                ]
-            )
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
     constantsPar = constants
-
-    # NOTE: used for debug and visualize
-    # record every refine steps' reprojection coordinates
-    w_kpts0_list = []
 
     start_time = time()
     for i in range(max_steps):
@@ -108,7 +72,6 @@ def FirstOrderSolve(
                     for variable_index in variable_indexs
                 ]
 
-                # NOTE: Left pose should not BP gradients!
                 if variable_id == 0:
                     variable_expanded[0] = variable_expanded[
                         0
@@ -140,19 +103,14 @@ def FirstOrderSolve(
         if isinstance(results, torch.Tensor):
             residuals = results
         else:
-            # NOTE: only used for debug, remove in future
-            residuals, w_kpts0 = results
-            w_kpts0_list.append(w_kpts0.clone().detach())
-        # residuals = residuals.view(residuals.shape[0], -1)
+            residuals, _ = results
 
-        # l = torch.sum(residuals)
         l = torch.sum(0.5 * residuals * residuals)
         l.backward()
         optimizer.step()
 
         current_step_residual = l.clone().detach()
         current_time = time()
-        # torch.cuda.synchronize()
         if i == 0:
             initial_residual = current_step_residual
             last_residual = initial_residual
@@ -194,12 +152,8 @@ def FirstOrderSolve(
         if isinstance(results, torch.Tensor):
             residuals = results
         else:
-            # NOTE: only used for debug, remove in future
-            residuals, w_kpts0 = results
-            # w_kpts0_list.append(w_kpts0.clone().detach())
-        # finial_residual = torch.sum(residuals)
+            residuals, _ = results
         finial_residual = torch.sum(0.5 * residuals * residuals)
-    # torch.cuda.synchronize()
     print(
         "First order optimizer initial residual = %E , finial residual = %E, decrease = %E, relative decrease percent = %f%%, %d residuals filtered"
         % (
@@ -210,19 +164,6 @@ def FirstOrderSolve(
             torch.sum(confidance <= 0) if confidance is not None else 0,
         )
     ) if verbose else None
-    if tragetory_dict is not None:
-        w_kpts0_global_list = tragetory_dict["w_kpts0_list"]
-        poped_list = w_kpts0_global_list.pop()
-        w_kpts0_global_list += (
-            [w_kpts0_list, [],]
-            if len(poped_list) == 0
-            else [poped_list, w_kpts0_list, []]
-        )  # NOTE: [] is used for second order tragetory kpts update
-        if len(w_kpts0_list) == 0:
-            logger.warning(
-                "Want to get reprojection points from loss function, however get nothing! please check whether set 'return_reprojected_coord' = True in loss function"
-            )
-        tragetory_dict.update({"w_kpts0_list": w_kpts0_global_list})
     variables = [variable.detach() for variable in variables]
 
     if return_residual_inform:

@@ -1,0 +1,61 @@
+# @package _global_
+
+type: sfm
+work_dir: ${hydra:runtime.cwd}
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model"
+match_type: "softmax"
+enable_post_refine: True
+verbose: True
+
+overwrite_all: False
+overwrite_coarse: False
+overwrite_fine: False
+
+use_global_ray: False
+use_local_ray: True
+debug: True
+full_img: False
+
+ray:
+  slurm: False
+  n_workers: 2
+  n_cpus_per_worker: 5
+  n_gpus_per_worker: 1
+  local_mode: False
+dataset:
+  max_num_kp3d: 15000 # 25000 for demo
+  max_num_kp2d: 10000
+
+  data_dir:
+    - /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-annotate
+
+  outputs_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model
+
+network:
+  detection: loftr
+  matching: loftr
+
+sfm:
+  # gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
+  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
+  down_ratio: 5
+  gap: 3
+  covis_num: 8
+  track_length: 8
+
+post_optim:
+  coarse_recon_data:
+    feature_track_assignment_strategy: 'greedy'
+  optimizer:
+    solver_type: 'SecondOrder' # 'FirstOrder'
+    # solver_type: 'FirstOrder'
+    residual_mode: "geometry_error"
+    optimize_lr:
+      depth: 0.03
+
+
+post_process:
+  filter_bbox_before_filter_track_length: True
+  skip_bbox_filter: False
+
+disable_lightning_logs: True

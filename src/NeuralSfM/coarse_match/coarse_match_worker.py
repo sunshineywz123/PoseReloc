@@ -15,8 +15,6 @@ from ..loftr_config.default import get_cfg_defaults
 from ..loftr_for_sfm.loftr_sfm import LoFTR_SfM
 from ..extractors import build_extractor
 from ..loftr_for_sfm.utils.detector_wrapper import DetectorWrapper, DetectorWrapperTwoView
-# from ..drc_net import DRCNet
-# from ..patch2pix import Patch2Pix
 from src.NeuralSfM.post_optimization.matcher_model.utils import sample_feature_from_unfold_featuremap
 from src.NeuralSfM.post_optimization.visualization.draw_plots import draw_local_heatmaps
 
@@ -69,10 +67,6 @@ def build_model(args):
 
         detector.eval()
         matcher.eval()
-    elif args['method'] == 'DRCNet':
-        matcher = DRCNet(args['DRC_weight_path'], use_cuda=True, half_precision=False)
-    elif 'patch2pix' in args['method']:
-        matcher = Patch2Pix(args['method'])
     else:
         raise NotImplementedError
 

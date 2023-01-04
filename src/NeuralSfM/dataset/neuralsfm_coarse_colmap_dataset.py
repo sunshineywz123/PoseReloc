@@ -21,7 +21,7 @@ from ..post_optimization.utils.eval_metric_utils import eval_colmap_results
 from ..post_optimization.utils.geometry_utils import get_pose_from_colmap_image
 
 
-class CoarseColmapDataset(Dataset):
+class CoarseReconDataset(Dataset):
     """Image Matching Challenge Dataset (val & test) with loaded COLMAP results"""
 
     def __init__(
@@ -29,7 +29,7 @@ class CoarseColmapDataset(Dataset):
         args,
         image_lists,
         covis_pairs,
-        colmap_results_dir,  # before refine results
+        coarse_recon_results_dir,  # before refine results
         save_dir,
         pre_sfm=False,
         vis_path=None,
@@ -37,23 +37,23 @@ class CoarseColmapDataset(Dataset):
         """
         Parameters:
         ---------------
-        image_lists: ['path/to/image/0.png', 'path/to/image/1.png]
+        image_lists: ['path/to/image/0.png', 'path/to/image/1.png, ...]
         covis_pairs: List or path
         colmap_results_dir: The directory contains images.bin(.txt) point3D.bin(.txt)...
         """
         super().__init__()
         self.img_list = image_lists
 
-        self.colmap_results_dir = colmap_results_dir
-        self.colmap_refined_save_dir = save_dir
+        self.coarse_recon_results_dir = coarse_recon_results_dir
+        self.refined_save_dir = save_dir
         self.vis_path = vis_path
 
         self.img_resize = args["img_resize"]  # 512
         self.df = args["df"]  # 8
         self.feature_track_assignment_strategy = args[
             "feature_track_assignment_strategy"
-        ]  # "greedy"
-        self.verbose = args["verbose"]  # True
+        ]
+        self.verbose = args["verbose"]
         self.state = True
 
         if isinstance(covis_pairs, list):
@@ -66,42 +66,20 @@ class CoarseColmapDataset(Dataset):
         self.frame_ids = list(range(len(self.img_list)))
 
         # Load colmap coarse results:
-        is_colmap_valid = osp.exists(osp.join(colmap_results_dir))
+        is_coarse_valid = osp.exists(osp.join(coarse_recon_results_dir))
         assert (
-            is_colmap_valid
-        ), f"COLMAP is not valid, current COLMAP path: {osp.join(colmap_results_dir)}"
+            is_coarse_valid
+        ), f"COLMAP is not valid, current COLMAP path: {osp.join(coarse_recon_results_dir)}"
 
         self.colmap_images = read_images_binary(
-            osp.join(colmap_results_dir, "images.bin")
+            osp.join(coarse_recon_results_dir, "images.bin")
         )
         self.colmap_3ds = read_points3d_binary(
-            osp.join(colmap_results_dir, "points3D.bin")
+            osp.join(coarse_recon_results_dir, "points3D.bin")
         )
-
-        # for id, pointcloud in self.colmap_3ds.items():
-        #     image_id_unique, index , counts = np.unique(pointcloud.image_ids, return_counts=True, return_index=True)
-        #     # TODO: see distance between two keypoints here!
-        #     if image_id_unique.shape[0] != pointcloud.image_ids.shape[0]:
-        #         print(image_id_unique, counts)
-
-        #         un_unique_mask = counts > 1
-        #         un_unique_img_id = image_id_unique[un_unique_mask].tolist()
-        #         for un_unique_id in un_unique_img_id:
-        #             idx = np.squeeze(np.argwhere(pointcloud.image_ids == un_unique_id), axis=-1)
-        #             point_idxs = pointcloud.point2D_idxs[idx]
-        #             double_point = self.colmap_images[un_unique_id].xys[point_idxs]
-        #             print(double_point)
-        #             pass
 
         self.colmap_cameras = read_cameras_binary(
-            osp.join(colmap_results_dir, "cameras.bin")
-        )
-
-        (
-            self.frameId2colmapID_dict,
-            self.colmapID2frameID_dict,
-        ) = self.get_frameID2colmapID(
-            self.frame_ids, self.img_list, self.colmap_images, pre_sfm=pre_sfm
+            osp.join(coarse_recon_results_dir, "cameras.bin")
         )
 
         # Verification:
@@ -112,6 +90,13 @@ class CoarseColmapDataset(Dataset):
         ):
             self.state = False
 
+        (
+            self.frameId2colmapID_dict,
+            self.colmapID2frameID_dict,
+        ) = self.get_frameID2colmapID(
+            self.frame_ids, self.img_list, self.colmap_images, pre_sfm=pre_sfm
+        )
+
         # Get keyframes and feature track(3D points) assignment
         logger.info("Building keyframes begin....")
         if self.feature_track_assignment_strategy == "greedy":
@@ -121,51 +106,14 @@ class CoarseColmapDataset(Dataset):
             ) = self.get_keyframes_greedy(
                 self.colmap_images, self.colmap_3ds, verbose=self.verbose
             )
-        elif self.feature_track_assignment_strategy == "balance":
-            (
-                self.keyframe_dict,
-                self.point_cloud_assigned_imgID_kptID,
-            ) = self.get_keyframes_balance(
-                self.colmap_images, self.colmap_3ds, verbose=self.verbose
-            )
         else:
             raise NotImplementedError
 
         # Build depth and pose of each frame
-        # Extract corresponding frames and index of each keypoints
         self.colmap_frame_dict = {}
         self.build_initial_depth_pose(self.colmap_frame_dict)
+        # Extract corresponding frames and index of each keypoints
         self.extract_corresponding_frames(self.colmap_frame_dict)
-        pass
-
-    def extract_corresponding_frames(self, colmap_frame_dict):
-        """
-        Update: {related_frameID: list}
-        """
-        for colmap_frameID, frame_info in colmap_frame_dict.items():
-            related_frameID = []
-            if not frame_info["is_keyframe"]:
-                # TODO: extract non keyframe info?
-                continue
-            all_kpt_status = frame_info["all_kpt_status"]
-            point_cloud_idxs = all_kpt_status[all_kpt_status >= 0]
-            for point_cloud_idx in point_cloud_idxs:
-                # Get related feature track
-                image_ids = self.colmap_3ds[point_cloud_idx].image_ids
-                point2D_idxs = self.colmap_3ds[point_cloud_idx].point2D_idxs
-
-                related_frameID.append(image_ids)
-
-            # TODO: extract related keypoints idxs?
-            all_related_frameID = np.concatenate(related_frameID)
-            unique_frameID, counts = np.unique(all_related_frameID, return_counts=True)
-
-            self_idx = np.squeeze(
-                np.argwhere(unique_frameID == colmap_frameID)
-            ).tolist()  # int
-            unique_frameID = unique_frameID.tolist()
-            unique_frameID.pop(self_idx)  # pop self index
-            frame_info.update({"related_frameID": unique_frameID})
 
     def build_initial_depth_pose(self, colmap_frame_dict):
         """
@@ -208,10 +156,6 @@ class CoarseColmapDataset(Dataset):
                 initial_depth = np.ones((keypoints.shape[0],)) * -1
                 initial_depth[occupied_mask] = initial_depth_
 
-                # # debug:
-                # real_kpts = keypoints[occupied_mask]
-                # rpj_error = np.average(np.linalg.norm((real_kpts - reprojected_kpts), axis=1))
-
             else:
                 initial_depth, keypoints, all_kpt_status = None, None, None
                 is_keyframe = False
@@ -228,6 +172,32 @@ class CoarseColmapDataset(Dataset):
                     }
                 }
             )
+
+    def extract_corresponding_frames(self, colmap_frame_dict):
+        """
+        Update: {related_frameID: list}
+        """
+        for colmap_frameID, frame_info in colmap_frame_dict.items():
+            related_frameID = []
+            if not frame_info["is_keyframe"]:
+                continue
+            all_kpt_status = frame_info["all_kpt_status"]
+            point_cloud_idxs = all_kpt_status[all_kpt_status >= 0]
+            for point_cloud_idx in point_cloud_idxs:
+                # Get related feature track
+                image_ids = self.colmap_3ds[point_cloud_idx].image_ids
+
+                related_frameID.append(image_ids)
+
+            all_related_frameID = np.concatenate(related_frameID)
+            unique_frameID, counts = np.unique(all_related_frameID, return_counts=True)
+
+            self_idx = np.squeeze(
+                np.argwhere(unique_frameID == colmap_frameID)
+            ).tolist()  # int
+            unique_frameID = unique_frameID.tolist()
+            unique_frameID.pop(self_idx)
+            frame_info.update({"related_frameID": unique_frameID})
 
     def get_frameID2colmapID(
         self, frame_IDs, frame_names, colmap_images, pre_sfm=False
@@ -276,10 +246,7 @@ class CoarseColmapDataset(Dataset):
                 -1,
             )  # (-1,): unoccupied, (imageid, pointidx): occupied
 
-        # Get keyframes running!
-        # Some tool functions. TODO: refactor
-
-        # Iterate to find keyframes!
+        # Iterate to find keyframes:
         keyframe_dict = {}
         while not self._is_colmap_3d_empty(colmap_3d_states):
             assert len(colmap_images_state) != 0
@@ -334,7 +301,7 @@ class CoarseColmapDataset(Dataset):
             colmap_images_state = self._update_colmap_images_state_unoccupied_number(
                 colmap_images_state
             )
-            # print(len(colmap_images_state))
+
         if verbose:
             logger.info(
                 f"total {len(self.colmap_images)} frames registred, {len(keyframe_dict)} keyframes selected"
@@ -345,94 +312,8 @@ class CoarseColmapDataset(Dataset):
                 )
         return keyframe_dict, colmap_3d_states
 
-    def get_keyframes_balance(self, colmap_images, colmap_3ds, verbose=True):
-        # Assign feature tracks to frames
-
-        # Build keypoints state and colmap 3D state.
-        # -3 means robbed, -2 means unoccupied, -1 unregisted by colmap, >=0 means index of the 3D point(feature track)
-        colmap_images_state = (
-            {}
-        )  # {colmap_imageID:{state: np.array [N], unoccupied_num: int n}}
-        for id, colmap_image in colmap_images.items():
-            colmap_images_state[id] = {}
-            colmap_images_state[id]["state"] = -2 * np.ones(
-                (colmap_image.xys.shape[0],)
-            )  # [N], initial as all -2
-            colmap_unregisted_mask = colmap_image.point3D_ids == -1
-            colmap_images_state[id]["state"][
-                colmap_unregisted_mask
-            ] = -1  # set unregistred keypoints to -1
-            colmap_images_state[id]["unoccupied_num"] = (
-                (colmap_images_state[id]["state"] == -2)
-            ).sum()
-        colmap_3d_states = {}
-        for point_cloudID, point_cloud in colmap_3ds.items():
-            colmap_3d_states[point_cloudID] = (
-                -1,
-            )  # (-1,): unoccupied, (imageid, pointidx): occupied
-
-        for point_3d_id, point_3d in colmap_3ds.items():
-            image_ids = list(point_3d.image_ids)
-            related_colmap_image_state = {
-                key: colmap_images_state[key] for key in image_ids
-            }
-            related_colmap_image_state_sorted = self._sort_colmap_images_state(
-                related_colmap_image_state
-            )
-            minimal_frameID = list(related_colmap_image_state_sorted.keys())[-1]
-
-            minimal_idx = int(
-                np.argwhere(point_3d.image_ids == minimal_frameID)[0].squeeze(-1)
-            )  # int idx in image_ids
-
-            minimal_related_kpt_idx = point_3d.point2D_idxs[minimal_idx]
-            for i, image_id in enumerate(image_ids):
-                keypoint_idx = point_3d.point2D_idxs[i]
-                if i == minimal_idx:
-                    # Assign to minimal_frameID
-                    assert (
-                        colmap_images_state[image_id]["state"][keypoint_idx] == -2
-                    )  # Unoccupied
-                    colmap_images_state[image_id]["state"][keypoint_idx] = point_3d_id
-                else:
-                    # Update other frames to be robbed
-                    assert (
-                        colmap_images_state[image_id]["state"][keypoint_idx] == -2
-                    )  # Unoccupied
-                    colmap_images_state[image_id]["state"][keypoint_idx] = -3
-
-            # Update colmap_3d_state:
-            colmap_3d_states[point_3d_id] = (minimal_frameID, minimal_related_kpt_idx)
-
-            colmap_images_state = self._update_colmap_images_state_unoccupied_number(
-                colmap_images_state
-            )
-            pass
-
-        # Get keyframes:
-        keyframe_dict = {}
-        for colmap_image_id, colmap_image_state in colmap_images_state.items():
-            assert np.sum(colmap_image_state["state"] == -2) == 0  # Correction check!
-            if np.sum(colmap_image_state["state"] >= 0) != 0:
-                # This frame occupied some feature track, is a keyframe!
-                keyframe_dict[colmap_image_id] = colmap_image_state
-
-        if verbose:
-            logger.info(
-                f"total {len(self.colmap_images)} frames registred, {len(keyframe_dict)} keyframes selected"
-            )
-            total_feature_track_num = 0
-            for id, item in keyframe_dict.items():
-                print(
-                    f"id:{id}, {sum(item['state'] != -1)} / {self.colmap_images[id].xys.shape[0]} keypoints registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
-                )
-                total_feature_track_num += sum(item["state"] >= 0)
-            assert total_feature_track_num == len(colmap_3ds)
-            logger.info(f"total {total_feature_track_num} feature tracks!")
-        return keyframe_dict, colmap_3d_states
-
     def update_optimize_results_to_colmap(
-        self, results_dict, visualize=False, evaluation=False
+        self, results_dict, visualize=False
     ):
         """
         Update optimized pose and depth to colmap format and save
@@ -541,57 +422,26 @@ class CoarseColmapDataset(Dataset):
             kpts_frame_h = (intrinsic @ kpts_cam).T # N*3
             projected_kpts = kpts_frame_h[:, :2] / (kpts_frame_h[:, [2]] + 1e-4) # N*2
 
-            # Check distance
-            offset = projected_kpts - keypoints_masked
-
             # Update to colmap frames
             keypoints[registrated_mask, :] = projected_kpts
             self.colmap_images[colmap_frame_id] = colmap_image._replace(xys=keypoints)
 
-        # import ipdb; ipdb.set_trace()
         # Write results to colmap file format
-        os.makedirs(self.colmap_refined_save_dir, exist_ok=True)
+        os.makedirs(self.refined_save_dir, exist_ok=True)
         write_model(
             self.colmap_cameras,
             self.colmap_images,
             self.colmap_3ds,
-            self.colmap_refined_save_dir,
+            self.refined_save_dir,
             ext=".bin",
         )
         write_model(
             self.colmap_cameras,
             self.colmap_images,
             self.colmap_3ds,
-            self.colmap_refined_save_dir,
+            self.refined_save_dir,
             ext=".txt",
         )
-
-        if evaluation:
-            raise NotImplementedError
-            pose_err_before_refine, aucs_before_refine = eval_colmap_results(
-                self,
-                self.colmap_results_dir.rsplit("/", 1)[0],
-                self.colmap_results_dir.rsplit("/", 1)[1],
-            )
-            pose_err_after_refine, aucs_after_refine = eval_colmap_results(
-                self,
-                self.colmap_refined_save_dir.rsplit("/", 1)[0],
-                self.colmap_refined_save_dir.rsplit("/", 1)[1],
-                save_error_path=self.colmap_refined_save_dir.rsplit("/", 2)[0],
-            )
-
-            if aucs_before_refine["auc@5"] < aucs_after_refine["auc@5"]:
-                name_label = "good"
-            elif aucs_before_refine["auc@5"] < aucs_after_refine["auc@5"]:
-                name_label = "equal"
-            else:
-                name_label = "bad"
-
-            print(f"{self.subset_name} aucs before refine", aucs_before_refine)
-            print(f"{self.subset_name} aucs after refine", aucs_after_refine)
-        else:
-            pose_err_before_refine, pose_err_after_refine = None, None
-            name_label = None
 
         # visualize
         if visualize and self.vis_path is not None:
@@ -615,7 +465,6 @@ class CoarseColmapDataset(Dataset):
                 old_point_cloud_color,
                 old_pose,
             )
-        return pose_err_before_refine, pose_err_after_refine
 
     def _is_colmap_3d_empty(self, colmap_3d_state):
         num_non_empty = 0
@@ -623,7 +472,6 @@ class CoarseColmapDataset(Dataset):
             if len(state) == 1:
                 num_non_empty += 1
 
-        # print(num_non_empty)  # for debug
         return num_non_empty == 0
 
     def _sort_colmap_images_state(self, colmap_images_state):

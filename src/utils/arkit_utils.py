@@ -1,5 +1,6 @@
 import sys
-sys.path.insert(0, '/home/hexingyi/code/PoseReloc')
+# sys.path.insert(0, '/home/hexingyi/code/PoseReloc')
+sys.path.insert(0, '/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc')
 
 import os
 import os.path as osp
@@ -320,7 +321,8 @@ def ln_data():
 if __name__ == "__main__":
     # ln_data()
     # data_root = './data/scan_data'
-    data_root = '/nas/users/hexingyi/onepose_hard_data'
+    # data_root = '/nas/users/hexingyi/onepose_hard_data'
+    data_root = "/cephfs-mvs/3dv-research/hexingyi/neuralsfm_capture_obj"
     # data_root = "/nas/users/hexingyi/2022_cvta_objects"
     seq_dirs = [
         # '0408-colorbox-box', '0409-aptamil-box', '0410-huiyuan-box',
@@ -472,31 +474,63 @@ if __name__ == "__main__":
         # "0508-hushoushuang4-others",
         # "0509-shoe-others"
         # "0510-shoehor-others"
-        "0511-shoehor840-others"
+        # "0511-shoehor840-others"
+
+        # "1000-whitecup-others",
+        # "1001-ape-others",
+        # "1002-sonybox-others",
+        # "1003-fakecam-others",
+        # "1004-smallwbox-others"
+
+        # "1005-penbox-others",
+        # "1006-bosebox-others",
+        # "1007-eyeglassbox-others",
+        # "1008-whitemouse-others",
+        # "1009-batterycharger-others",
+        # "1010-themos-others",
+        # "1011-penboxvert-others"
+        # "1012-toy-others",
+        # "1013-pingpangcover-others",
+        # "1014-gengbox-others",
+        # "1015-toshihiba-others",
+        # "1016-dingshuju-others",
+        "1017-luckincup-others",
+        "1018-tiesanjiao-others",
+        "1019-airpodsdog-others",
+        "1020-iphonecharger-others",
+        "1021-hhkbhandrest-others",
+        "1022-logimouse-others",
+
     ]
     deal_first = True
     deal_last = True
     # resize_hw = 512 # 512 orginal
-    # resize_hw = 840 # 512 orginal
-    resize_hw = 512 # 512 orginal
+    resize_hw = 840 # 512 orginal
+    # resize_hw = 512 # 512 orginal
     for seq_dir in seq_dirs:
+        seq_id = 1
         data_dir = osp.join(data_root, seq_dir)
         subdirs = os.listdir(data_dir)
         subdir_ids = []
         # Find last seq for an object
         for subdir in subdirs:
             if not subdir.startswith('.') and 'visual' not in subdir and '.' not in subdir:
-                if '-' in subdir:
-                    obj_name, subdir_id = subdir.split('-')
-                elif '_' in subdir:
-                    obj_name, subdir_id = subdir.split('_')
-                else:
-                    obj_name, subdir_id = subdir[:-1], subdir[-1]
+                try:
+                    if '-' in subdir:
+                        obj_name, subdir_id = subdir.split('-')
+                    elif '_' in subdir:
+                        obj_name, subdir_id = subdir.split('_')
+                except:
+                    obj_name = seq_dir.split('-')[1]
+                    os.system(f"mv {osp.join(data_dir, subdir)} {osp.join(data_dir, '-'.join([obj_name, str(seq_id)]))}")
+                    subdir_id = seq_id
+                    seq_id += 1
                 subdir_ids.append(int(subdir_id))
         subdir_ids.sort()
         max_id = subdir_ids[-1]
         min_id = subdir_ids[0]
         
+        subdirs = os.listdir(data_dir)
         for subdir in subdirs: 
             if not subdir.startswith('.') and "visual" not in subdir and '.' not in subdir:
                 if '-' in subdir:

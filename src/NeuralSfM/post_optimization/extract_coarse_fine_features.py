@@ -1,15 +1,12 @@
 import os
 import os.path as osp
-import copy
-
-from ray.actor import ActorHandle
 
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 from loguru import logger
 import ray
 from src.utils.data_io import load_obj, save_obj
 
-from ..dataset.neuralsfm_coarse_colmap_dataset import CoarseColmapDataset
+from ..dataset.neuralsfm_coarse_colmap_dataset import CoarseReconDataset
 from .data_construct import MatchingPairData
 from .matcher_model import *
 from .feature_aggregation import feature_aggregation_and_update
@@ -68,7 +65,7 @@ def extract_coarse_fine_features(
     cfgs["coarse_colmap_data"]["verbose"] = verbose
 
     # Construct scene data
-    colmap_image_dataset = CoarseColmapDataset(
+    colmap_image_dataset = CoarseReconDataset(
         cfgs["coarse_colmap_data"],
         image_lists,
         covis_pairs_pth,
@@ -137,7 +134,7 @@ def extract_coarse_fine_features_for_pixsfm(
     cfgs["coarse_colmap_data"]["verbose"] = verbose
 
     # Construct scene data
-    colmap_image_dataset = CoarseColmapDataset(
+    colmap_image_dataset = CoarseReconDataset(
         cfgs["coarse_colmap_data"],
         image_lists,
         covis_pairs_pth,

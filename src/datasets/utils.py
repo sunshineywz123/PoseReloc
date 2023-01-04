@@ -11,14 +11,17 @@ import albumentations as A
 
 
 def process_resize(w, h, resize, df=None):
-    assert(len(resize) > 0 and len(resize) <= 2)
-    if len(resize) == 1 and resize[0] > -1:  # resize the larger side
-        scale = resize[0] / max(h, w)
-        w_new, h_new = int(round(w*scale)), int(round(h*scale))
-    elif len(resize) == 1 and resize[0] == -1:
+    if resize is not None:
+        assert(len(resize) > 0 and len(resize) <= 2)
+        if len(resize) == 1 and resize[0] > -1:  # resize the larger side
+            scale = resize[0] / max(h, w)
+            w_new, h_new = int(round(w*scale)), int(round(h*scale))
+        elif len(resize) == 1 and resize[0] == -1:
+            w_new, h_new = w, h
+        else:  # len(resize) == 2:
+            w_new, h_new = resize[0], resize[1]
+    else:
         w_new, h_new = w, h
-    else:  # len(resize) == 2:
-        w_new, h_new = resize[0], resize[1]
 
     if df is not None:
         w_new, h_new = map(lambda x: int(x // df * df), [w_new, h_new])
@@ -75,9 +78,8 @@ def load_intrinsics_from_h5(intrinsics_path):
 def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
                    pad_to=None, ret_scales=False, ret_pad_mask=False,
                    augmentor=None):
-    resize = tuple(resize)
+    resize = tuple(resize) if resize is not None else None
     assert osp.exists(path), f"image path: {path} not exists!"
-    # TODO: Refactor the code to separate read, pad and to_tensor. @ang
     if augmentor is None:
         image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if client is None \
             else load_array_from_petrel(path, client, cv2.IMREAD_GRAYSCALE)
@@ -90,7 +92,7 @@ def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
 
     assert image is not None, f"path: {path} image not properly loaded"
     w, h = image.shape[1], image.shape[0]
-    w_new, h_new = process_resize(w, h, resize, df) if resize is not None else (w, h)
+    w_new, h_new = process_resize(w, h, resize, df)
     scales = torch.tensor([float(h) / float(h_new), float(w) / float(w_new)]) # [2]
 
     if resize_float:

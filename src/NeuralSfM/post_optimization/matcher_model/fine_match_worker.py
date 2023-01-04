@@ -4,41 +4,17 @@ import numpy as np
 import ray
 from ray.actor import ActorHandle
 from tqdm import tqdm
-import os.path as osp
-from loguru import logger
 
 from src.NeuralSfM.loftr_config.default import get_cfg_defaults
 from src.NeuralSfM.loftr_for_sfm import LoFTR_SfM
 from src.utils.misc import lower_config
 from src.utils.torch_utils import update_state_dict, STATE_DICT_MAPPER
-from src.NeuralSfM.extractors import build_extractor
-from src.NeuralSfM.loftr_for_sfm.utils.detector_wrapper import (
-    DetectorWrapper,
-    DetectorWrapperTwoView,
-)
-from .utils import sample_feature_from_unfold_featuremap
-from ..visualization.draw_plots import draw_matches, draw_local_heatmaps
 
 
 def build_model(args, extract_coarse_feats_mode=False):
     cfg = get_cfg_defaults()
     cfg.merge_from_file(args["cfg_path"])
     pl.seed_everything(args["seed"])
-
-    detector = build_extractor(lower_config(cfg.LOFTR_MATCH_FINE))
-    detector = (
-        DetectorWrapper(
-            detector,
-            cfg.LOFTR_MATCH_FINE.DETECTOR,
-            fullcfg=lower_config(cfg.LOFTR_MATCH_FINE),
-        )
-        if not cfg.LOFTR_GUIDED_MATCHING.ENABLE
-        else DetectorWrapperTwoView(
-            detector,
-            cfg.LOFTR_MATCH_FINE.DETECTOR,
-            fullcfg=lower_config(cfg.LOFTR_MATCH_FINE),
-        )
-    )
 
     match_cfg = {
         "loftr_backbone": lower_config(cfg.LOFTR_BACKBONE),
@@ -61,7 +37,7 @@ def build_model(args, extract_coarse_feats_mode=False):
         )
         assert updated
         matcher.load_state_dict(state_dict, strict=True)
-    return detector, matcher
+    return matcher
 
 
 def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
@@ -72,34 +48,13 @@ def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
     mkpts1_c = data["mkpts1_c"].cpu().numpy()
     mkpts0_f = data["mkpts0_f"].cpu().numpy()
     mkpts1_f = data["mkpts1_f"].cpu().numpy()
-    mkpts0_idx = data["mkpts0_idx"].cpu().numpy()  # from original dataset
+    mkpts0_idx = data["mkpts0_idx"].cpu().numpy()  # from original dataset, just pass by
     scale0 = data["scale0"].cpu().numpy()
     scale1 = data["scale1"].cpu().numpy()
-    # mconfs = data["mconf"].cpu().numpy()
-
-    # Get feature response map
-    # feat_f0_unfold = data["feat_f0_unfold"]
-    # feat_f1_unfold = data["feat_f1_unfold"]
-    # query_features = sample_feature_from_unfold_featuremap(feat_f0_unfold)
-    # distance_map = torch.linalg.norm(
-    #     query_features.unsqueeze(1) - feat_f1_unfold, dim=-1, keepdim=True
-    # )  # L*WW*1
-    # distance_map = distance_map.cpu().numpy()
-    distance_map = np.zeros((mkpts1_f.shape[0], 25, 1))
 
     if extract_feature_method == "fine_match_backbone":
         feature0 = data["feat_ext0"].cpu().numpy()
         feature1 = data["feat_ext1"].cpu().numpy()
-    elif extract_feature_method == "fine_match_attention":
-        raise NotImplementedError
-        ref_features = sample_feature_from_unfold_featuremap(
-            feat_f1_unfold,
-            data["mkpts1_f"] - data["mkpts1_c"],
-            scale=data["scale1"] * 2,
-        )  # 2 is input_res / fine_level_res
-        query_features = query_features.cpu().numpy()
-        ref_features = ref_features.cpu().numpy()
-        feature0, feature1 = query_features, ref_features
     elif extract_feature_method is None:
         feature0, feature1 = None, None
     else:
@@ -111,24 +66,11 @@ def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
     else:
         feature_c0, feature_c1 = None, None
     
-    if use_warpped_feature:
-        if "feat_coarse_b_1_warpped" in data:
-            feature_c1_warp = data['feat_coarse_b_1_warpped'].cpu().numpy()
-            feature1_warp = data['feat_f_1_warpped'].cpu().numpy()
-        else:
-            logger.warning("feat_coarse_b_1_warpped is not in data! use warpped feature failed!")
-            feature_c1_warp = feature_c1
-            feature1_warp = feature1
-    else:
-        feature_c1_warp = feature_c1
-        feature1_warp = feature1
-
     return (
         mkpts0_c,
         mkpts1_c,
         mkpts0_f,
         mkpts1_f,
-        distance_map,
         mkpts0_idx,
         scale0,
         scale1,
@@ -136,34 +78,25 @@ def extract_preds(data, extract_feature_method=None, use_warpped_feature=False):
         feature_c1,
         feature0,
         feature1,
-        feature_c1_warp,
-        feature1_warp
     )
 
 
 def extract_results(
     data,
-    detector=None,
     matcher=None,
-    refiner=None,
-    refine_args={},
     extract_feature_method=None,
-    use_warpped_feature=False
 ):
     # 1. inference
-    detector(data)
     if extract_feature_method == "fine_match_backbone":
         matcher(data, extract_coarse_feature=True, extract_fine_feature=True)
     else:
         matcher(data, extract_coarse_feature=True)
-    refiner(data, **refine_args) if refiner is not None else None
-    # 2. extract match and refined poses
+    # 2. extract matches:
     (
         mkpts0_c,
         mkpts1_c,
         mkpts0_f,
         mkpts1_f,
-        distance_map,
         mkpts0_idx,
         scale0,
         scale1,
@@ -171,17 +104,12 @@ def extract_results(
         feature_c1,
         feature0,
         feature1,
-        feature_c1_warp,
-        feature1_warp
-    ) = extract_preds(data, extract_feature_method=extract_feature_method, use_warpped_feature=use_warpped_feature)
-    del data
-    torch.cuda.empty_cache()
+    ) = extract_preds(data, extract_feature_method=extract_feature_method)
     return (
         mkpts0_c,
         mkpts1_c,
         mkpts0_f,
         mkpts1_f,
-        distance_map,
         mkpts0_idx,
         scale0,
         scale1,
@@ -189,8 +117,6 @@ def extract_results(
         feature_c1,
         feature0,
         feature1,
-        feature_c1_warp,
-        feature1_warp
     )
 
 
@@ -199,18 +125,13 @@ def extract_results(
 def matchWorker(
     dataset,
     subset_ids,
-    detector,
     matcher,
     extract_feature_method=None,
     use_warpped_feature=False,
-    visualize=False,
-    visualize_dir=None,
     pba: ActorHandle = None,
     verbose=True,
 ):
     """extract matches from part of the possible image pair permutations"""
-    # detector, matcher = build_model(args)
-    detector.cuda()
     matcher.cuda()
     results_dict = {}
 
@@ -220,7 +141,6 @@ def matchWorker(
         assert pba is None
         subset_ids = subset_ids
 
-    # match all permutations
     for subset_id in subset_ids:
         data = dataset[subset_id]
         frameID0, frameID1 = data["frame0_colmap_id"], data["frame1_colmap_id"]
@@ -233,7 +153,6 @@ def matchWorker(
             mkpts1_c,
             mkpts0_f,
             mkpts1_f,
-            distance_map,
             mkpts0_idx,
             scale0,
             scale1,
@@ -241,14 +160,10 @@ def matchWorker(
             feature_c1,
             feature0,
             feature1,
-            feature_c1_warp,
-            feature1_warp
         ) = extract_results(
             data_c,
-            detector=detector,
             matcher=matcher,
             extract_feature_method=extract_feature_method,
-            use_warpped_feature=use_warpped_feature
         )
 
         # 3. extract results
@@ -259,42 +174,19 @@ def matchWorker(
             "mkpts0_f": mkpts0_f,
             "mkpts1_f": mkpts1_f,
             "mkpts0_idx": mkpts0_idx,
-            "distance_map": distance_map,  # N*WW*1
             "scale0": scale0,  # 1*2
             "scale1": scale1,
             "feature_c0": feature_c0,
             "feature_c1": feature_c1,
             "feature0": feature0,
             "feature1": feature1,
-            "feature_c1_warp": feature_c1_warp,
-            "feature1_warp": feature1_warp
         }
         if pba is not None:
             pba.update.remote(1)
-
-        if visualize:
-            # Output match and distance patch
-            assert (
-                visualize_dir is not None
-            ), f"Please provide visualize saving directory!"
-            # draw_matches(
-            #     data,
-            #     results_dict[pair_name],
-            #     save_path=osp.join(
-            #         visualize_dir, "test_match_pair", pair_name + ".png"
-            #     ),
-            # )
-            draw_local_heatmaps(
-                data,
-                distance_map,
-                mkpts1_c,
-                save_path="loftr_local_patch.png"
-            )
 
     return results_dict
 
 
 @ray.remote(num_cpus=1, num_gpus=0.25, max_calls=1)  # release gpu after finishing
-# @ray.remote(num_cpus=1, num_gpus=1)  # release gpu after finishing
 def matchWorker_ray_wrapper(*args, **kwargs):
     return matchWorker(*args, **kwargs)

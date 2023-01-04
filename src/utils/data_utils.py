@@ -1,6 +1,7 @@
 import cv2
 import torch
 import numpy as np
+from pathlib import Path
 
 
 def get_3rd_point(a, b):
@@ -349,27 +350,6 @@ def pad_features3d_random(
 
     return descriptors, scores
 
-def pad_features3d_leaves_random(
-    descriptors, scores, idxs, n_target_shape, num_leaf, padding_index
-):
-    """ Given num_leaf, fix the numf of 3d features to n_target_shape * num_leaf"""
-    dim = descriptors.shape[0]
-    orig_num = idxs.shape[0]
-    n_pad = n_target_shape - orig_num
-
-    if n_pad < 0:
-        dim = descriptors.shape[0]
-        descriptors = descriptors.view(dim, -1, num_leaf)
-        scores = scores.view(-1, num_leaf, 1)
-
-        descriptors = descriptors[:, padding_index, :]
-        scores = scores[padding_index, :]
-
-        descriptors = descriptors.view(dim, -1)
-        scores = scores.view(-1, 1)
-
-    return descriptors, scores
-
 def pad_keypoints3d_random_v2(keypoints, features, scores, n_target_kpts, num_leaf):
     n_pad = n_target_kpts - keypoints.shape[0]
     feature_dim = features["0"].shape[1]  # FIXME: read feature dim from cfg
@@ -567,3 +547,22 @@ def get_K_crop_resize(box, K_orig, resize_shape):
     K_crop = K_crop_homo[:3, :3]
 
     return K_crop, K_crop_homo
+
+def get_K(intrin_file):
+    assert Path(intrin_file).exists()
+    with open(intrin_file, 'r') as f:
+        lines = f.readlines()
+    intrin_data = [line.rstrip('\n').split(':')[1] for line in lines]
+    fx, fy, cx, cy = list(map(float, intrin_data))
+
+    K = np.array([
+        [fx, 0, cx],
+        [0, fy, cy],
+        [0,  0,  1]
+    ])
+    K_homo = np.array([
+        [fx, 0, cx, 0],
+        [0, fy, cy, 0],
+        [0,  0,  1, 0]
+    ])
+    return K, K_homo

@@ -61,7 +61,6 @@ class FinePreprocess(nn.Module):
 
                 self.merge_feat = nn.Conv2d(2*config['d_model'], config['d_model'], 3, 1, 1)
            
-        # TODO: Refactor net init and change window-size to image scale
         self.coarse_id, self.fine_id = [int(log(r, 2)) for r in cf_res]  # coarse, fine resolutions
         self.feat_ids = feat_ids  # FIXME: This argument is linked to RESFPN, where res2/deit backbone don't have?
         self.feat_dims = feat_dims  # dim of feats returned by backbone

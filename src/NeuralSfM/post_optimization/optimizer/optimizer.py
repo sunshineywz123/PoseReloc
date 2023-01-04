@@ -1,5 +1,4 @@
 from functools import partial
-from tabnanny import verbose
 from pytorch3d import transforms
 import torch
 import torch.nn as nn
@@ -13,7 +12,7 @@ import ray
 from submodules.DeepLM import Solve as SecondOrderSolve
 from .first_order_solver import FirstOrderSolve
 
-from .residual import pose_ba_residual, depth_residual
+from .residual import depth_residual
 from ..utils.geometry_utils import *
 
 
@@ -24,8 +23,6 @@ class Optimizer(nn.Module):
         ----------------
         """
         super().__init__()
-        # self.configs = configs
-        # self.verbose = self.configs["verbose"]
 
         self.optimization_dataset = optimization_dataset
         self.colmap_frame_dict = optimization_dataset.colmap_frame_dict
@@ -34,13 +31,8 @@ class Optimizer(nn.Module):
         self.num_workers = cfgs["num_workers"]
         self.batch_size = cfgs["batch_size"]
 
-        # self.solver_type = "SecondOrder"
         self.solver_type = cfgs["solver_type"]
         self.residual_mode = cfgs["residual_mode"]
-        self.distance_loss_scale = cfgs["distance_loss_scale"]
-        self.distance_map_temp = cfgs["distance_map_temp"]
-        self.distance_map_do_softmax = cfgs["distance_map_do_softmax"]
-        # self.optimize_lr = {"depth": 1e-4, "pose": 1e-4, "BA": 5e-5}  # Baseline
         self.optimize_lr = cfgs["optimize_lr"]
         self.optim_procedure = cfgs["optim_procedure"]
 
@@ -50,14 +42,15 @@ class Optimizer(nn.Module):
     @torch.enable_grad()
     def start_optimize(self):
         optimization_procedures = self.optim_procedure
+
         # Data structure build from matched kpts
         aggregated_dict = {}
 
         logger.info("Loading data begin!")
-        start_time = time.time()
         device = torch.device("cuda")
 
         if self.optimization_dataset.padding_data:
+            # Fast data loading:
             dataloader = DataLoader(
                 self.optimization_dataset,
                 batch_size=self.batch_size,
@@ -75,9 +68,6 @@ class Optimizer(nn.Module):
                     sub_mask[: data_batch["n_query"][i]] = True
                     mask.append(sub_mask)
                 mask = torch.stack(mask, dim=0)  # batch_size * max_track_length
-                assert torch.sum(mask > 0) == torch.sum(
-                    data_batch["n_query"]
-                ), f"Bug exists here!"
 
                 # Aggregate data
                 for data_key, data_item in data_batch.items():
@@ -98,9 +88,6 @@ class Optimizer(nn.Module):
                     aggregated_dict[key].append(
                         value.to(device) if isinstance(value, torch.Tensor) else value
                     )
-
-        end_time = time.time()
-        print(f"Consums: {end_time - start_time}")
 
         # Concat data and convert data format to double
         for key, value in aggregated_dict.items():
@@ -162,9 +149,6 @@ class Optimizer(nn.Module):
         left_pose_idxs = torch.tensor(left_pose_idxs).to(device).long()
         right_pose_idxs = torch.tensor(right_pose_idxs).to(device).long()
 
-        aggregated_dict["scale0"] *= self.image_i_f_scale
-        aggregated_dict["scale1"] *= self.image_i_f_scale
-
         # Prepare optimization data
         point_cloud_ids = aggregated_dict["point_cloud_id"].long()
 
@@ -180,13 +164,12 @@ class Optimizer(nn.Module):
         else:
             iter_obj = enumerate(optimization_procedures)
 
-        begin_optimize_t = time.time()
         for i, procedure in iter_obj:
             if procedure == "depth":
                 logger.info(
-                    f"Only depth optimization, optimize: {aggregated_dict['depth'].shape[0]}, depth parameters"
+                    f"Depth optimization, optimize: {aggregated_dict['depth'].shape[0]} depth parameters"
                 ) if self.verbose else None
-                # only optimize depth, regard pose an constant
+
                 aggregated_dict["left_pose_indexed"] = aggregated_dict[
                     "angle_axis_to_world"
                 ][left_pose_idxs]
@@ -203,51 +186,8 @@ class Optimizer(nn.Module):
                     "mkpts0_c",
                     "mkpts1_c",
                     "mkpts1_f",
-                    "distance_map",
-                    "scale0",
-                    "scale1",
                 ]
                 residual_format = depth_residual
-            elif procedure == "pose":
-                logger.info(
-                    f"Only optimize pose, optimize: {aggregated_dict['angle_axis_to_world'].shape[0]}*6 parameters"
-                ) if self.verbose else None
-                # only optimize pose, regard depth as constant
-                aggregated_dict["depth_indexed"] = aggregated_dict["depth"][
-                    depth_indices
-                ]
-
-                variables_name = ["angle_axis_to_world"]
-                indices = {0: [left_pose_idxs, right_pose_idxs]}  # only optimize pose
-                constants_name = [
-                    "depth_indexed",
-                    "intrinsic0",
-                    "intrinsic1",
-                    "mkpts0_c",
-                    "mkpts1_c",
-                    "mkpts1_f",
-                    "distance_map",
-                    "scale0",
-                    "scale1",
-                ]
-                residual_format = pose_ba_residual
-            elif procedure == "BA":
-                logger.info(
-                    f"BA optimization, optimize: pose {aggregated_dict['angle_axis_to_world'].shape[0]}*6 parameters, depth {aggregated_dict['depth'].shape[0]} parameters"
-                ) if self.verbose else None
-                variables_name = ["angle_axis_to_world", "depth"]
-                indices = {0: [left_pose_idxs, right_pose_idxs], 1: [depth_indices]}
-                constants_name = [
-                    "intrinsic0",
-                    "intrinsic1",
-                    "mkpts0_c",
-                    "mkpts1_c",
-                    "mkpts1_f",
-                    "distance_map",
-                    "scale0",
-                    "scale1",
-                ]
-                residual_format = pose_ba_residual
             else:
                 raise NotImplementedError
 
@@ -260,15 +200,10 @@ class Optimizer(nn.Module):
 
             # Refinement
             partial_paras = {
-                "distance_loss_scale": self.distance_loss_scale,
-                "distance_map_temp": self.distance_map_temp,
-                "distance_map_do_softmax": self.distance_map_do_softmax,
                 "mode": self.residual_mode,
             }
             if self.solver_type == "SecondOrder":
-                if residual_format is pose_ba_residual:
-                    # pose optimization and ba is not implement for second order solver
-                    raise NotImplementedError
+                # Use DeepLM lib:
                 optimized_variables = SecondOrderSolve(
                     variables=variables,
                     constants=constants,
@@ -277,7 +212,6 @@ class Optimizer(nn.Module):
                     fn=partial(residual_format, **partial_paras),
                 )
             elif self.solver_type == "FirstOrder":
-                # TODO: move to out parameter
                 optimization_cfgs = {
                     "lr": self.optimize_lr[procedure],
                     "optimizer": "Adam",
@@ -303,10 +237,6 @@ class Optimizer(nn.Module):
             # Update results
             for idx, variable_name in enumerate(variables_name):
                 aggregated_dict[variable_name] = optimized_variables[idx]
-
-        stop_optimize_t = time.time()
-        if self.verbose:
-            logger.info(f"Optimization consumes:{stop_optimize_t - begin_optimize_t}")
 
         if initial_residual is not None and final_residual is not None:
             logger.info(

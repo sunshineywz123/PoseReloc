@@ -15,21 +15,12 @@ from .patch2pix_merger import patch2pix_merger
 
 cfgs = {
     "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
-    # "data": {"img_resize": 1200, "df": 8, "shuffle": True},  # For OnePose
-    # "data": {"img_resize": 720, "df": 8, "shuffle": True},  # For OnePose
-    # "data": {"img_resize": 256, "df": 8, "shuffle": True},  # For OnePose_bop
-    # "data": {"img_resize": 1600, "df": 8, "shuffle": True}, # For Inloc
-    # "data": {"img_resize": 640, "df": 8, "shuffle": True}, # For Scannet
     "matcher": {
         "model": {
             "method": "LoFTR",
-            # "method": 'DRCNet', # [LoFTR, DRCNet, patch2pix]
-            # "method": 'patch2pix', # [LoFTR, DRCNet, patch2pix]
-            # "method": 'patch2pix_superglue',
             "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_only.py",
             # "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
             "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
-            "DRC_weight_path": "weight/dualrc-net_orth.pth.tar",
             "seed": 666,
         },
         "pair_name_split": " ",
@@ -54,7 +45,7 @@ cfgs = {
 }
 
 
-def loftr_coarse_matching(
+def detector_free_coarse_matching(
     image_lists,
     covis_pairs_out,
     feature_out,

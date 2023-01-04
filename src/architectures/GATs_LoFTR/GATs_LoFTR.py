@@ -1,4 +1,3 @@
-from itertools import chain
 
 from loguru import logger
 import torch
@@ -7,28 +6,23 @@ import torch.nn.functional as F
 from einops.einops import rearrange, repeat
 
 from src.utils.profiler import PassThroughProfiler
-from src.utils.misc import upper_config  # TODO: Remove the out of package import
-from src.utils.torch_utils import torch_speed_test
 
 from .backbone import (
     build_backbone,
     _extract_backbone_feats,
-    _split_backbone_feats,
     _get_feat_dims,
 )
 from .utils.normalize import normalize_3d_keypoints
 from .loftr_module import LocalFeatureTransformer, FinePreprocess
 from .utils.position_encoding import (
     PositionEncodingSine,
-    KeypointEncoding,
     KeypointEncoding_linear,
-    PositionEncodingSine3D,
 )
 from .utils.coarse_matching import CoarseMatching
 from .utils.fine_matching import FineMatching
 
 
-class GATs_LoFTR(nn.Module):
+class OnePosePlus_model(nn.Module):
     def __init__(self, config, profiler=None, debug=False):
         super().__init__()
         # Misc
@@ -51,12 +45,8 @@ class GATs_LoFTR(nn.Module):
 
         if self.config["keypoints_encoding"]["enable"]:
             # NOTE: from Gats part
-            if config["keypoints_encoding"]["type"] == "mlp_cov1d":
-                encoding_func = KeypointEncoding
-            elif config["keypoints_encoding"]["type"] == "mlp_linear":
+            if config["keypoints_encoding"]["type"] == "mlp_linear":
                 encoding_func = KeypointEncoding_linear
-            elif config["keypoints_encoding"]["type"] == "sine":
-                encoding_func = PositionEncodingSine3D
             else:
                 raise NotImplementedError
 
@@ -78,7 +68,6 @@ class GATs_LoFTR(nn.Module):
 
         self.fine_preprocess = FinePreprocess(
             self.config["loftr_fine"],
-            self.config["loftr_coarse"]["d_model"],
             cf_res=self.config["loftr_backbone"]["resolution"],
             feat_ids=self.config["loftr_backbone"]["resnetfpn"]["output_layers"],
             feat_dims=_get_feat_dims(self.config["loftr_backbone"]),
@@ -104,17 +93,13 @@ class GATs_LoFTR(nn.Module):
                 for param in self.backbone.parameters():
                     param.requires_grad = False
 
-    def forward(
-        self, data, return_fine_unfold_feat=False, return_coarse_atten_feat=False
-    ):
+    def forward(self, data):
         """
         Update:
             data (dict): {
                 keypoints3d: [N, n1, 3]
                 descriptors3d_db: [N, dim, n1]
-                descriptors2d_db: [N, dim, n1 * num_leaf]
                 scores3d_db: [N, n1, 1]
-                scores2d_db: [N, n1 * num_leaf, 1]
 
                 query_image: (N, 1, H, W)
                 query_image_scale: (N, 2)
@@ -148,29 +133,9 @@ class GATs_LoFTR(nn.Module):
                 }
             )
 
-        if self.config["use_fine_backbone_as_coarse"]:
-            # Down sample fine feature
-            query_feat_b_c = F.interpolate(
-                query_feat_f,
-                size=query_feat_b_c.shape[2:],
-                mode=self.config["interpol_type"],
-                align_corners=False,
-            )
-
-        if return_coarse_atten_feat:
-            # For visualize:
-            data.update(
-                {
-                    "q_b_c": query_feat_b_c.clone().detach().permute(0,2,3,1),
-                    "db_3D_c": data["descriptors3d_db"].clone().detach().permute(0,2,1)
-                    if "descriptors3d_coarse_db" not in data
-                    else data["descriptors3d_coarse_db"].clone().detach().permute(0,2,1),
-                }
-            )
-
         # 2. coarse-level loftr module
         with self.profiler.record_function("LoFTR/coarse-loftr"):
-            # add featmap with positional encoding, then flatten it to sequence [N, HW, C]
+            # Add featmap with positional encoding, then flatten it to sequence [N, HW, C]
             query_feat_c = rearrange(
                 self.dense_pos_encoding(query_feat_b_c)
                 if self.dense_pos_encoding is not None
@@ -191,52 +156,14 @@ class GATs_LoFTR(nn.Module):
                 if "descriptors3d_coarse_db" not in data
                 else data["descriptors3d_coarse_db"]
             )
-            desc2d_db = (
-                data["descriptors2d_db"]
-                if "descriptors2d_coarse_db" not in data
-                else data["descriptors2d_coarse_db"]
-            )
-            desc2d_db_pad_mask = (
-                data["desc2d_db_padding_mask"]
-                if "descriptors2d_coarse_db" not in data
-                else data["desc2d_coarse_db_padding_mask"]
-            )
 
-            query_mask = None
-            if "query_image_mask" in data:
-                query_mask = data["query_image_mask"].flatten(-2)
-            # NOTE: feat_c0 & feat_c1 are conv features residually modulated by LoFTR: x + sum_i(self_i + cross_i)
-            if not return_coarse_atten_feat:
-                desc3d_db, query_feat_c = self.loftr_coarse(
-                    desc3d_db,
-                    desc2d_db,
-                    query_feat_c,
-                    data,
-                    query_mask=query_mask,
-                    keypoints3D=kpts3d,
-                    desc2d_db_pad_mask=desc2d_db_pad_mask,
-                )
-            # logger.info('Profiling LoFTR model...')
-            # torch_speed_test(self.loftr_coarse, [feat_c0, feat_c1, mask_c0, mask_c1], model_name='loftr_coarse')
+            query_mask = data["query_image_mask"].flatten(-2) if "query_image_mask" in data else None
 
-            if return_coarse_atten_feat:
-                desc3d_db, query_feat_c, desc3d_db_middle, query_feat_c_middle = self.loftr_coarse(
-                    desc3d_db,
-                    desc2d_db,
-                    query_feat_c,
-                    data,
-                    query_mask=query_mask,
-                    keypoints3D=kpts3d,
-                    desc2d_db_pad_mask=desc2d_db_pad_mask,
-                    return_middle_layer_features=True
-                )
-                # For visualize:
-                data.update(
-                    {
-                        "q_atten_c": rearrange(query_feat_c_middle.clone().detach(), 'n (h w) c -> n h w c', h=data['q_hw_c'][0]),
-                        "db_3D_atten_c": desc3d_db_middle.clone().detach()
-                    }
-                )
+            desc3d_db, query_feat_c = self.loftr_coarse(
+                desc3d_db,
+                query_feat_c,
+                query_mask=query_mask,
+            )
 
         # 3. match coarse-level
         with self.profiler.record_function("LoFTR/coarse-matching"):
@@ -255,15 +182,11 @@ class GATs_LoFTR(nn.Module):
         with self.profiler.record_function("LoFTR/fine-refinement"):
             (
                 desc3d_db_selected,
-                desc2d_db_selected,
                 query_feat_f_unfolded,
             ) = self.fine_preprocess(
                 data,
                 data["descriptors3d_db"],
-                data["descriptors2d_db"],
                 query_feat_f,
-                feat_3D_c=desc3d_db,
-                feat_query_c=query_feat_c,
             )
             # at least one coarse level predicted
             if (
@@ -271,21 +194,13 @@ class GATs_LoFTR(nn.Module):
                 and self.config["loftr_fine"]["enable"]
             ):
                 desc3d_db_selected, query_feat_f_unfolded = self.loftr_fine(
-                    desc3d_db_selected, desc2d_db_selected, query_feat_f_unfolded, data
+                    desc3d_db_selected, query_feat_f_unfolded
                 )
             else:
                 desc3d_db_selected = torch.einsum(
                     "bdn->bnd", desc3d_db_selected
                 )  # [N, L, C]
 
-        if return_fine_unfold_feat:
-            data.update(
-                {
-                    "desc3d_db_selected": desc3d_db_selected,
-                    "query_feat_f_unfolded": query_feat_f_unfolded,
-                }
-            )
-
-        # 5. match fine-level
+        # 5. fine-level matching
         with self.profiler.record_function("LoFTR/fine-matching"):
             self.fine_matching(desc3d_db_selected, query_feat_f_unfolded, data)

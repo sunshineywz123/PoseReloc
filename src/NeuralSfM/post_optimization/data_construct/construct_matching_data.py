@@ -1,13 +1,10 @@
-from matplotlib import pyplot as plt
 from torch.utils.data.dataset import Dataset
 import numpy as np
 import torch
-from loguru import logger
-
 
 class MatchingPairData(Dataset):
     """
-    Construct image pair for LoFTR fine matching
+    Construct image pair for refinement matching
     """
 
     def __init__(self, colmap_image_dataset) -> None:
@@ -38,7 +35,7 @@ class MatchingPairData(Dataset):
                 data[key + str(i)] = value
         assert (
             len(data) % 2 == 0
-        ), "build data pair error! please check built data pair!"
+        ), "Build data pair error!"
         data["pair_names"] = (data["img_path0"], data["img_path1"])
         return data
 
@@ -67,18 +64,14 @@ class MatchingPairData(Dataset):
             if len(related_index) != 0:
                 # successfully find!
                 if len(related_index) != 1:
-                    print(self.colmap_3ds[related_3d_id].image_ids)
-                    # FIXME: Duplicate keypoints in right frame! Currenct solution is use first one!
                     related_index = related_index[0]
-                    # import ipdb; ipdb.set_trace()
                 point2d_idx = self.colmap_3ds[related_3d_id].point2D_idxs[
                     np.squeeze(related_index).tolist()
                 ]  # int
                 left_kpts.append(
                     valid_kpts[i]
-                )  # FIXME: duplicate points in a feature track is counted twice!
+                )
                 right_kpts.append(self.colmap_images[right_img_id].xys[point2d_idx])
-                # print(f"right img id:{right_img_id}, point2d_idx:{point2d_idx}, point location: {self.colmap_images[right_img_id].xys[point2d_idx]}")
 
                 # Record left keypoints index in original frame keypoints
                 (
@@ -88,8 +81,6 @@ class MatchingPairData(Dataset):
                     related_3d_id
                 ]
                 assert self_img_id == left_img_id
-                if self_kpt_idx != valid_kpts_idxs[i]:
-                    logger.warning("Duplicate point exists in keyframe")
                 left_kpts_idx.append(valid_kpts_idxs[[i]])
 
         left_kpts = np.stack(left_kpts, axis=0)  # N*2
@@ -113,7 +104,6 @@ class MatchingPairData(Dataset):
                 "mkpts0_idx": torch.from_numpy(left_kpts_idx),
                 "frame0_colmap_id": left_img_id,
                 "frame1_colmap_id": right_img_id,
-                # "image_base_dir": self.colmap_image_dataset.img_dir
             }
         )
 
@@ -126,65 +116,5 @@ class MatchingPairData(Dataset):
             pair_data.update({
                 "homo_mat": torch.from_numpy(homo_sampled[None]) # B*3*3
             })
-
-            # homo_sampled_normed = normalize_homography(
-            #     torch.from_numpy(homo_sampled[None]).to(torch.float32), (h, w), (h, w)
-            # )
-            # # homo_warpped_image1 = transform.warp((pair_data['image1'].cpu().numpy() * 255).round().astype(np.int32)[0], homo_sampled)
-            # homo_warpped_image1 = homography_warp(
-            #     pair_data["image1"], torch.linalg.inv(homo_sampled_normed), (h, w)
-            # )
-
-            # # For debug:
-            # from src.utils.plot_utils import plot_single_image, make_matching_plot
-
-            # homo_warpped_image1 = (
-            #     (homo_warpped_image1.cpu().numpy() * 255).round().astype(np.int32)[0]
-            # )  # 1*H*W
-            # fig = plot_single_image(homo_warpped_image1[0])
-            # plt.savefig("homo_warpped_image.png")
-            # plt.close()
-            # original_image0 = (
-            #     (pair_data["image0"].cpu().numpy() * 255).round().astype(np.int32)[0]
-            # )  # 1*H*W
-            # original_image1 = (
-            #     (pair_data["image1"].cpu().numpy() * 255).round().astype(np.int32)[0]
-            # )  # 1*H*W
-            # fig = plot_single_image(original_image1[0])
-            # plt.savefig("original_image.png")
-            # plt.close()
-
-            # # Plot matching:
-            # norm_pixel_mat = normal_transform_pixel(h, w)
-            # right_kpts_normed = (
-            #     norm_pixel_mat[0].numpy()
-            #     @ (
-            #         np.concatenate(
-            #             [right_kpts, np.ones((right_kpts.shape[0], 1))], axis=-1
-            #         )
-            #     ).T
-            # ).astype(np.float32)
-            # right_kpts_warpped = (
-            #     norm_pixel_mat[0].inverse() @ homo_sampled_normed[0] @ right_kpts_normed
-            # ).T  # N*3
-
-            # right_kpts_warpped[:, :2] /= right_kpts_warpped[
-            #     :, [2]
-            # ]  # NOTE: Important! [:, 2] is not all 1!
-            # right_kpts_warpped = right_kpts_warpped[:, :2]  # N*2
-            # figure = make_matching_plot(
-            #     original_image1[0],
-            #     homo_warpped_image1[0],
-            #     right_kpts,
-            #     right_kpts_warpped,
-            #     right_kpts,
-            #     right_kpts_warpped,
-            #     color=np.zeros((left_kpts.shape[0], 3)),
-            #     text="",
-            # )
-            # plt.savefig("wrapped_match_pair.png")
-            # plt.close()
-            # homo_sampled = homo_sampled
-
         return pair_data
 

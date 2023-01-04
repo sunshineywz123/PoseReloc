@@ -76,7 +76,6 @@ def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
                    pad_to=None, ret_scales=False, ret_pad_mask=False,
                    augmentor=None):
     resize = tuple(resize)
-    # TODO: Refactor the code to separate read, pad and to_tensor. @ang
     if augmentor is None:
         image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if client is None \
             else load_array_from_petrel(path, client, cv2.IMREAD_GRAYSCALE)

@@ -1,4 +1,3 @@
-from genericpath import exists
 import cv2
 import torch
 import numpy as np
@@ -175,10 +174,11 @@ def filter_bbox(model_path, model_updated_save_path, box_path, box_trans_path=No
     from src.utils.colmap.read_write_model import read_model, write_model
     cameras, images, points3D = read_model(model_path, ext='.bin')
 
-    # Get 3D bbox:
-    corner_in_cano, _ = get_3d_box(box_path)
-    if box_trans_path is not None:
-        corner_in_cano = trans_corner(corner_in_cano, box_trans_path)
+    # # Get 3D bbox:
+    # corner_in_cano, _ = get_3d_box(box_path)
+    # if box_trans_path is not None:
+    #     corner_in_cano = trans_corner(corner_in_cano, box_trans_path)
+    corner_in_cano = np.loadtxt(box_path)
     
     # Get pointcloud:
     pointclouds = []
@@ -222,15 +222,13 @@ def filter_bbox(model_path, model_updated_save_path, box_path, box_trans_path=No
     points3D_keeped = {}
     for id, point3D in points3D.items():
         if id in passed_ids:
-            # Update images state!
+            # Update images state:
             for img_id, point2D_idx in zip(point3D.image_ids.tolist(), point3D.point2D_idxs.tolist()):
                 images[img_id].point3D_ids[point2D_idx] = -1
         else:
-            # Keep!
+            # Keep:
             points3D_keeped[id] = point3D
-    # import ipdb; ipdb.set_trace()
     
-    # TODO: Save updated colmap model
     if not osp.exists(model_updated_save_path):
         os.makedirs(model_updated_save_path, exist_ok=True)
     write_model(cameras, images, points3D_keeped, model_updated_save_path, ext='.bin')

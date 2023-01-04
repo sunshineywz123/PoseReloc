@@ -1,7 +1,10 @@
 import cv2
-from cv2 import Feature2D
 import numpy as np
 import torch
+from pathlib import Path
+import natsort
+import os
+from loguru import logger
 from vis3d.vis3d import Vis3D
 from sklearn.decomposition import PCA
 
@@ -304,3 +307,38 @@ def vis_pca_features(data):
         "feature2D_color_after": feature2D_color_after,
         "point_cloud": point_coord
     }
+
+def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=None):
+    """ 
+    Project 3D bbox by predicted pose and visualize
+    """
+    if isinstance(box3d, str):
+        box3d = np.loadtxt(box3d)
+
+    image_full = cv2.imread(image_path)
+
+    if draw_box:
+        reproj_box_2d = reproj(K, pose_pred, box3d)
+        draw_3d_box(image_full, reproj_box_2d, color='b', linewidth=10)
+    
+    if save_path is not None:
+        Path(save_path).parent.mkdir(exist_ok=True, parents=True)
+
+        cv2.imwrite(save_path, image_full)
+    return image_full
+
+def make_video(image_path, output_video_path):
+    # Generate video:
+    images = natsort.natsorted(os.listdir(image_path))
+    Path(output_video_path).parent.mkdir(parents=True, exist_ok=True)
+    H, W, C = cv2.imread(str(Path(image_path) /images[0])).shape
+    if Path(output_video_path).exists():
+        Path(output_video_path).unlink()
+    
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video = cv2.VideoWriter(output_video_path, fourcc, 24, (W, H))
+    for id, image_name in enumerate(images):
+        image = cv2.imread(str(Path(image_path) / image_name))
+        video.write(image)
+    video.release()
+    logger.info(f"Demo vido saved to: {output_video_path}")

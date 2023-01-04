@@ -3,11 +3,14 @@
 type: inference
 
 
-data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data/0646-fakecam-others fakecam-2"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error/outputs_softmax_loftr_loftr/0646-fakecam-others"
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data/0408-colorbox-box colorbox-4"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error/outputs_softmax_loftr_loftr/0408-colorbox-box"
+data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-test"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model/outputs_softmax_loftr_loftr/test_robot"
 
 match_type: softmax
-# task_name: cam_ready_test_loftr_gats_test_easy_0.1_7000_3d_train_use_coarse_nofb_gats_loftr_c3f1_nogats_warp_no_pad_nooptim_detector_sppspg
 task_name: cam_ready_test_speed
 suffix: ""
 feature_method: "average"
@@ -15,13 +18,6 @@ verbose: False
 
 use_global_ray: True
 use_local_ray: True
-
-ray:
-  slurm: False
-  n_workers: 8
-  n_cpus_per_worker: 5
-  n_gpus_per_worker: 1
-  local_mode: False
 
 model:
   # _target_: src.models.spg_model.LitModelSPG
@@ -212,7 +208,7 @@ datamodule:
     num_leaf: 8
     shape2d: 2000 # Not used
     shape3d_train: 10000 # NOTE: Changed from 11000 to 12000
-    shape3d_val: 10000 # 15000
+    shape3d_val: 7000 # 15000
     load_3d_coarse: True
     pad3D: False
 
@@ -231,139 +227,6 @@ datamodule:
 network:
   detection: loftr
   matching: loftr
-
-# object_detector_method: SPP+SPG # ['GT', "SPP+SPG", "loftr"]
-object_detector_method: "GT" # ['GT', "SPP+SPG", "loftr"]
-data_dir: ${data_base_dir}
-top_k_obj: null
-num_val_seq: 1 # last n objects
-ids:
-    # - '0408'
-    # - '0409'
-    # - '0419'
-    # - '0422'
-    # - '0423'
-    # - '0424'
-    # - '0447'
-    # - '0450'
-    # - '0452'
-    # - '0455'
-    # - '0456'
-    # - '0458'
-    # - '0459'
-    # - '0466'
-    # - '0468'
-    # - '0469'
-    # - '0470'
-    # - '0471'
-    # - '0472'
-    # - '0473'
-    # - '0474'
-    # - '0476'
-    # - '0480'
-    # - '0483'
-    # - '0486'
-    # - '0487'
-    # - '0488'
-    # - '0489'
-    # - '0490'
-    # - '0492'
-    # - '0493'
-    # - '0494'
-    # - '0495'
-    # - '0496'
-    # - '0497'
-    # - '0498'
-    # - '0500'
-    # - '0501'
-    # - '0502'
-    # - '0503'
-    # - '0504'
-    # - '0508'
-    # - '0510'
-    # - '0511'
-    # - '0517'
-    # - '0518'
-    # - '0519'
-    # - '0520'
-    # - '0521'
-    # - '0522'
-    # - '0523'
-    # - '0525'
-    # - '0526'
-    # - '0527'
-    # - '0534'
-    # - '0535'
-    # - '0537'
-    # - '0539'
-    # - '0543'
-    # - '0547'
-    # - '0548'
-    # - '0550'
-    # - '0551'
-    # - '0552'
-    # - '0557'
-    # - '0558'
-    # - '0559'
-    # - '0560'
-    # - '0564'
-    # - '0565'
-    # - '0568'
-    # - '0570'
-    # - '0576'
-    # - '0577'
-    # - '0578'
-    # - '0579'
-    # - '0580'
-    # - '0582'
-    # - '0583'
-    # - '0593'
-    # - '0594'
-    # - '0595'
-
-    # # test hard
-    - '0601'
-    # - '0603'
-    # - '0604'
-    # - '0626'
-    # - '0627'
-    # - '0628'
-    # - '0629'
-    # - '0630'
-    # - '0631'
-    # - '0600'
-    # - '0602'
-    # - '0606'
-    # - '0607'
-    # - '0608'
-    # - '0610'
-    # - '0612'
-    # - '0613'
-    # - '0615'
-    # - '0618'
-    # - '0619'
-    # - '0620'
-    # - '0621'
-    # - '0622'
-    # - '0623'
-    # - '0624'
-    # - '0625'
-    # - '0633'
-    # - '0634'
-    # - '0635'
-    # - '0636'
-    # - '0637'
-    # - '0638'
-    # - '0639'
-    # - '0640'
-    # - '0641'
-    # - '0642'
-    # - '0643'
-    # - '0644'
-    # - '0645'
-    # - '0646'
-exception_obj_names: 
-    -
 
 
 output:

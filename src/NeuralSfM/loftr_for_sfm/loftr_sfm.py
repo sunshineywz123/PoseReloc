@@ -30,8 +30,6 @@ from .utils.sample_feature_from_featuremap import sample_feature_from_featuremap
 from src.utils.misc import upper_config  # TODO: Remove the out of package import
 from src.utils.torch_utils import torch_speed_test
 
-# from .two_view_refinement.pose_depth_refinement import PoseDepthRefinement
-
 
 class LoFTR_SfM(nn.Module):
     def __init__(self, config={}, profiler=None, debug=False, extract_coarse_feats_mode=False):
@@ -222,7 +220,6 @@ class LoFTR_SfM(nn.Module):
                 (data["mkpts0_c"].shape[0],), device=data["mkpts0_c"].device
             ).long()
 
-
             data['mkpts0_c'][:, 0] = torch.clip(data['mkpts0_c'][:, 0], min=0, max=data['hw0_i'][1] - 2)
             data['mkpts0_c'][:, 1] = torch.clip(data['mkpts0_c'][:, 1], min=0, max=data['hw0_i'][0] - 2)
             data['mkpts1_c'][:, 0] = torch.clip(data['mkpts1_c'][:, 0], min=0, max=data['hw1_i'][1] - 2)
@@ -246,12 +243,6 @@ class LoFTR_SfM(nn.Module):
                 mkpts1_coarse_scaled[:, 1] * data["hw1_c"][1]
                 + mkpts1_coarse_scaled[:, 0]
             ).long()
-
-            # # Debug
-            # mkpts0_c = torch.stack([i_ids % data['hw0_c'][1], i_ids // data['hw0_c'][1]], dim=1) * scale0
-            # mkpts1_c = torch.stack([j_ids % data['hw1_c'][1], j_ids // data['hw1_c'][1]], dim=1) * scale1
-            # print(torch.mean(mkpts0_c - data['mkpts0_c']))
-            # print(torch.mean(mkpts1_c - data['mkpts1_c']))
 
             feat_c0, feat_c1 = None, None
 
