@@ -59,7 +59,6 @@ def make_matching_plot_fast(
         cv2.circle(out, (x0, y0), 2, c, -1, lineType=cv2.LINE_AA)
         cv2.circle(out, (x1 + margin + W0, y1), 2, c, -1, lineType=cv2.LINE_AA)
 
-    # FIXME: vis num_matches_to_show pairs
     if num_matches_to_show:
         pass
 
@@ -150,40 +149,6 @@ def reproj(K, pose, pts_3d):
     reproj_points = reproj_points[:] / reproj_points[2:]
     reproj_points = reproj_points[:2, :].T
     return reproj_points  # [n, 2]
-
-
-def ransac_PnP(K, pts_2d, pts_3d, scale=1):
-    """solve pnp"""
-    dist_coeffs = np.zeros(shape=[8, 1], dtype="float64")
-
-    pts_2d = np.ascontiguousarray(pts_2d.astype(np.float64))
-    pts_3d = np.ascontiguousarray(pts_3d.astype(np.float64))
-    K = K.astype(np.float64)
-
-    pts_3d *= scale
-    try:
-        _, rvec, tvec, inliers = cv2.solvePnPRansac(
-            pts_3d,
-            pts_2d,
-            K,
-            dist_coeffs,
-            reprojectionError=5,
-            iterationsCount=10000,
-            flags=cv2.SOLVEPNP_EPNP,
-        )
-        # _, rvec, tvec, inliers = cv2.solvePnPRansac(pts_3d, pts_2d, K, dist_coeffs)
-
-        rotation = cv2.Rodrigues(rvec)[0]
-
-        tvec /= scale
-        pose = np.concatenate([rotation, tvec], axis=-1)
-        pose_homo = np.concatenate([pose, np.array([[0, 0, 0, 1]])], axis=0)
-
-        return pose, pose_homo, inliers
-    except cv2.error:
-        print("CV ERROR")
-        return np.eye(4)[:3], np.eye(4), []
-
 
 def draw_3d_box(image, corners_2d, linewidth=3, color="g"):
     """Draw 3d box corners

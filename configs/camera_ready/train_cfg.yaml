@@ -49,10 +49,10 @@ trainer:
     # resume_from_checkpoint: '${work_dir}/models/checkpoints/${exp_name}/last.ckpt'
 
 model:
-  _target_: src.models.GATs_LoFTR_lightning_model.PL_GATsLoFTR
+  _target_: src.models.OnePosePlus_lightning_model.PL_OnePosePlus
   pretrained_ckpt: null
 
-  loftr:
+  OnePosePlus:
     loftr_backbone:
       type: "ResNetFPN"
       resolution: [8, 2]
@@ -167,10 +167,10 @@ model:
     coarse_type: "focal"
     coarse_weight: 1.0
     fine_type: "l2_with_std"
-    fine_weight: 0.81 # Calculated according to fine window size in train_gats_loftr.py
+    fine_weight: 0.81 
 
     # Config for coarse
-    focal_alpha: 0.5 # 0.25 default
+    focal_alpha: 0.5 
     focal_gamma: 2.0
     pos_weight: 1.0
     neg_weight: 1.0
@@ -213,7 +213,7 @@ model:
   match_type: "softmax"
 
 datamodule:
-    _target_: src.datamodules.GATs_loftr_datamodule.GATsLoFTRDataModule
+    _target_: src.datamodules.OnePosePlus_datamodule.OnePosePlusDataModule
     # data_dirs: ${sfm_dir}
     anno_dirs: outputs_${model.match_type}/anno
     train_anno_file: ${merge_output_dir}/${task_name}/train.json
@@ -227,7 +227,6 @@ datamodule:
     train_percent: 1.0 # For debug
     val_percent: 0.4
 
-    # TODO: move to a template
     # 3D part
     load_3d_coarse: True
     shape3d_train: 7000

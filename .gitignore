@@ -238,9 +238,10 @@ visual/
 .hydra/*.yaml
 # *.yaml
 weight
-models
+/models
 command
 *.png
 pretrained
 .history
 .hydra/**
+submodules

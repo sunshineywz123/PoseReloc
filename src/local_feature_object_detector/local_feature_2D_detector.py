@@ -5,52 +5,29 @@ import numpy as np
 import natsort
 import pytorch_lightning as pl
 
-from src.NeuralSfM.loftr_config.default import get_cfg_defaults
-from src.NeuralSfM.loftr_for_sfm.loftr_sfm import LoFTR_SfM
-from src.utils.torch_utils import update_state_dict, STATE_DICT_MAPPER
-from src.utils.misc import lower_config
+from src.NeuralSfM.loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
 from src.utils.colmap.read_write_model import read_model
 from src.utils.data_utils import get_K_crop_resize, get_image_crop_resize
 from src.utils.vis_utils import reproj
-from src.datasets.utils import read_grayscale
 
 cfgs = {
-    "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
     "model": {
         "method": "LoFTR",
-        "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse_fine.py",
         "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
         "seed": 666,
     },
 }
 
 def build_2D_match_model(args):
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file(args['cfg_path'])
     pl.seed_everything(args['seed'])
 
     if args['method'] == 'LoFTR':
-        match_cfg = {
-            "loftr_backbone": lower_config(cfg.LOFTR_BACKBONE),
-            "loftr_coarse": lower_config(cfg.LOFTR_COARSE),
-            "loftr_match_coarse": lower_config(cfg.LOFTR_MATCH_COARSE),
-            "loftr_fine": lower_config(cfg.LOFTR_FINE),
-            "loftr_match_fine": lower_config(cfg.LOFTR_MATCH_FINE),
-            "loftr_guided_matching": lower_config(cfg.LOFTR_GUIDED_MATCHING),
-        }
-        matcher = LoFTR_SfM(config=match_cfg)
+        matcher = LoFTR_for_OnePose_Plus(config=default_cfg)
         # load checkpoints
         state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
         for k in list(state_dict.keys()):
             state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
-        try:
-            matcher.load_state_dict(state_dict, strict=True)
-        except RuntimeError as _:
-            state_dict, updated = update_state_dict(
-                STATE_DICT_MAPPER, state_dict=state_dict
-            )
-            assert updated
-            matcher.load_state_dict(state_dict, strict=True)
+        matcher.load_state_dict(state_dict, strict=True)
 
         matcher.eval()
     else:
@@ -174,17 +151,6 @@ class LocalFeatureObjectDetector():
             )
         ]
         return detect_results_dict[idx_sorted[0]]["bbox"]
-
-    def robust_crop(self, query_img_path, bbox, K, crop_size=512):
-        x0, y0 = bbox[0], bbox[1]
-        x1, y1 = bbox[2], bbox[3]
-        x_c = (x0 + x1) / 2
-        y_c = (y0 + y1) / 2
-
-        origin_img = cv2.imread(query_img_path, cv2.IMREAD_GRAYSCALE)
-        image_crop = origin_img
-        K_crop, K_crop_homo = get_K_crop_resize(bbox, K, [crop_size, crop_size])
-        return image_crop, K_crop
 
     def crop_img_by_bbox(self, query_img_path, bbox, K=None, crop_size=512):
         """

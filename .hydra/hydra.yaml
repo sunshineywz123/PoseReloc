@@ -109,12 +109,14 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +camera_ready=sfm_demo
+    - +camera_ready=sfm_loftr_coarse_fine_val_geometric_error
+    - use_local_ray=True
     - use_global_ray=False
-    - use_local_ray=False
+    - ray.n_workers=7
+    - dataset.top_k_obj=null
   job:
     name: run
-    override_dirname: +camera_ready=sfm_demo,use_global_ray=False,use_local_ray=False
+    override_dirname: +camera_ready=sfm_loftr_coarse_fine_val_geometric_error,dataset.top_k_obj=null,ray.n_workers=7,use_global_ray=False,use_local_ray=True
     id: ???
     num: ???
     config_name: config.yaml
@@ -139,7 +141,7 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      camera_ready: sfm_demo
+      camera_ready: sfm_loftr_coarse_fine_val_geometric_error
       logger: null
       callbacks: default_callbacks.yaml
       datamodule: mnist_datamodule.yaml

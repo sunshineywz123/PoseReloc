@@ -1,1 +1,0 @@
-from .GATs_LoFTR import OnePosePlus_model

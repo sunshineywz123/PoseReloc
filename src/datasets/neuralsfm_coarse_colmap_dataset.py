@@ -8,8 +8,6 @@ from torch.utils.data import Dataset
 from src.datasets.utils import (
     read_grayscale,
 )
-from src.NeuralSfM.post_optimization.utils.eval_metric_utils import eval_colmap_results
-from src.NeuralSfM.post_optimization.utils.geometry_utils import get_pose_from_colmap_image
 
 from src.utils.colmap.read_write_model import (
     read_images_binary,
@@ -73,21 +71,6 @@ class CoarseColmapDataset(Dataset):
             osp.join(colmap_results_dir, "points3D.bin")
         )
 
-        # for id, pointcloud in self.colmap_3ds.items():
-        #     image_id_unique, index , counts = np.unique(pointcloud.image_ids, return_counts=True, return_index=True)
-        #     # TODO: see distance between two keypoints here!
-        #     if image_id_unique.shape[0] != pointcloud.image_ids.shape[0]:
-        #         print(image_id_unique, counts)
-
-        #         un_unique_mask = counts > 1
-        #         un_unique_img_id = image_id_unique[un_unique_mask].tolist()
-        #         for un_unique_id in un_unique_img_id:
-        #             idx = np.squeeze(np.argwhere(pointcloud.image_ids == un_unique_id), axis=-1)
-        #             point_idxs = pointcloud.point2D_idxs[idx]
-        #             double_point = self.colmap_images[un_unique_id].xys[point_idxs]
-        #             print(double_point)
-        #             pass
-
         self.colmap_cameras = read_cameras_binary(
             osp.join(colmap_results_dir, "cameras.bin")
         )
@@ -124,7 +107,6 @@ class CoarseColmapDataset(Dataset):
         self.colmap_frame_dict = {}
         self.build_initial_depth_pose(self.colmap_frame_dict)
         self.extract_corresponding_frames(self.colmap_frame_dict)
-        pass
 
     def extract_corresponding_frames(self, colmap_frame_dict):
         """
@@ -511,27 +493,6 @@ class CoarseColmapDataset(Dataset):
 
         if evaluation:
             raise NotImplementedError
-            pose_err_before_refine, aucs_before_refine = eval_colmap_results(
-                self,
-                self.colmap_results_dir.rsplit("/", 1)[0],
-                self.colmap_results_dir.rsplit("/", 1)[1],
-            )
-            pose_err_after_refine, aucs_after_refine = eval_colmap_results(
-                self,
-                self.colmap_refined_save_dir.rsplit("/", 1)[0],
-                self.colmap_refined_save_dir.rsplit("/", 1)[1],
-                save_error_path=self.colmap_refined_save_dir.rsplit("/", 2)[0],
-            )
-
-            if aucs_before_refine["auc@5"] < aucs_after_refine["auc@5"]:
-                name_label = "good"
-            elif aucs_before_refine["auc@5"] < aucs_after_refine["auc@5"]:
-                name_label = "equal"
-            else:
-                name_label = "bad"
-
-            print(f"{self.subset_name} aucs before refine", aucs_before_refine)
-            print(f"{self.subset_name} aucs after refine", aucs_after_refine)
         else:
             pose_err_before_refine, pose_err_after_refine = None, None
             name_label = None

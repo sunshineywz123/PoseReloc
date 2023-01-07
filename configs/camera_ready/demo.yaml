@@ -7,8 +7,10 @@ type: inference
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error/outputs_softmax_loftr_loftr/0646-fakecam-others"
 # data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data/0408-colorbox-box colorbox-4"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error/outputs_softmax_loftr_loftr/0408-colorbox-box"
-data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-test"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model/outputs_softmax_loftr_loftr/test_robot"
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-test"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model/outputs_softmax_loftr_loftr/test_robot"
+data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/demo_cam cam-test"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam"
 
 match_type: softmax
 task_name: cam_ready_test_speed

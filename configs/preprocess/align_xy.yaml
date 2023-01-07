@@ -33,12 +33,15 @@ dataset:
         # - ${data_base_dir}/1015-toshihiba-others toshihiba-1
         # - ${data_base_dir}/1016-dingshuju-others dingshuju-1
 
-        - ${data_base_dir}/1017-luckincup-others luckincup-1
-        - ${data_base_dir}/1018-tiesanjiao-others tiesanjiao-1
-        - ${data_base_dir}/1019-airpodsdog-others airpodsdog-1
-        - ${data_base_dir}/1020-iphonecharger-others iphonecharger-1
-        - ${data_base_dir}/1021-hhkbhandrest-others hhkbhandrest-1
-        - ${data_base_dir}/1022-logimouse-others logimouse-1
+        # - ${data_base_dir}/1017-luckincup-others luckincup-1
+        # - ${data_base_dir}/1018-tiesanjiao-others tiesanjiao-1
+        # - ${data_base_dir}/1019-airpodsdog-others airpodsdog-1
+        # - ${data_base_dir}/1020-iphonecharger-others iphonecharger-1
+        # - ${data_base_dir}/1021-hhkbhandrest-others hhkbhandrest-1
+        # - ${data_base_dir}/1022-logimouse-others logimouse-1
+
+        - ${data_base_dir}/1023-pinkplate-others pinkplate-1
+        - ${data_base_dir}/1024-chamtglass-others chamtglass-1
 
 
         # - ${data_base_dir}/0612-insta-others insta-1 insta-2

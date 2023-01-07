@@ -1,3 +1,5 @@
-- +camera_ready=sfm_demo
+- +camera_ready=sfm_loftr_coarse_fine_val_geometric_error
+- use_local_ray=True
 - use_global_ray=False
-- use_local_ray=False
+- ray.n_workers=7
+- dataset.top_k_obj=null

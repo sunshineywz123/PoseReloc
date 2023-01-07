@@ -27,7 +27,8 @@ dataset:
   max_num_kp2d: 10000
 
   data_dir:
-    - /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-annotate
+    # - /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-annotate
+    - /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/demo_cam cam-annotate
 
   outputs_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model
 

@@ -94,7 +94,6 @@ def chunks(lst, n, length=None):
 
     for i in range(0, _len, n):
         yield lst[i : i + n]
-    # TODO: Check that lst is fully iterated
 
 
 def chunk_index(total_len, sub_len):

@@ -13,10 +13,9 @@ from pathlib import Path
 from src.utils import data_utils
 from src.utils import vis_utils
 from src.utils.metric_utils import ransac_PnP
-from src.datasets.GATs_loftr_inference_dataset import OnePosePlus_inference_dataset
-from src.inference.inference_gats_loftr.inference_gats_loftr import build_model
+from src.datasets.OnePosePlus_inference_dataset import OnePosePlusInferenceDataset
+from src.inference.inference_OnePosePlus import build_model
 from src.local_feature_object_detector.local_feature_2D_detector import LocalFeatureObjectDetector
-from src.hloc.postprocess.filter_points import get_3d_box
 
 def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
     sfm_ws_dir = osp.join(
@@ -67,7 +66,7 @@ def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
 
 def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
     img_list, paths = get_default_paths(cfg, data_root, seq_dir, sfm_model_dir)
-    dataset = OnePosePlus_inference_dataset(
+    dataset = OnePosePlusInferenceDataset(
         paths['sfm_dir'],
         img_list,
         load_3d_coarse=cfg.datamodule.load_3d_coarse,
@@ -84,6 +83,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
     local_feature_obj_detector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
         output_results=False,
+        # output_results=True,
         detect_save_dir=paths["vis_detector_dir"],
     )
     match_2D_3D_model = build_model(cfg['model']["loftr"], cfg['model']['pretrained_ckpt'])
@@ -91,7 +91,6 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
 
     K, _ = data_utils.get_K(paths["intrin_full_path"])
 
-    # bbox3d, _ = get_3d_box(paths["bbox3d_path"]) # FIXME: refactor here!
     bbox3d = np.loadtxt(paths["bbox3d_path"])
     pred_poses = {}  # {id:[pred_pose, inliers]}
     for id in tqdm(range(len(dataset))):
@@ -109,7 +108,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
             # Use 3D bbox and previous frame's pose to yield current frame 2D bbox:
             previous_frame_pose, inliers = pred_poses[id - 1]
 
-            if len(inliers) < 40:
+            if len(inliers) < 20:
                 # Consider previous pose estimation failed, reuse local feature object detector:
                 bbox, inp_crop, K_crop = local_feature_obj_detector.detect(
                     query_image, query_image_path, K
@@ -129,7 +128,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         match_2D_3D_model(data)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy() # N*3
         mkpts_query = data["mkpts_query_f"].cpu().numpy() # N*2
-        pose_pred, _, inliers, _ = ransac_PnP(K_crop, mkpts_query, mkpts_3d, scale=1000, pnp_reprojection_error=3)
+        pose_pred, _, inliers, _ = ransac_PnP(K_crop, mkpts_query, mkpts_3d, scale=1000, pnp_reprojection_error=7, img_hw=[512,512], use_pycolmap_ransac=True)
 
         pred_poses[id] = [pose_pred, inliers]
 

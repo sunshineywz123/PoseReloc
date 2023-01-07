@@ -43,10 +43,6 @@ def compute_homography_sap(h, w, angle=0, tx=0, ty=0, scale=1, k0=1, k1=0, v0=0,
 
 
 def sample_homography_sap(h, w, **kwargs):
-    # angle = 0
-    # tx = 0
-    # ty = 0
-    # scale = 1
     angle = np.random.uniform(-180, 180)
     tx = np.random.uniform(-0.25, 0.25)
     ty = np.random.uniform(-0.25, 0.25)
@@ -56,15 +52,8 @@ def sample_homography_sap(h, w, **kwargs):
     # k1 = 0
     k1 = np.random.uniform(-0.1, 0.1)
 
-    # v0 = 0
-    # v1 = 0
-    # v0 = np.random.uniform(-0.8, 0.8)
-    # v1 = np.random.uniform(-0.8, 0.8)
     v0 = np.random.uniform(-0.5, 0.5)
     v1 = np.random.uniform(-0.5, 0.5)
-    # sm_fac = 1
-    # v0 = scipy_truncnorm.rvs(-sm_fac, sm_fac, loc=0, scale=1)*0.9/sm_fac
-    # v1 = scipy_truncnorm.rvs(-sm_fac, sm_fac, loc=0, scale=1)*0.9/sm_fac
 
     H = compute_homography_sap(h, w, angle, tx, ty, scale, k0, k1, v0, v1)
     return H

@@ -494,12 +494,14 @@ if __name__ == "__main__":
         # "1014-gengbox-others",
         # "1015-toshihiba-others",
         # "1016-dingshuju-others",
-        "1017-luckincup-others",
-        "1018-tiesanjiao-others",
-        "1019-airpodsdog-others",
-        "1020-iphonecharger-others",
-        "1021-hhkbhandrest-others",
-        "1022-logimouse-others",
+        # "1017-luckincup-others",
+        # "1018-tiesanjiao-others",
+        # "1019-airpodsdog-others",
+        # "1020-iphonecharger-others",
+        # "1021-hhkbhandrest-others",
+        # "1022-logimouse-others",
+        '1023-pinkplate-others',
+        "1024-chamtglass-others"
 
     ]
     deal_first = True

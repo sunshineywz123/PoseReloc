@@ -59,7 +59,6 @@ class YCBAug(object):
     """
 
     def __init__(self):
-        # TODO: Mutual exclusive group
         self.augmentor = A.Compose(
             [
                 A.ISONoise(intensity=(0.4, 0.9),p=0.25),

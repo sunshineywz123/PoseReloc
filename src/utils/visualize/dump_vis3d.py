@@ -1,5 +1,4 @@
 from shutil import rmtree
-from unittest import result
 import cv2
 from loguru import logger
 from vis3d.vis3d import Vis3D

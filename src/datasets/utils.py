@@ -29,7 +29,6 @@ def process_resize(w, h, resize, df=None):
 
 
 def pad_bottom_right(inp, pad_size, ret_mask=False):
-    # TODO: Generalize the input ndim & simplify code  @ang
     assert isinstance(pad_size, int) and pad_size >= max(inp.shape[-2:])
     mask = None
     if inp.ndim == 2:
@@ -50,18 +49,11 @@ def pad_bottom_right(inp, pad_size, ret_mask=False):
 
 
 def grayscale2tensor(image, mask=None):
-    # TODO: Normalize grayscale image with (mean, std)?
     return torch.from_numpy(image/255.).float()[None]  # (1, h, w)
 
 
 def mask2tensor(mask):
     return torch.from_numpy(mask).float()  # (h, w)
-
-
-def depth2tensor(depth):
-    # don't do normalization
-    return torch.from_numpy(depth).float()  # (h, w)
-
 
 def ndarray2grayscale(inp):
     """Transform ndarray (from tensor.cpu().numpy) to grayscale image"""
@@ -71,21 +63,18 @@ def load_intrinsics_from_h5(intrinsics_path):
     assert osp.exists(intrinsics_path), f"intrinsic path {intrinsics_path} not exists"
     with h5py.File(intrinsics_path, 'r') as f:
         intrinsics = f['K'].__array__().astype(np.float32)
-        # q = f['q'].__array__().astype(np.float32)
     return intrinsics
 
 
-def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
+def read_grayscale(path, resize=None, resize_float=False, df=None,
                    pad_to=None, ret_scales=False, ret_pad_mask=False,
                    augmentor=None):
     resize = tuple(resize) if resize is not None else None
     assert osp.exists(path), f"image path: {path} not exists!"
     if augmentor is None:
-        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if client is None \
-            else load_array_from_petrel(path, client, cv2.IMREAD_GRAYSCALE)
+        image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
     else:
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR) if client is None \
-            else load_array_from_petrel(path, client, cv2.IMREAD_COLOR)  # BGR image
+        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = augmentor(image)
         image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -114,75 +103,9 @@ def read_grayscale(path, resize=None, resize_float=False, df=None, client=None,
     return ret_val[0] if len(ret_val) == 1 else ret_val
 
 
-def read_color(path, client):
-    image = cv2.imread(str(path), cv2.IMREAD_COLOR) if client is None \
-        else load_array_from_petrel(path, client, cv2.IMREAD_COLOR)
+def read_color(path):
+    image = cv2.imread(str(path), cv2.IMREAD_COLOR)
     return image
-
-
-def read_grayscale_megadepth(path, client=None, ret_tensor=True):
-    image = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE) if client is None \
-        else load_array_from_petrel(path, client, cv2.IMREAD_GRAYSCALE)
-
-    return grayscale2tensor(image) if ret_tensor else image
-
-
-def read_depth(path, client=None):
-    depth = cv2.imread(str(path), cv2.IMREAD_UNCHANGED) if client is None \
-        else load_array_from_petrel(path, client, cv2.IMREAD_UNCHANGED)
-    depth = depth / 1000
-    ts_depth = depth2tensor(depth)
-    return ts_depth
-
-
-def read_depth_megadepth(path, client=None, pad_to=None):
-    depth = np.array(h5py.File(path, 'r')['/depth']) if client is None \
-        else load_array_from_petrel(path, client, None, use_h5py=True)  # (h, w)
-
-    if pad_to is not None:
-        depth, _ = pad_bottom_right(depth, pad_to)
-
-    return depth2tensor(depth)
-
-def read_kpts_megadepth(path,client=None):
-    if client is None:
-        assert osp.exists(path), "file not exist!"
-        with h5py.File(path,"r") as f:
-            keypoints=f["/keypoints"].__array__().astype(np.float32)
-            keypoints_img_size=f["/img_size"].__array__().astype(np.float32)
-    else:
-        keypoints,keypoints_img_size=load_kpts_from_petrel(path,client)
-    
-    return keypoints,keypoints_img_size
-
-def load_kpts_from_petrel(path,client=None):
-    byte_str = client.Get(path)
-    try:
-        f = io.BytesIO(byte_str)
-        keypoints = np.array(h5py.File(f, 'r')['/keypoints']).astype(np.float32)
-        keypoints_img_size = np.array(h5py.File(f,'r')['/img_size']).astype(np.float32)
-    except Exception as ex:
-        print(f"==> Data loading failure: {path}")
-        raise ex
-    assert keypoints is not None
-    return keypoints,keypoints_img_size
-
-def load_array_from_petrel(path, client, cv_type, max_retry=10, use_h5py=False, return_tensor=True):
-    byte_str = client.Get(path)
-    try:
-        if not use_h5py:
-            raw_array = np.fromstring(byte_str, np.uint8)
-            data = cv2.imdecode(raw_array, cv_type)
-        else:
-            f = io.BytesIO(byte_str)
-            data = np.array(h5py.File(f, 'r')['/depth'])
-    except Exception as ex:
-        print(f"==> Data loading failure: {path}")
-        raise ex
-
-    assert data is not None
-    return data
-
 
 def calc_max_size(img_path, max_area):
     try:

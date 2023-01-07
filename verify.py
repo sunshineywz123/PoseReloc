@@ -9,6 +9,7 @@ from loguru import logger
 from pathlib import Path
 from omegaconf import DictConfig
 
+from src.sfm_utils import pairs_from_poses_hloc
 
 def align(cfg):
     data_dirs = cfg.dataset.data_dir
@@ -38,9 +39,9 @@ def align(cfg):
 
 
 def align_core(cfg, img_lists, outputs_dir_root):
-    from src.hloc import extract_features, pairs_from_poses, generate_empty, \
+    from src.sfm_utils import extract_features, generate_empty, \
                          match_features, triangulation, global_ba
-    from src.hloc.postprocess.ba_postprocess import parse_align_pose
+    from src.sfm_utils.postprocess.ba_postprocess import parse_align_pose
     
     outputs_dir = osp.join(outputs_dir_root, 'outputs_' + cfg.network.detection + '_' + cfg.network.matching)
     
@@ -56,11 +57,8 @@ def align_core(cfg, img_lists, outputs_dir_root):
         os.system(f'rm -rf {outputs_dir}')
         Path(outputs_dir).mkdir(exist_ok=True, parents=True)
 
-        max_rotation = cfg.sfm.max_rotation
-        min_rotation = cfg.sfm.min_rotation
-
         extract_features.main(img_lists, feature_out, cfg)
-        pairs_from_poses.covis_from_pose(img_lists, covis_pairs_out, covis_num, do_ba=True)
+        pairs_from_poses_hloc.covis_from_pose(img_lists, covis_pairs_out, covis_num, do_ba=True)
         match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
         generate_empty.generate_model(img_lists, empty_dir, do_ba=True)
         triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out,

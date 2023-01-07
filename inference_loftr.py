@@ -5,13 +5,14 @@ import hydra
 from tqdm import tqdm
 import os
 import os.path as osp
+from pathlib import Path
 import numpy as np
 from loguru import logger
 import math
 
 from omegaconf.dictconfig import DictConfig
 
-from src.inference.inference_gats_loftr.inference_gats_loftr import inference_gats_loftr
+from src.inference.inference_OnePosePlus import inference_onepose_plus
 from src.utils.ray_utils import ProgressBar, chunks
 
 
@@ -169,10 +170,10 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
             else:
                 raise NotImplementedError
 
-            img_names = os.listdir(color_dir)
-            if len(img_names) == num_img_in_mapping_seq:
+            img_paths = list(Path(color_dir).glob("*.png"))
+            if len(img_paths) == num_img_in_mapping_seq:
                 logger.warning(f"Same num of images in test sequence:{sub_dir}")
-            image_paths = [osp.join(color_dir, img_name) for img_name in img_names]
+            image_paths = [str(img_path) for img_path in img_paths]
             all_image_paths += image_paths
 
         if len(all_image_paths) == 0:
@@ -192,14 +193,15 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
             obj_name,
         )
 
-        metrics = inference_gats_loftr(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose)
+        metrics = inference_onepose_plus(sfm_results_dir, all_image_paths, cfg, use_ray=cfg.use_local_ray, verbose=cfg.verbose)
         obj_name2metrics[obj_name] = metrics
         if pba is not None:
             pba.update.remote(1)
     
     return obj_name2metrics
 
-@ray.remote
+@ray.remote(num_cpus=1)
+# @ray.remote(num_cpus=4, num_gpus=1, max_calls=1)  # release gpu after finishing
 def inference_worker_ray_wrapper(*args, **kwargs):
     return inference_worker(*args, **kwargs)
 

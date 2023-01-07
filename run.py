@@ -3,6 +3,7 @@ import os
 import os.path as osp
 import natsort
 
+
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 import hydra
 import math
@@ -16,8 +17,9 @@ from pathlib import Path
 from omegaconf import DictConfig
 
 
-from src.utils.colmap.read_write_model import read_model, write_model
 from src.utils.ray_utils import ProgressBar, chunks
+from src.sfm_utils import pairs_from_index
+from src.sfm_utils import pairs_from_poses
 
 def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
@@ -146,14 +148,12 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
     """ 
     Keypoint-Free SfM: coarse reconstruction (including match features, triangulation), post optimization
     """
-    from src.hloc import (
-        pairs_from_covisibility,
+    from src.sfm_utils import (
         generate_empty,
         triangulation,
-        pairs_from_poses,
         pairs_exhaustive_all,
     )
-    from src.NeuralSfM import coarse_match, post_optimization
+    from src.KeypointFreeSfM import coarse_match, post_optimization
 
     outputs_dir = osp.join(
         outputs_dir_root,
@@ -206,7 +206,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
             )
         else:
             if cfg.sfm.gen_cov_from == 'index':
-                pairs_from_covisibility.covis_from_index(
+                pairs_from_index.covis_from_index(
                     img_lists,
                     covis_pairs_out,
                     num_matched=covis_num,
@@ -299,15 +299,10 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
 
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     """ Filter points and average feature"""
-    from src.hloc.postprocess import filter_points, feature_process, filter_tkl
+    from src.sfm_utils.postprocess import filter_points, feature_process, filter_tkl
 
-    # data_dir0 = osp.join(root_dir, sub_dirs[0])
     bbox_path = osp.join(root_dir, "box3d_corners.txt")
     trans_box_path = None
-    # trans_box_path = osp.join(data_dir0, "Box_trans.txt")
-    # if not osp.exists(trans_box_path):
-    #     logger.warning(f'trans box path:{trans_box_path} not exists')
-    #     trans_box_path = None
 
     outputs_dir = osp.join(
         outputs_dir_root,

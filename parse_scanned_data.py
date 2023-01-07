@@ -300,13 +300,13 @@ if __name__ == "__main__":
 
     seq_dirs = os.listdir(data_dir)
     for seq_dir in seq_dirs:
-        if '-annotate' in seq_dir:
-            print('=> Processing annotate sequence: ', seq_dir)
-            data_process_anno(osp.join(data_dir, seq_dir), downsample_rate=1, hw=512)
-        elif '-test' in seq_dir:
+        if '-test' in seq_dir:
             # Parse scanned test sequence
             print('=> Processing test sequence: ', seq_dir)
             data_process_test(osp.join(data_dir, seq_dir), downsample_rate=1)
+        # elif '-annotate' in seq_dir:
+        #     print('=> Processing annotate sequence: ', seq_dir)
+        #     data_process_anno(osp.join(data_dir, seq_dir), downsample_rate=1, hw=512)
         else:
             continue
 

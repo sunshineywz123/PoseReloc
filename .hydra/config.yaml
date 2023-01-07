@@ -51,37 +51,46 @@ work_dir: ${hydra:runtime.cwd}
 data_dir: ${work_dir}/data
 print_config: true
 type: sfm
-output_base_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model
+data_base_dir: /cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowTexture
+output_base_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10_pairfrompose
 match_type: softmax
 enable_post_refine: true
-verbose: true
-overwrite_all: false
+overwrite_all: true
 overwrite_coarse: false
 overwrite_fine: true
 use_global_ray: false
-use_local_ray: false
+use_local_ray: true
 debug: true
 full_img: false
 ray:
   slurm: false
-  n_workers: 2
+  n_workers: 7
   n_cpus_per_worker: 5
   n_gpus_per_worker: 1
   local_mode: false
 dataset:
   max_num_kp3d: 15000
   max_num_kp2d: 10000
-  data_dir:
-  - /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/test_robot test_robot-annotate
-  outputs_dir: /cephfs-mvs/3dv-research/hexingyi/onepose_plus_demo/sfm_model
+  data_dir: ${data_base_dir}
+  top_k_obj: null
+  num_seq: 1
+  ids:
+  - '0604'
+  - '0601'
+  - '0603'
+  exception_obj_names:
+  - null
+  outputs_dir: ${output_base_dir}
 network:
   detection: loftr
+  detection_model_path: weight/superpoint_v1.pth
   matching: loftr
+  matching_model_path: weight/superglue_outdoor.pth
 sfm:
   gen_cov_from: pose
   down_ratio: 5
   gap: 3
-  covis_num: 8
+  covis_num: 10
   track_length: 8
 post_optim:
   coarse_recon_data:
@@ -94,4 +103,5 @@ post_optim:
 post_process:
   filter_bbox_before_filter_track_length: true
   skip_bbox_filter: false
+verbose: true
 disable_lightning_logs: true

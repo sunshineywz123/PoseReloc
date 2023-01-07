@@ -2,13 +2,16 @@
 
 type: sfm
 work_dir: ${hydra:runtime.cwd}
-data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
+data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowTexture"
 # output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
-output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10_pairfrompose"
 match_type: "softmax"
 enable_post_refine: True
 
-overwrite_all: False
+overwrite_all: True
 overwrite_coarse: False
 overwrite_fine: True
 
@@ -104,14 +107,14 @@ dataset:
     # - '0565'
     # - '0568'
     # - '0570'
-    # - '0576' # miss
+    # # - '0576'
     # - '0577'
     # - '0578'
     # - '0579'
     # - '0580'
     # - '0582'
     # - '0583'
-    # - '0593' # miss
+    # # - '0593'
     # - '0594'
     # - '0595'
 
@@ -126,9 +129,9 @@ dataset:
     # - '0591'
 
     # # Hard case:
+    - '0604'
     - '0601'
-    # - '0603'
-    # - '0604'
+    - '0603'
     # - '0626'
     # - '0627'
     # - '0628'
@@ -181,18 +184,19 @@ network:
   matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
-  gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
+  # gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
+  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
   down_ratio: 5
   gap: 3
-  covis_num: 8
+  covis_num: 10
   track_length: 8
 
 post_optim:
   coarse_recon_data:
     feature_track_assignment_strategy: 'greedy'
   optimizer:
-    # solver_type: 'SecondOrder' # 'FirstOrder'
-    solver_type: 'FirstOrder'
+    # solver_type: 'FirstOrder'
+    solver_type: 'SecondOrder'
     residual_mode: "geometry_error"
     optimize_lr:
       depth: 0.03
