@@ -51,8 +51,6 @@ def extract_results(
     if extract_feature_method == "fine_match_backbone":
         feature0 = data["feat_ext0"].cpu().numpy()
         feature1 = data["feat_ext1"].cpu().numpy()
-    elif extract_feature_method is None:
-        feature0, feature1 = None, None
     else:
         raise NotImplementedError
 
@@ -60,7 +58,7 @@ def extract_results(
         feature_c0 = data['feat_coarse_b_0'].cpu().numpy()
         feature_c1 = data['feat_coarse_b_1'].cpu().numpy()
     else:
-        feature_c0, feature_c1 = None, None
+        raise NotImplementedError
     
     return (
         mkpts0_c,

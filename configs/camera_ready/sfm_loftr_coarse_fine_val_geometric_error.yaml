@@ -6,14 +6,14 @@ work_dir: ${hydra:runtime.cwd}
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowTexture"
 # output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
 # output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
-# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
-output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10_pairfrompose"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10_pairfrompose"
 match_type: "softmax"
 enable_post_refine: True
 
 overwrite_all: False
 overwrite_coarse: False
-overwrite_fine: False
+overwrite_fine: True
 
 use_global_ray: False
 use_local_ray: False
@@ -129,9 +129,10 @@ dataset:
     # - '0591'
 
     # # Hard case:
-    - '0604'
-    - '0601'
+    # - '0604'
+    # - '0601'
     - '0603'
+
     # - '0626'
     # - '0627'
     # - '0628'
@@ -184,8 +185,8 @@ network:
   matching_model_path: weight/superglue_outdoor.pth
 
 sfm:
-  # gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
-  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
+  gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
+  # gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
   down_ratio: 5
   gap: 3
   covis_num: 10

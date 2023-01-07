@@ -7,16 +7,20 @@ type: inference
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowTexture"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
-# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_feature_warp"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata_loftr_offical"
+
+
 
 match_type: softmax
 # task_name: release_test_hard_original_sfm
 # task_name: release_test_hard_sfm_covis10
+task_name: release_test_hard_sfm_covis10_testfeature_aggregate
 # task_name: release_test_hard_sfm_oldversion
-task_name: release_test_hard_sfm_oldversion_newdata
+# task_name: release_test_hard_sfm_oldversion_newdata
+# task_name: release_test_hard_sfm_oldversion_newdata_loftr_offical
 
 suffix: ""
 feature_method: "average"
