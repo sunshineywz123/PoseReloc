@@ -109,14 +109,12 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +camera_ready=ours_full_onepose_lowtexture
-    - ray.n_workers=1
+    - +camera_ready=sfm_demo
     - use_global_ray=False
-    - use_local_ray=True
-    - verbose=True
+    - use_global_ray=False
   job:
-    name: inference_loftr
-    override_dirname: +camera_ready=ours_full_onepose_lowtexture,ray.n_workers=1,use_global_ray=False,use_local_ray=True,verbose=True
+    name: run
+    override_dirname: +camera_ready=sfm_demo,use_global_ray=False,use_global_ray=False
     id: ???
     num: ???
     config_name: config.yaml
@@ -141,7 +139,7 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      camera_ready: ours_full_onepose_lowtexture
+      camera_ready: sfm_demo
       logger: null
       callbacks: default_callbacks.yaml
       datamodule: mnist_datamodule.yaml

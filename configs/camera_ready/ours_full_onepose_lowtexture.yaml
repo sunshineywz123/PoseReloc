@@ -9,13 +9,14 @@ data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowT
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code"
-sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_feature_warp"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_feature_warp"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata"
 
 match_type: softmax
 # task_name: release_test_hard_original_sfm
 # task_name: release_test_hard_sfm_covis10
 # task_name: release_test_hard_sfm_oldversion
-task_name: release_test_hard_sfm_oldversion_feature_warp
+task_name: release_test_hard_sfm_oldversion_newdata
 
 suffix: ""
 feature_method: "average"
@@ -329,8 +330,8 @@ ids:
     # - '0595'
 
     # # test hard
-    - '0604'
-    - '0601'
+    # - '0604'
+    # - '0601'
     - '0603'
 
     # - '0626'

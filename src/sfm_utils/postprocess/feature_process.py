@@ -546,17 +546,7 @@ def mean_descriptors_and_scores(descriptors, scores, idxs):
     for i, (start, end) in enumerate(zip(pre_cumsum_idxs, cumsum_idxs)):
         descriptors_span = descriptors[start:end]
         scores_span = scores[start:end]
-
-        # Get average feature:
-        piller_mask = (scores_span == 0).reshape(
-            -1
-        )  # [N] 0 in score marks point as piller point
-
         avg_descriptors.append(np.mean(descriptors_span, axis=0, keepdims=True))
-        # update idx to exclude piller feature
-
-        # Get leaf (warpped) feature:
-        idxs[i] -= np.sum(piller_mask)
 
     avg_descriptors = np.concatenate(avg_descriptors, axis=0)  # N*D
     avg_scores = np.ones((avg_descriptors.shape[0], 1))  # N*1 Fake score!

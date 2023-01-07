@@ -1,5 +1,3 @@
-- +camera_ready=ours_full_onepose_lowtexture
-- ray.n_workers=1
+- +camera_ready=sfm_demo
 - use_global_ray=False
-- use_local_ray=True
-- verbose=True
+- use_global_ray=False

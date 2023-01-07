@@ -9,7 +9,7 @@ verbose: True
 
 overwrite_all: False
 overwrite_coarse: False
-overwrite_fine: True
+overwrite_fine: False
 
 use_global_ray: False
 use_local_ray: True
