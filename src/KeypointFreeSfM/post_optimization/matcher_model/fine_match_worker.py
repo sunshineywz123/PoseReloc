@@ -6,7 +6,6 @@ from ray.actor import ActorHandle
 from tqdm import tqdm
 
 from src.KeypointFreeSfM.loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
-from src.utils.torch_utils import update_state_dict, STATE_DICT_MAPPER
 
 
 def build_model(args):
@@ -17,14 +16,7 @@ def build_model(args):
     state_dict = torch.load(args["weight_path"], map_location="cpu")["state_dict"]
     for k in list(state_dict.keys()):
         state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
-    try:
-        matcher.load_state_dict(state_dict, strict=True)
-    except RuntimeError as _:
-        state_dict, updated = update_state_dict(
-            STATE_DICT_MAPPER, state_dict=state_dict
-        )
-        assert updated
-        matcher.load_state_dict(state_dict, strict=True)
+    matcher.load_state_dict(state_dict, strict=True)
     return matcher
 
 def extract_results(
@@ -135,6 +127,7 @@ def matchWorker(
             "feature0": feature0,
             "feature1": feature1,
         }
+        # print(f"{pair_name}, feature_c0 mean:{feature_c0.mean()}, feature_c1 mean:{feature_c1.mean()}")
         if pba is not None:
             pba.update.remote(1)
 

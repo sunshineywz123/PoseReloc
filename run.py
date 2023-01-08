@@ -300,8 +300,8 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
         state = extract_coarse_fine_features.extract_coarse_fine_features(
             img_lists,
             covis_pairs_out,
-            # colmap_coarse_dir=osp.join(deep_sfm_dir, "model_coarse"),
-            colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
+            colmap_coarse_dir=osp.join(deep_sfm_dir, "model_coarse"),
+            # colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
             refined_model_save_dir=osp.join(deep_sfm_dir, "model"),
             match_out_pth=matches_out,
             feature_out_pth=feature_out,

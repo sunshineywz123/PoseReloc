@@ -59,7 +59,7 @@ overwrite_all: false
 overwrite_coarse: false
 overwrite_fine: false
 use_global_ray: false
-use_local_ray: true
+use_local_ray: false
 debug: true
 full_img: false
 ray:

@@ -17,8 +17,6 @@ from .feature_aggregation import feature_aggregation_and_update
 cfgs = {
     "coarse_colmap_data": {
         "img_resize": 512,  # For OnePose
-        # "img_resize": 1600, # For InLoc
-        # "img_resize": 640, # For InLoc
         "df": 8,
         "feature_track_assignment_strategy": "greedy",
         # "feature_track_assignment_strategy": "balance",
