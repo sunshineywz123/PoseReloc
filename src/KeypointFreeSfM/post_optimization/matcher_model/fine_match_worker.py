@@ -127,7 +127,7 @@ def matchWorker(
             "feature0": feature0,
             "feature1": feature1,
         }
-        print(f"{pair_name}, mkpts0_c mean:{mkpts0_c.mean()}, mkpts1_c mean:{mkpts1_c.mean()}, mkpts1_f mean:{mkpts0_f.mean()}, feature_c0 mean:{feature_c0.mean()}, feature_c1 mean:{feature_c1.mean()}")
+        print(f"{pair_name}, mkpts0_c mean:{mkpts0_c.mean()}, mkpts1_c mean:{mkpts1_c.mean()}, mkpts1_f mean:{mkpts1_f.mean()}, feature_c0 mean:{feature_c0.mean()}, feature_c1 mean:{feature_c1.mean()}")
         if pba is not None:
             pba.update.remote(1)
 
