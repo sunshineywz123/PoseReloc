@@ -7,9 +7,10 @@ type: inference
 data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowTexture"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
+# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_feature_warp"
-# sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata"
+sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata"
 # sfm_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_old_version_code_newdata_loftr_offical"
 
 

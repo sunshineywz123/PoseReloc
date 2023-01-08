@@ -500,9 +500,14 @@ if __name__ == "__main__":
         # "1020-iphonecharger-others",
         # "1021-hhkbhandrest-others",
         # "1022-logimouse-others",
-        '1023-pinkplate-others',
-        "1024-chamtglass-others"
-
+        # '1023-pinkplate-others',
+        # "1024-chamtglass-others"
+        '1025-cat-others',
+        '1026-ybbox-others',
+        "1027-duck-others",
+        "1028-diaosu1-others",
+        '1029-huangjinya-others',
+        '1030-diaosu2-others'
     ]
     deal_first = True
     deal_last = True

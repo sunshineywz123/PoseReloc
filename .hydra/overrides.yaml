@@ -1,5 +1,6 @@
-- +camera_ready=ours_full_onepose_lowtexture
-- ray.n_workers=1
-- use_global_ray=False
+- +camera_ready=sfm_loftr_coarse_fine_val_geometric_error
 - use_local_ray=True
+- use_global_ray=False
+- ray.n_workers=7
+- dataset.top_k_obj=null
 - verbose=True

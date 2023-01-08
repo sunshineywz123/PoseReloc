@@ -9,9 +9,9 @@ match_type: "softmax"
 redo: True
 enable_loftr_post_refine: True
 
-overwrite_all: True
+overwrite_all: False
 overwrite_coarse: False
-overwrite_fine: True
+overwrite_fine: False
 
 use_global_ray: False
 use_local_ray: False

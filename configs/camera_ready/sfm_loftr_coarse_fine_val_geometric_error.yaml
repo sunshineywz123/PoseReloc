@@ -9,11 +9,11 @@ data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowT
 output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
 # output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10_pairfrompose"
 match_type: "softmax"
-enable_post_refine: True
+enable_post_refine: False
 
 overwrite_all: False
 overwrite_coarse: False
-overwrite_fine: True
+overwrite_fine: False
 
 use_global_ray: False
 use_local_ray: False

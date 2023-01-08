@@ -40,8 +40,15 @@ dataset:
         # - ${data_base_dir}/1021-hhkbhandrest-others hhkbhandrest-1
         # - ${data_base_dir}/1022-logimouse-others logimouse-1
 
-        - ${data_base_dir}/1023-pinkplate-others pinkplate-1
-        - ${data_base_dir}/1024-chamtglass-others chamtglass-1
+        # - ${data_base_dir}/1023-pinkplate-others pinkplate-1
+        # - ${data_base_dir}/1024-chamtglass-others chamtglass-1
+
+        - ${data_base_dir}/1025-cat-others cat-1
+        - ${data_base_dir}/1026-ybbox-others ybbox-1
+        - ${data_base_dir}/1027-duck-others duck-1
+        - ${data_base_dir}/1028-diaosu1-others diaosu1-1
+        - ${data_base_dir}/1029-huangjinya-others huangjinya-1
+        - ${data_base_dir}/1030-diaosu2-others diaosu2-1
 
 
         # - ${data_base_dir}/0612-insta-others insta-1 insta-2
