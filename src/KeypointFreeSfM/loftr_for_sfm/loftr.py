@@ -46,8 +46,8 @@ class LoFTR_for_OnePose_Plus(nn.Module):
             'bs': data['image0'].size(0),
             'hw0_i': data['image0'].shape[2:], 'hw1_i': data['image1'].shape[2:]
         })
-        print(data['image0'].mean(), data['image1'].mean())
 
+        import ipdb; ipdb.set_trace()
         if data['hw0_i'] == data['hw1_i']:  # faster & better BN convergence
             feats_c, feats_f = self.backbone(torch.cat([data['image0'], data['image1']], dim=0))
             (feat_c0, feat_c1), (feat_f0, feat_f1) = feats_c.split(data['bs']), feats_f.split(data['bs'])
@@ -63,6 +63,8 @@ class LoFTR_for_OnePose_Plus(nn.Module):
         feat_c1_backbone = feat_c1.clone()
         feat_f0_backbone = feat_f0.clone()
         feat_f1_backbone = feat_f1.clone()
+
+        print(feat_c1_backbone.mean(), feat_f0_backbone.mean())
 
         if 'mkpts0_c' not in data:
             # 2. coarse-level loftr module
@@ -167,8 +169,8 @@ class LoFTR_for_OnePose_Plus(nn.Module):
                 )
                 data.update({"feat_ext0": feat_ext0, "feat_ext1": feat_ext1})
 
-    def load_state_dict(self, state_dict, *args, **kwargs):
-        for k in list(state_dict.keys()):
-            if k.startswith('matcher.'):
-                state_dict[k.replace('matcher.', '', 1)] = state_dict.pop(k)
-        return super().load_state_dict(state_dict, *args, **kwargs)
+    # def load_state_dict(self, state_dict, *args, **kwargs):
+        # for k in list(state_dict.keys()):
+        #     if k.startswith('matcher.'):
+        #         state_dict[k.replace('matcher.', '', 1)] = state_dict.pop(k)
+        # return super().load_state_dict(state_dict, *args, **kwargs)
