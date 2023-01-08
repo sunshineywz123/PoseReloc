@@ -46,6 +46,7 @@ class LoFTR_for_OnePose_Plus(nn.Module):
             'bs': data['image0'].size(0),
             'hw0_i': data['image0'].shape[2:], 'hw1_i': data['image1'].shape[2:]
         })
+        print(data['image0'].mean(), data['image1'].mean())
 
         if data['hw0_i'] == data['hw1_i']:  # faster & better BN convergence
             feats_c, feats_f = self.backbone(torch.cat([data['image0'], data['image1']], dim=0))
