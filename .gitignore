@@ -223,7 +223,6 @@ profile_default/
 ipython_config.py
 .idea/
 *.jpg
-*.txt
 data/
 logs/
 outputs/

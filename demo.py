@@ -9,6 +9,7 @@ import glob
 import numpy as np
 import natsort
 from pathlib import Path
+import torch
 
 from src.utils import data_utils
 from src.utils import vis_utils
@@ -71,7 +72,6 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         img_list,
         load_3d_coarse=cfg.datamodule.load_3d_coarse,
         shape3d=cfg.datamodule.shape3d_val,
-        num_leaf=cfg.datamodule.num_leaf,
         img_pad=cfg.datamodule.img_pad,
         img_resize=None,
         df=cfg.datamodule.df,
@@ -83,10 +83,9 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
     local_feature_obj_detector = LocalFeatureObjectDetector(
         sfm_ws_dir=paths["sfm_ws_dir"],
         output_results=False,
-        # output_results=True,
         detect_save_dir=paths["vis_detector_dir"],
     )
-    match_2D_3D_model = build_model(cfg['model']["loftr"], cfg['model']['pretrained_ckpt'])
+    match_2D_3D_model = build_model(cfg['model']["OnePosePlus"], cfg['model']['pretrained_ckpt'])
     match_2D_3D_model.cuda()
 
     K, _ = data_utils.get_K(paths["intrin_full_path"])
@@ -97,8 +96,6 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         data = dataset[id]
         query_image = data['query_image']
         query_image_path = data['query_image_path']
-
-        # K, _ = data_utils.get_K(Path(paths["intrin_full_dir"]) / (Path(query_image_path).stem + '.txt'))
 
         # Detect object:
         if id == 0:
@@ -125,7 +122,8 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         data.update({"query_image": inp_crop.cuda()})
 
         # Perform keypoint-free 2D-3D matching and then estimate object pose of query image by PnP:
-        match_2D_3D_model(data)
+        with torch.no_grad():
+            match_2D_3D_model(data)
         mkpts_3d = data["mkpts_3d_db"].cpu().numpy() # N*3
         mkpts_query = data["mkpts_query_f"].cpu().numpy() # N*2
         pose_pred, _, inliers, _ = ransac_PnP(K_crop, mkpts_query, mkpts_3d, scale=1000, pnp_reprojection_error=7, img_hw=[512,512], use_pycolmap_ransac=True)

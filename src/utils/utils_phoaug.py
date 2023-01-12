@@ -37,7 +37,6 @@ class MobileAug(object):
     """
 
     def __init__(self):
-        # TODO: Mutual exclusive group
         self.augmentor = A.Compose(
             [
                 A.MotionBlur(p=0.25),
@@ -101,7 +100,7 @@ class Stylization(object):
             raise NotImplementedError()
 
     def __call__(self, x):
-        ref_img = np.random.choice(self.ref_imgs, replace=True)  # FIXME: Deprecated.
+        ref_img = np.random.choice(self.ref_imgs, replace=True)
         aug = A.Compose([self.stylizer([ref_img])])
         return aug(image=x)["image"]
 
@@ -113,7 +112,6 @@ def build_augmentor(method=None, **kwargs):
         return MobileAug()
     elif method == "FDA":  # fourier domain adaptation
         return Stylization(method="FDA", **kwargs)
-    # TODO: FastImageStyle
     elif method == "Gaussian":
         return GaussianAug()
     elif method is None:

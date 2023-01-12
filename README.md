@@ -21,7 +21,7 @@ conda env create -f environment.yaml
 conda activate oneposeplus
 ```
 
-LoFTR and DeepLM are used in this project, thanks for their great work and we appreciate their contribution to the community. Please follow their installation instructions and LICENSE:
+[LoFTR](https://github.com/zju3dv/LoFTR) and [DeepLM](https://github.com/hjwdzh/DeepLM) are used in this project, thanks for their great work and we appreciate their contribution to the community. Please follow their installation instructions and LICENSE:
 ```shell
 git submodule update --init --recursive
 
@@ -29,13 +29,13 @@ git submodule update --init --recursive
 cd submodules/DeepLM
 sh example.sh
 ```
-Note that the efficient optimizer DeepLM is used in our SfM refinement phase. If you face difficulty in installing DeepLM, don't worry. You can still run the code by using our first-order optimizer which is a little slower.
+Note that the efficient optimizer DeepLM is used in our SfM refinement phase. If you face difficulty in installation, don't worry. You can still run the code by using our first-order optimizer which is a little slower.
 
 [COLMAP](https://colmap.github.io/) is also used in this project for Structure-from-Motion. Please refer to the official [instructions](https://colmap.github.io/install.html) for the installation.
 
-Download the [pretrained models]() including our 2D-3D model and LoFTR model. Then move them to `${REPO_ROOT}/weights`.
+Download the [pretrained models]() including our 2D-3D matching model and LoFTR model firstly. Then move them to `${REPO_ROOT}/weights`.
 
-[Optional] You may optionally try out our web-based 3D visualization tool [Wis3D](https://github.com/zju3dv/Wis3D) for convenient and interactive visualizations of feature matches. We also provide many other cool visualization features in Wis3D, welcome to try it out.
+[Optional] You may optionally try out our web-based 3D visualization tool [Wis3D](https://github.com/zju3dv/Wis3D) for convenient and interactive visualizations of feature matches and point clouds. We also provide many other cool visualization features in Wis3D, welcome to try it out.
 
 ```bash
 # Working in progress, should be ready very soon, only available on test-pypi now.
@@ -47,7 +47,7 @@ After the installation, please refer to [this page](doc/demo.md) for running dem
 
 ## Training and Evaluation
 ### Dataset setup 
-1. Download OnePose from [onedrive storage](https://zjueducn-my.sharepoint.com/:f:/g/personal/zihaowang_zju_edu_cn/ElfzHE0sTXxNndx6uDLWlbYB-2zWuLfjNr56WxF11_DwSg?e=GKI0Df) and and OnePose_LowTexture dataset from [onedrive storage](https://zjueducn-my.sharepoint.com/:f:/g/personal/zihaowang_zju_edu_cn/ElfzHE0sTXxNndx6uDLWlbYB-2zWuLfjNr56WxF11_DwSg?e=GKI0Df), extract them into `$/your/path/to/onepose_datasets`. 
+1. Download OnePose dataset from [here](https://zjueducn-my.sharepoint.com/:f:/g/personal/zihaowang_zju_edu_cn/ElfzHE0sTXxNndx6uDLWlbYB-2zWuLfjNr56WxF11_DwSg?e=GKI0Df) and and OnePose_LowTexture dataset from [here](https://zjueducn-my.sharepoint.com/:f:/g/personal/zihaowang_zju_edu_cn/ElfzHE0sTXxNndx6uDLWlbYB-2zWuLfjNr56WxF11_DwSg?e=GKI0Df), extract them into `$/your/path/to/onepose_datasets`. 
 The directory should be organized in the following structure:
     ```
     |--- /your/path/to/datasets
@@ -62,40 +62,42 @@ The directory should be organized in the following structure:
     REPO_ROOT=/path/to/OnePose_Plus_Plus
     ln -s /your/path/to/datasets $REPO_ROOT/data/datasets
     ```
-
+### Reconstruction
+Reconstructed the semi-dense object point cloud and 2D-3D correspondences are needed for both training and test objects:
+```python
+python run.py +preprocess=sfm_train_data.yaml # for train data
+python run.py +preprocess=sfm_inference_onepose_val.yaml # for val data
+python run.py +preprocess=sfm_inference_onepose.yaml # for test data
+python run.py +preprocess=sfm_inference_lowtexture.yaml # for lowtexture test data
+```
 ### Inference
-1. Run Structure-from-Motion for the data sequences
+```shell
+# Eval OnePose dataset:
+python inference.py +experiment=inference_onepose.yaml verbose=True
 
-    Reconstructed the semi-dense object point cloud and 2D-3D correspondences are needed for both training and test objects:
-    ```python
-    python run.py +preprocess=sfm_spp_spg_train.yaml # for training data
-    python run.py +preprocess=sfm_spp_spg_test.yaml # for testing data
-    python run.py +preprocess=sfm_spp_spg_val.yaml # for val data
-    ```
-
-2. Inference:
-
-    ```python
-    python inference.py +experiment=test_GATsSPG
-    ```
+# Eval OnePose_LowTexture dataset:
+python inference.py +experiment=inference_onepose_lowtexture.yaml verbose=True
+```
+Note that we perform parallel evaluation on a single GPU with two workers by default. If your GPU memory is smaller than 6GB, you are supposed to add `use_local_ray=False` to turn off the parallelization.
 
 ### Training
 1. Prepare ground-truth annotations. Merge annotations of training/val data:
     ```python
-    python run.py +preprocess=merge_anno task_name=onepose split=train
-    python run.py +preprocess=merge_anno task_name=onepose split=val
+    python run.py +preprocess=merge_annotation_train.yaml
+    python run.py +preprocess=merge_annotation_val.yaml
     ```
    
 2. Begin training
     ```python
-    python train.py +experiment=train_GATsSPG task_name=onepose exp_name=training_onepose
+    python train.py +experiment=train.yaml exp_name=onepose_plus_train
     ```
+    Note that the default config for training uses 8 GPUs with around 23GB memory for each GPU. You can set GPU number or ID in `trainer.gpus` and reduce the batch size in `datamodule.batch_size` to reduce the GPU memory footprint.
    
 All model weights will be saved under `${REPO_ROOT}/models/checkpoints/${exp_name}` and logs will be saved under `${REPO_ROOT}/logs/${exp_name}`.
-<!-- You can visualize the training process by tensorboard:
+You can visualize the training process by tensorboard:
 ```shell
-tensorboard xx
-``` -->
+tensorboard --logdir logs --bind_all --port your_port_number
+```
 
 ## Citation
 If you find this code useful for your research, please use the following BibTeX entry.

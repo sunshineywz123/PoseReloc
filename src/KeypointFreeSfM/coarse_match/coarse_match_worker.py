@@ -16,16 +16,13 @@ def names_to_pair(name0, name1):
 def build_model(args):
     pl.seed_everything(args['seed'])
 
-    if args['method'] == 'LoFTR':
-        matcher = LoFTR_for_OnePose_Plus(config=default_cfg, enable_fine_matching=False)
-        # load checkpoints
-        state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
-        for k in list(state_dict.keys()):
-            state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
-        matcher.load_state_dict(state_dict, strict=True)
-        matcher.eval()
-    else:
-        raise NotImplementedError
+    matcher = LoFTR_for_OnePose_Plus(config=default_cfg, enable_fine_matching=False)
+    # load checkpoints
+    state_dict = torch.load(args['weight_path'], map_location="cpu")["state_dict"]
+    for k in list(state_dict.keys()):
+        state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
+    matcher.load_state_dict(state_dict, strict=True)
+    matcher.eval()
 
     return matcher
 

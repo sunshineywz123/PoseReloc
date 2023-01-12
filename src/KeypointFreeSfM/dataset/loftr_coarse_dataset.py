@@ -4,7 +4,7 @@ import os.path as osp
 import torch
 
 from torch.utils.data import Dataset
-from .utils import (
+from src.utils.data_io import (
     read_grayscale,
 )
 

@@ -18,9 +18,7 @@ from .inference_OnePosePlus_worker import (
 args = {
     "ray": {
         "slurm": False,
-        # "n_workers": 1,
         "n_workers": 2,
-        # "n_cpus_per_worker": 1,
         "n_cpus_per_worker": 1,
         "n_gpus_per_worker": 0.5,
         "local_mode": False,
@@ -35,7 +33,7 @@ def build_model(model_configs, ckpt_path):
     for k in list(state_dict.keys()):
         state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
 
-    match_model.load_state_dict(state_dict, strict=False)
+    match_model.load_state_dict(state_dict, strict=True)
     match_model.eval()
     return match_model
 
@@ -51,7 +49,6 @@ def inference_onepose_plus(
         all_image_paths,
         load_3d_coarse=cfg.datamodule.load_3d_coarse,
         shape3d=cfg.datamodule.shape3d_val,
-        num_leaf=cfg.datamodule.num_leaf,
         img_pad=cfg.datamodule.img_pad,
         img_resize=cfg.datamodule.img_resize,
         df=cfg.datamodule.df,
@@ -59,7 +56,7 @@ def inference_onepose_plus(
         load_pose_gt=True,
         n_images=None
     )
-    match_model = build_model(cfg['model']["loftr"], cfg['model']['pretrained_ckpt'])
+    match_model = build_model(cfg['model']["OnePosePlus"], cfg['model']['pretrained_ckpt'])
 
     # Run matching
     if use_ray:

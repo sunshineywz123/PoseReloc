@@ -109,13 +109,13 @@ hydra:
   overrides:
     hydra: []
     task:
-    - +camera_ready=demo
+    - +experiment=inference_demo
     - data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
       demo_cam-test
     - sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam
   job:
     name: demo
-    override_dirname: +camera_ready=demo,data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
+    override_dirname: +experiment=inference_demo,data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
       demo_cam-test,sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam
     id: ???
     num: ???
@@ -141,12 +141,12 @@ hydra:
       schema: structured
       provider: schema
     choices:
-      camera_ready: demo
+      experiment: inference_demo
       logger: null
-      callbacks: default_callbacks.yaml
-      datamodule: mnist_datamodule.yaml
-      model: mnist_model.yaml
-      trainer: default_trainer.yaml
+      callbacks: null
+      datamodule: null
+      model: null
+      trainer: null
       hydra/env: default
       hydra/callbacks: null
       hydra/job_logging: default

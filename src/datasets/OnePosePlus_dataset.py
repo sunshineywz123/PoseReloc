@@ -7,14 +7,12 @@ except ImportError:
 import torch
 import torch.nn.functional as F
 import numpy as np
-import cv2
-import time
 import os.path as osp
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset
 
 from kornia import homography_warp, normalize_homography, normal_transform_pixel
-from .utils import read_grayscale
+from src.utils.data_io import read_grayscale
 from src.utils import data_utils
 from src.utils.sample_homo import sample_homography_sap
 

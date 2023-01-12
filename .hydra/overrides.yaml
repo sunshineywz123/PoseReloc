@@ -1,4 +1,4 @@
-- +camera_ready=demo
+- +experiment=inference_demo
 - data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
   demo_cam-test
 - sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam

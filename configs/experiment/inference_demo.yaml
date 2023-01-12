@@ -2,23 +2,8 @@
 
 type: inference
 
-
-data_base_dir: "data/datasets/lowtexture_test_data"
-sfm_base_dir: "data/datasets/sfm_output"
-
-match_type: softmax
-task_name: inference_onepose_lowtexture
-verbose: False
-
-use_global_ray: False
-use_local_ray: True
-
-ray:
-  slurm: False
-  n_workers: 4
-  n_cpus_per_worker: 5
-  n_gpus_per_worker: 1
-  local_mode: False
+data_base_dir: null
+sfm_base_dir: null
 
 model:
   pretrained_ckpt: weight/OnePosePlus_model.ckpt
@@ -32,10 +17,11 @@ model:
         initial_dim: 128
         block_dims: [128, 196, 256]
         output_layers: [3, 1]
+
       pretrained: "weight/LoFTR_wsize9.ckpt"
       pretrained_fix: False
 
-    interpol_type: "bilinear"
+    interpol_type: "bilinear" # ['nearest', 'bilinear']
 
     keypoints_encoding:
       enable: True
@@ -108,15 +94,6 @@ model:
         s2d:
             type: 'heatmap'
 
-  eval_metrics:
-    point_cloud_rescale: 1000
-    pnp_reprojection_error: 8
-    pose_thresholds: [1, 3, 5]
-    model_unit: 'm'
-    eval_ADD_metric: False
-    ADDS: False
-    use_pycolmap_ransac: False
-
 datamodule:
     # 3D part
     shape3d_val: 7000
@@ -132,54 +109,3 @@ datamodule:
 network:
   detection: loftr
   matching: loftr
-
-object_detector_method: "GT"
-data_dir: ${data_base_dir}
-top_k_obj: null
-num_val_seq: 1 # last n objects
-ids:
-    - '0700'
-    - '0701'
-    - '0702'
-    - '0703'
-    - '0706'
-    - '0707'
-    - '0708'
-    - '0710'
-    - '0712'
-    - '0713'
-    - '0714'
-    - '0715'
-    - '0718'
-    - '0719'
-    - '0720'
-    - '0721'
-    - '0722'
-    - '0723'
-    - '0724'
-    - '0725'
-    - '0726'
-    - '0727'
-    - '0728'
-    - '0729'
-    - '0730'
-    - '0731'
-    - '0732'
-    - '0733'
-    - '0734'
-    - '0735'
-    - '0736'
-    - '0737'
-    - '0740'
-    - '0741'
-    - '0742'
-    - '0743'
-    - '0744'
-    - '0745'
-    - '0746'
-    - '0748'
-exception_obj_names: 
-    -
-
-output:
-  txt_dir: 'data/output/${task_name}'

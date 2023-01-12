@@ -28,7 +28,6 @@ def mask_border_with_padding(m, bd, v, p_m0, p_m1):
 
     h0s, w0s = p_m0.sum(1).max(-1)[0].int(), p_m0.sum(-1).max(-1)[0].int()
     h1s, w1s = p_m1.sum(1).max(-1)[0].int(), p_m1.sum(-1).max(-1)[0].int()
-    # TODO: Vectorization
     for b_idx, (h0, w0, h1, w1) in enumerate(zip(h0s, w0s, h1s, w1s)):
         m[b_idx, h0 - bd :] = v
         m[b_idx, :, w0 - bd :] = v

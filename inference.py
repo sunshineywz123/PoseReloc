@@ -23,7 +23,6 @@ def inference(cfg):
 
     if isinstance(data_dirs, str):
         # Parse object directory
-        # assert isinstance(data_dirs, str)
         num_val_seq = cfg.num_val_seq
         exception_obj_name_list = cfg.exception_obj_names
         top_k_obj = cfg.top_k_obj
@@ -163,10 +162,6 @@ def inference_worker(data_dirs, cfg, pba=None, worker_id=0):
 
             if object_detector_method == 'GT':
                 color_dir = osp.join(root_dir, sub_dir, "color")
-            elif object_detector_method == 'SPP+SPG':
-                color_dir = osp.join(root_dir, sub_dir, "color_SPP+SPG")
-            elif object_detector_method == 'loftr':
-                color_dir = osp.join(root_dir, sub_dir, "color_loftr")
             else:
                 raise NotImplementedError
 

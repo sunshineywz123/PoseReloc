@@ -1,9 +1,6 @@
-from pytorch_lightning import LightningModule, LightningDataModule, Callback, Trainer
+from pytorch_lightning import LightningModule, Callback, Trainer
 from pytorch_lightning import seed_everything
-from pytorch_lightning import loggers
-from pytorch_lightning.core import datamodule
 from pytorch_lightning.loggers import LightningLoggerBase
-from pytorch_lightning.plugins import DDPPlugin
 import math
 import torch
 
@@ -40,7 +37,6 @@ def train(config: DictConfig):
     _scaling = true_batch_size / config.model.trainer.canonical_bs
     # config.model.trainer.scaling= _scaling
     config.model.trainer.true_lr = config.model.trainer.canonical_lr * _scaling
-    # config.TRAINER.WARMUP_STEP = math.floor(config.TRAINER.WARMUP_STEP / _scaling)
 
     config.model.loss.fine_weight = 0.25 * (config.model.OnePosePlus.loftr_fine.window_size / 5 ) ** 2
 
@@ -83,9 +79,6 @@ def train(config: DictConfig):
 
     # Train the model
     trainer.fit(model=model, datamodule=datamodule)
-
-    # Evaluate model on test set after training
-    # trainer.test()
 
     # Make sure everything closed properly
     utils.finish(

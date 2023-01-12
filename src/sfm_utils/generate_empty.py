@@ -8,7 +8,7 @@ from pathlib import Path
 from src.utils.colmap.read_write_model import Camera, Image
 from src.utils.colmap.read_write_model import rotmat2qvec
 from src.utils.colmap.read_write_model import write_model
-from src.utils.arkit_utils import get_K
+from src.utils.data_utils import get_K
 
 
 def get_pose_from_txt(img_index, pose_dir):

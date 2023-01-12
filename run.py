@@ -17,8 +17,6 @@ from omegaconf import DictConfig
 
 
 from src.utils.ray_utils import ProgressBar, chunks
-from src.sfm_utils import pairs_from_index
-from src.sfm_utils import pairs_from_poses
 
 def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
@@ -103,7 +101,7 @@ def sfm_worker(data_dirs, cfg, worker_id=0, pba=None):
         ext_bag = [".png", ".jpg"]
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
-            img_dir_name = 'color' if not cfg.full_img else 'color_full'
+            img_dir_name = 'color'
             img_name_lists = os.listdir(osp.join(seq_dir, img_dir_name))
             img_lists += [
                 osp.join(seq_dir, img_dir_name, img_name)
@@ -150,9 +148,9 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
     from src.sfm_utils import (
         generate_empty,
         triangulation,
-        pairs_exhaustive_all,
+        pairs_exhaustive_all, pairs_from_index, pairs_from_poses
     )
-    from src.KeypointFreeSfM import coarse_match, post_optimization, extract_coarse_fine_features
+    from src.KeypointFreeSfM import coarse_match, post_optimization
 
     outputs_dir = osp.join(
         outputs_dir_root,

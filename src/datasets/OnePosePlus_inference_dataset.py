@@ -3,11 +3,9 @@ import os
 import os.path as osp
 import torch
 import numpy as np
-import cv2
-import torch.nn.functional as F
 from torch.utils.data import Dataset
 
-from .utils import read_grayscale
+from src.utils.data_io import read_grayscale
 from src.utils import data_utils
 
 class OnePosePlusInferenceDataset(Dataset):
@@ -16,7 +14,6 @@ class OnePosePlusInferenceDataset(Dataset):
         sfm_dir,
         image_paths,
         shape3d,
-        num_leaf,
         load_3d_coarse=True,
         img_pad=False,
         img_resize=512,
@@ -31,7 +28,6 @@ class OnePosePlusInferenceDataset(Dataset):
 
         self.demo_mode = demo_mode
         self.shape3d = shape3d
-        self.num_leaf = num_leaf
         self.pad = pad
         self.image_paths = (
             image_paths[:: int(len(image_paths) / n_images)]

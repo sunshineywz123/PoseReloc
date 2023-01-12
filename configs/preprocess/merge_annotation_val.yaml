@@ -1,14 +1,15 @@
 # @package _global_
 
 type: merge_anno
+task_name: onepose_plus_train
 match_type: 'softmax'
-task_name: loftr_train_geometric
-split: 'train'
+split: 'val'
 
-data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
-sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error'
-merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
+data_base_dir: 'data/datasets/val_data'
+sfm_dir: 'data/datasets/sfm_output'
+merge_output_dir: 'data/datasets/merged_anno'
 
+val_use_last_n_seq: 1
 names:
     # Val set
     - "0601"

@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import tqdm
 
 from torch.utils.data import Dataset
-from .utils import read_grayscale
+from src.utils.data_io import read_grayscale
 
 from src.utils.colmap.read_write_model import (
     read_images_binary,
@@ -17,12 +17,9 @@ from src.utils.colmap.read_write_model import (
 )
 from ..post_optimization.utils.vis3d import vis_cameras_point_clouds
 from ..post_optimization.utils.geometry_utils import *
-from ..post_optimization.utils.geometry_utils import get_pose_from_colmap_image
 
 
 class CoarseReconDataset(Dataset):
-    """Image Matching Challenge Dataset (val & test) with loaded COLMAP results"""
-
     def __init__(
         self,
         args,
@@ -308,7 +305,7 @@ class CoarseReconDataset(Dataset):
             )
             for id, item in keyframe_dict.items():
                 print(
-                    f"id:{id}, total: {sum(item['state'] != -1)} / {self.colmap_images[id].xys.shape[0]} keypoints registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} keypoints robbed"
+                    f"id:{id}, total: {sum(item['state'] != -1)} / {self.colmap_images[id].xys.shape[0]} 2D points registrated, possess {sum(item['state'] >= 0)} feature tracks, {sum(item['state'] == -3)} points robbed"
                 )
         return keyframe_dict, colmap_3d_states
 

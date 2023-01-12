@@ -7,7 +7,7 @@ import os.path as osp
 from pathlib import Path
 from loguru import logger
 
-from src.utils.arkit_utils import get_test_seq_path, get_gt_pose_path_by_color
+from src.utils.path_utils import get_test_seq_path, get_gt_pose_path_by_color
 
 
 def merge_train_core(

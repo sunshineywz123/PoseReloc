@@ -69,27 +69,6 @@ class LocalFeatureObjectDetector():
                 ).T  # 3*4
             )
 
-            # db_img_full_path = db_img_path.replace('/color/', '/color_full/')
-            # reproj_box_path = db_img_path.replace('/color/', '/reproj_box/').replace('.png', '.txt')
-            # db_img = cv2.imread(db_img_full_path, cv2.IMREAD_GRAYSCALE)
-            # reproj_box = np.loadtxt(reproj_box_path)
-            # box_max, box_min = reproj_box.max(axis=0).astype(np.int), reproj_box.min(axis=0).astype(np.int)
-            # mask = np.ones_like(db_img).astype(np.bool)
-            # mask[box_min[1]:box_max[1], box_min[0]:box_max[0]] = 0
-            # db_img[mask] = 0
-
-            # db_corners_homo.append(
-            #     np.array(
-            #         [
-            #             [box_min[0], box_min[1], 1],
-            #             [box_min[0], box_max[1], 1],
-            #             [box_max[0], box_min[1], 1],
-            #             [box_max[0], box_max[1], 1],
-            #         ]
-            #     ).T # 3*4
-            # )
-            # db_imgs.append(torch.from_numpy(db_img)[None][None] / 255.0)
-
         return db_imgs, db_corners_homo
 
     @torch.no_grad()
@@ -97,7 +76,7 @@ class LocalFeatureObjectDetector():
         detect_results_dict = {}
         for idx, db_img in enumerate(self.db_imgs):
 
-            match_data = {"image0": db_img.cuda(), "image1": query.cuda()} # FIXME: resize image to 1200 and visualize
+            match_data = {"image0": db_img.cuda(), "image1": query.cuda()}
             self.matcher(match_data)
             mkpts0 = match_data["mkpts0_f"].cpu().numpy()
             mkpts1 = match_data["mkpts1_f"].cpu().numpy()

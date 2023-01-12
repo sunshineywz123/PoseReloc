@@ -13,16 +13,15 @@ from .coarse_match_worker import *
 from ..dataset.loftr_coarse_dataset import LoftrCoarseDataset
 
 cfgs = {
-    "data": {"img_resize": 512, "df": 8, "shuffle": True},  # For OnePose
+    "data": {"img_resize": 512, "df": 8, "shuffle": True},
     "matcher": {
         "model": {
-            "method": "LoFTR",
-            "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
+            "weight_path": "weight/LoFTR_wsize9.ckpt",
             "seed": 666,
         },
         "pair_name_split": " ",
     },
-    "coarse_match_debug": False,
+    "coarse_match_debug": True,
     "ray": {
         "slurm": False,
         "n_workers": 4, 
@@ -95,7 +94,7 @@ def detector_free_coarse_matching(
 
         # Combine keypoints
         n_imgs = len(dataset.img_dir)
-        pb = ProgressBar(n_imgs, "Combine keypoints") if verbose else None
+        pb = ProgressBar(n_imgs, "Combine points 2D...") if verbose else None
         all_kpts = Match2Pts2D(
             matches, dataset.img_dir, name_split=cfgs["matcher"]["pair_name_split"]
         )

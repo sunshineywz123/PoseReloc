@@ -1,4 +1,4 @@
-from vis3d.vis3d import Vis3D
+from wis3d import Wis3D as Vis3D
 import open3d as o3d
 import os.path as osp
 import os

@@ -6,8 +6,8 @@ import os.path as osp
 from loguru import logger
 from time import time
 from scipy import spatial
-from tools.data_prepare.sample_points_on_cad import load_points_from_cad, sample_points_on_cad, model_diameter_from_bbox
-from .colmap.read_write_model import qvec2rotmat, read_images_binary
+from src.utils.sample_points_on_cad import load_points_from_cad, model_diameter_from_bbox
+from .colmap.read_write_model import qvec2rotmat
 from .colmap.eval_helper import quaternion_from_matrix
 
 
@@ -114,7 +114,6 @@ def add_metric(model_3D_pts, diameter, pose_pred, pose_target, percentage=0.1, s
     if mean_dist < diameter_thres:
         return True
     else:
-        # import ipdb; ipdb.set_trace()
         return False
 
 
@@ -159,6 +158,12 @@ def ransac_PnP(
     use_pycolmap_ransac=False,
 ):
     """ solve pnp """
+    try:
+        import pycolmap
+    except:
+        logger.warning(f"pycolmap is not installed, use opencv ransacPnP instead")
+        use_pycolmap_ransac = False
+
     if use_pycolmap_ransac:
         import pycolmap
 
@@ -333,16 +338,6 @@ def aggregate_metrics(metrics, pose_thres=[1, 3, 5], proj2d_thres=5):
             (np.array(R_errs) < pose_threshold) & (np.array(t_errs) < pose_threshold)
         )
 
-    if "R_errs_coarse" in metrics:
-        R_errs_coarse = metrics["R_errs_coarse"]
-        t_errs_coarse = metrics["t_errs_coarse"]
-
-        for threshold in pose_thres:
-            agg_metric[f"{threshold}cm@{threshold}degree coarse"] = np.mean(
-                (np.array(R_errs_coarse) < threshold)
-                & (np.array(t_errs_coarse) < threshold)
-            )
-    
     if "ADD_metric" in metrics:
         ADD_metric = metrics['ADD_metric']
         agg_metric["ADD metric"] = np.mean(ADD_metric)

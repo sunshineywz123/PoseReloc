@@ -25,8 +25,7 @@ cfgs = {
     "fine_match_debug": True,
     "fine_matcher": {
         "model": {
-            "cfg_path": "configs/loftr_configs/loftr_w9_no_cat_coarse.py",
-            "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
+            "weight_path": "weight/LoFTR_wsize9.ckpt",
             "seed": 666,
         },
         "extract_feature_method": "fine_match_backbone",
