@@ -6,10 +6,8 @@ import numpy as np
 from loguru import logger
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-import time
 import ray
 
-from submodules.DeepLM import Solve as SecondOrderSolve
 from .first_order_solver import FirstOrderSolve
 
 from .residual import depth_residual
@@ -202,7 +200,15 @@ class Optimizer(nn.Module):
             partial_paras = {
                 "mode": self.residual_mode,
             }
+
+            try:
+                from submodules.DeepLM import Solve as SecondOrderSolve
+            except:
+                self.solver_type = "FirstOrder"
+                logger.error(f"Failed to import DeepLM module. Use our first-order optimizer instead. Please check whether installation is correct!")
+
             if self.solver_type == "SecondOrder":
+                from submodules.DeepLM import Solve as SecondOrderSolve
                 # Use DeepLM lib:
                 optimized_variables = SecondOrderSolve(
                     variables=variables,

@@ -13,7 +13,6 @@ import os.path as osp
 from pycocotools.coco import COCO
 from torch.utils.data import Dataset
 
-# import open3d as o3d
 from kornia import homography_warp, normalize_homography, normal_transform_pixel
 from .utils import read_grayscale
 from src.utils import data_utils

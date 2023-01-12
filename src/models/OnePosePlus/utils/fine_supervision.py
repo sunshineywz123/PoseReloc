@@ -8,14 +8,14 @@ def fine_supervision(data, config):
             "expec_f_gt": [M, 2]
         }
     """
-    coarse_scale, fine_scale = list(config['loftr']['loftr_backbone']['resolution'])
-    radius = config['loftr']['loftr_fine']['window_size'] // 2
+    coarse_scale, fine_scale = list(config['OnePosePlus']['loftr_backbone']['resolution'])
+    radius = config['OnePosePlus']['loftr_fine']['window_size'] // 2
 
     # 2. get coarse prediction
     b_ids, i_ids, j_ids = data['b_ids'], data['i_ids'], data['j_ids']
 
     # 3. compute gt
-    coarse_scale =coarse_scale * data['query_image_scale'][b_ids][:, [1, 0]] if 'query_image_scale' in data else fine_scale 
+    coarse_scale = coarse_scale * data['query_image_scale'][b_ids][:, [1, 0]] if 'query_image_scale' in data else fine_scale 
     fine_scale = fine_scale * data['query_image_scale'][b_ids][:, [1, 0]] if 'query_image_scale' in data else fine_scale
 
     mkpts_query = (
@@ -23,7 +23,6 @@ def fine_supervision(data, config):
         * coarse_scale
     ) # [M, 2]
 
-    # `expec_f_gt` might exceed the window, i.e. abs(*) > 1
     fine_gt_location = data['fine_location_matrix_gt'][b_ids, i_ids, j_ids]
     gt_offset = fine_gt_location - mkpts_query
     expec_f_gt = (gt_offset) / fine_scale / radius  # [M, 2]

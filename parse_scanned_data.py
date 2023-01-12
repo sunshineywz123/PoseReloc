@@ -74,15 +74,11 @@ def get_test_default_path(data_dir):
     orig_intrin_file = osp.join(data_dir, 'Frames.txt')
     final_intrin_file = osp.join(data_dir, 'intrinsics.txt')
 
-    final_intrin_dir = osp.join(data_dir, 'intrin_full')
-    Path(final_intrin_dir).mkdir(parents=True, exist_ok=True)
-
     paths = {
         'video_file': video_file,
         'color_full_dir': color_full_dir,
         'orig_intrin_file': orig_intrin_file,
         'final_intrin_file': final_intrin_file,
-        'final_intrin_dir': final_intrin_dir
     }
 
     return paths
@@ -262,13 +258,6 @@ def data_process_test(data_dir, downsample_rate=1):
     fx, fy, cx, cy = np.average(data, axis=0)[2:]
     with open(paths['final_intrin_file'], 'w') as f:
         f.write('fx: {0}\nfy: {1}\ncx: {2}\ncy: {3}'.format(fx, fy, cx, cy))
-
-    for id, data_per_img in enumerate(data):
-        fx, fy, cx, cy = data_per_img[2:]
-        print(fx, cx)
-        with open(str(Path(paths['final_intrin_dir']) / f"{id}.txt"), 'w') as f:
-            f.write('fx: {0}\nfy: {1}\ncx: {2}\ncy: {3}'.format(fx, fy, cx, cy))
-
     
     # Parse video:
     cap = cv2.VideoCapture(paths['video_file'])
@@ -304,9 +293,9 @@ if __name__ == "__main__":
             # Parse scanned test sequence
             print('=> Processing test sequence: ', seq_dir)
             data_process_test(osp.join(data_dir, seq_dir), downsample_rate=1)
-        # elif '-annotate' in seq_dir:
-        #     print('=> Processing annotate sequence: ', seq_dir)
-        #     data_process_anno(osp.join(data_dir, seq_dir), downsample_rate=1, hw=512)
+        elif '-annotate' in seq_dir:
+            print('=> Processing annotate sequence: ', seq_dir)
+            data_process_anno(osp.join(data_dir, seq_dir), downsample_rate=1, hw=512)
         else:
             continue
 

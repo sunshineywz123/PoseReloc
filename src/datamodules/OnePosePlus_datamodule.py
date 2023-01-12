@@ -1,5 +1,5 @@
 from loguru import logger
-from datasets.OnePosePlus_dataset import OnePosePlusDataset
+from src.datasets.OnePosePlus_dataset import OnePosePlusDataset
 from src.utils.utils_phoaug import build_augmentor
 from pytorch_lightning import LightningDataModule
 from torch.utils.data.dataloader import DataLoader

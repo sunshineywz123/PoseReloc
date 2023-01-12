@@ -13,7 +13,6 @@ from src.utils.arkit_utils import get_test_seq_path, get_gt_pose_path_by_color
 def merge_train_core(
     anno_2d_file,
     avg_anno_3d_file,
-    collect_anno_3d_file,
     idxs_file,
     img_id,
     ann_id,
@@ -40,7 +39,6 @@ def merge_train_core(
             "pose_file": anno_2d["pose_file"],
             "anno2d_file": anno_2d["anno_file"],
             "avg_anno3d_file": avg_anno_3d_file,
-            "collect_anno3d_file": collect_anno_3d_file,
             "idxs_file": idxs_file,
         }
         annotations.append(anno)
@@ -52,7 +50,6 @@ def merge_val_core(
     data_dir,
     name,
     avg_anno_3d_file,
-    collect_anno_3d_file,
     idxs_file,
     img_id,
     ann_id,
@@ -82,7 +79,6 @@ def merge_val_core(
                 "id": ann_id,
                 "pose_file": get_gt_pose_path_by_color(img_file),
                 "avg_anno3d_file": avg_anno_3d_file,
-                "collect_anno3d_file": collect_anno_3d_file,
                 "idxs_file": idxs_file,
             }
             annotations.append(anno)
@@ -125,7 +121,6 @@ def merge_(cfg, names, split):
         logger.info(f"Merging anno dir: {anno_dir}")
         anno_2d_file = osp.join(anno_dir, "anno_2d.json")
         avg_anno_3d_file = osp.join(anno_dir, "anno_3d_average.npz")
-        collect_anno_3d_file = osp.join(anno_dir, "anno_3d_collect.npz")
         idxs_file = osp.join(anno_dir, "idxs.npy")
 
         if not osp.isfile(anno_2d_file) or not osp.isfile(avg_anno_3d_file):
@@ -136,7 +131,6 @@ def merge_(cfg, names, split):
             img_id, ann_id = merge_train_core(
                 anno_2d_file,
                 avg_anno_3d_file,
-                collect_anno_3d_file,
                 idxs_file,
                 img_id,
                 ann_id,
@@ -148,7 +142,6 @@ def merge_(cfg, names, split):
                 data_dir,
                 name,
                 avg_anno_3d_file,
-                collect_anno_3d_file,
                 idxs_file,
                 img_id,
                 ann_id,

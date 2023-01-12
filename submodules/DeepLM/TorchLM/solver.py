@@ -5,8 +5,6 @@ from torch._C import device
 from .jacobian import *
 from .listvec import *
 
-# import LMCore
-# from ..build import LMCore
 import torch
 from ..build import LMCore
 import subprocess

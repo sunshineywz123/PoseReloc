@@ -296,19 +296,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
             if state == False:
                 logger.error("Coarse reconstruction failed!")
     else:
-        logger.info("Keypoint-Free SfM post refinement begin...")
-        state = extract_coarse_fine_features.extract_coarse_fine_features(
-            img_lists,
-            covis_pairs_out,
-            colmap_coarse_dir=osp.join(deep_sfm_dir, "model_coarse"),
-            # colmap_coarse_dir=osp.join(deep_sfm_dir, "model"),
-            refined_model_save_dir=osp.join(deep_sfm_dir, "model"),
-            match_out_pth=matches_out,
-            feature_out_pth=feature_out,
-            fine_match_use_ray=cfg.use_local_ray,
-            vis3d_pth=vis3d_pth,
-            verbose=cfg.verbose,
-        )
+        raise NotImplementedError
 
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     """ Filter points and average feature"""

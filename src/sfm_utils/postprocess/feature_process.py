@@ -37,19 +37,6 @@ def get_pose_path(img_path):
 
 
 def get_default_path(cfg, outputs_dir):
-    """
-    directory tree:
-
-                outputs_dir
-                    |
-            ------------------
-            |                |
-        anno_dir           deep_sfm_dir
-                             |
-                         ---------
-                         |       |
-                   database.db  model
-    """
     deep_sfm_dir = osp.join(outputs_dir, "sfm_ws")
     model_dir = osp.join(deep_sfm_dir, "model")
     anno_dir = osp.join(outputs_dir, "anno")

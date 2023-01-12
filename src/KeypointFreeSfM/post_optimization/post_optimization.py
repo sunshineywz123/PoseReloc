@@ -32,10 +32,9 @@ cfgs = {
         "extract_feature_method": "fine_match_backbone",
         "ray": {
             "slurm": False,
-            "n_workers": 4,  # 4 for onepose
+            "n_workers": 4,
             "n_cpus_per_worker": 1,
             "n_gpus_per_worker": 0.25,
-            # "n_gpus_per_worker": 1, # 0.25 for onepose
             "local_mode": False,
         },
     },

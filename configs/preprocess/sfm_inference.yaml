@@ -1,0 +1,221 @@
+# @package _global_
+
+type: sfm
+work_dir: ${hydra:runtime.cwd}
+# data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data"
+data_base_dir: "/cephfs-mvs/3dv-research/hexingyi/nips_data_release/OnePose_LowTexture"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test"
+# output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10"
+output_base_dir: "/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_release_test_covis10_pairfrompose"
+match_type: "softmax"
+enable_post_refine: True
+
+overwrite_all: True
+overwrite_coarse: False
+overwrite_fine: True
+
+use_global_ray: False
+use_local_ray: False
+debug: True
+full_img: False
+
+ray:
+  slurm: False
+  n_workers: 2
+  n_cpus_per_worker: 5
+  n_gpus_per_worker: 1
+  local_mode: False
+dataset:
+  max_num_kp3d: 15000
+  max_num_kp2d: 10000
+
+  data_dir: ${data_base_dir}
+  top_k_obj: null
+  num_seq: 1
+  ids:
+    # Val set
+    - "0601"
+    - "0602"
+    - "0603"
+    - "0604"
+    - "0605"
+    - "0606"
+    - "0607"
+    - "0608"
+    - "0609"
+    - "0610"
+    - "0611"
+    - "0612"
+    - "0613"
+    - "0614"
+    - "0615"
+    - "0616"
+    - "0617"
+    - "0618"
+    - "0619"
+    - "0620"
+    - "0621"
+
+    # Test set:
+    - '0408'
+    - '0409'
+    - '0419'
+    - '0422'
+    - '0423'
+    - '0424'
+    - '0447'
+    - '0450'
+    - '0452'
+    - '0455'
+    - '0456'
+    - '0458'
+    - '0459'
+    - '0466'
+    - '0468'
+    - '0469'
+    - '0470'
+    - '0471'
+    - '0472'
+    - '0473'
+    - '0474'
+    - '0476'
+    - '0480'
+    - '0483'
+    - '0486'
+    - '0487'
+    - '0488'
+    - '0489'
+    - '0490'
+    - '0492'
+    - '0493'
+    - '0494'
+    - '0495'
+    - '0496'
+    - '0497'
+    - '0498'
+    - '0500'
+    - '0501'
+    - '0502'
+    - '0503'
+    - '0504'
+    - '0508'
+    - '0510'
+    - '0511'
+    - '0517'
+    - '0518'
+    - '0519'
+    - '0520'
+    - '0521'
+    - '0522'
+    - '0523'
+    - '0525'
+    - '0526'
+    - '0527'
+    - '0534'
+    - '0535'
+    - '0537'
+    - '0539'
+    - '0543'
+    - '0547'
+    - '0548'
+    - '0550'
+    - '0551'
+    - '0552'
+    - '0557'
+    - '0558'
+    - '0559'
+    - '0560'
+    - '0564'
+    - '0565'
+    - '0568'
+    - '0570'
+    - '0577'
+    - '0578'
+    - '0579'
+    - '0580'
+    - '0582'
+    - '0583'
+    - '0594'
+    - '0595'
+
+    # Test set of OnePose_LowTexture
+    - '0601'
+    - '0603'
+    - '0626'
+    - '0627'
+    - '0628'
+    - '0629'
+    - '0630'
+    - '0631'
+    - '0600'
+    - '0602'
+    - '0606'
+    - '0607'
+    - '0608'
+    - '0610'
+    - '0612'
+    - '0613'
+    - '0614'
+    - '0615'
+    - '0618'
+    - '0619'
+    - '0620'
+    - '0621'
+    - '0622'
+    - '0623'
+    - '0624'
+    - '0625'
+    - '0632'
+    - '0633'
+    - '0634'
+    - '0635'
+    - '0636'
+    - '0637'
+    - '0640'
+    - '0641'
+    - '0642'
+    - '0643'
+    - '0644'
+    - '0645'
+    - '0646'
+    - '0648'
+  exception_obj_names:
+    -
+
+  outputs_dir: ${output_base_dir}
+
+network:
+  
+  detection: loftr
+  detection_model_path: weight/superpoint_v1.pth
+
+  matching: loftr
+  matching_model_path: weight/superglue_outdoor.pth
+
+sfm:
+  # gen_cov_from: 'index' # ['pose', 'index'], index for onepose dataset
+  gen_cov_from: 'pose' # ['pose', 'index'], index for onepose dataset
+  down_ratio: 5
+  gap: 3
+  covis_num: 10
+  track_length: 8
+
+post_optim:
+  coarse_recon_data:
+    feature_track_assignment_strategy: 'greedy'
+  optimizer:
+    # solver_type: 'FirstOrder'
+    solver_type: 'SecondOrder'
+    residual_mode: "geometry_error"
+    optimize_lr:
+      depth: 0.03
+
+
+post_process:
+  filter_bbox_before_filter_track_length: True
+  skip_bbox_filter: False
+
+verbose: True
+
+disable_lightning_logs: True

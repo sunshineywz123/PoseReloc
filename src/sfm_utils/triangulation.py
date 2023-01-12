@@ -255,6 +255,6 @@ def main(sfm_dir, empty_sfm_model, outputs_dir, pairs, features, matches, match_
     stats = run_triangulation(colmap_path, model, database, image_dir, empty_sfm_model, verbose=verbose)
     os.system(f'colmap model_converter --input_path {model} --output_path {outputs_dir}/model.ply --output_type PLY')
 
-@ray.remote(num_cpus=2, num_gpus=1)  # release gpu after finishing
+@ray.remote(num_cpus=2, num_gpus=1, max_calls=1)  # release gpu after finishing
 def main_ray_wrapper(*args, **kwargs):
     return main(*args, **kwargs)

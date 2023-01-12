@@ -5,8 +5,7 @@ from pathlib import Path
 import natsort
 import os
 from loguru import logger
-from vis3d.vis3d import Vis3D
-from sklearn.decomposition import PCA
+from wis3d import Wis3D as Vis3D
 
 
 def make_matching_plot_fast(
@@ -193,85 +192,6 @@ def add_pointcloud_to_vis3d(pointcloud_pth, dump_dir, save_name):
     vis3d = Vis3D(dump_dir, save_name)
     vis3d.add_point_cloud(pointcloud_pth, name="filtered_pointcloud")
 
-
-def compute_pca_features(
-    feature3D, feature2D_map, feature_rescal_factor=8, save_path=None
-):
-    """
-    feature2D_map: H*W*c
-    feature3D: N*C
-    """
-    # PCA decrease dim of input feature:
-    pca = PCA(n_components=3, svd_solver="arpack")
-
-    H, W, C = feature2D_map.shape
-    N = feature3D.shape[0]
-    assert feature3D.shape[-1] == feature2D_map.shape[-1]
-
-    feat_concated = np.concatenate(
-        [feature3D, feature2D_map.reshape(-1, C)], axis=0
-    )  # 2N * C
-    pca_feature = pca.fit_transform(feat_concated)
-
-    # Convert decreased feature to color map:
-    pca_feature = cv2.normalize(
-        pca_feature,
-        None,
-        alpha=0,
-        beta=255,
-        norm_type=cv2.NORM_MINMAX,
-        dtype=cv2.CV_8UC3,
-    )
-    feature3D_color = pca_feature[:N]
-    feature2D_map_pca = pca_feature[N:].reshape(H, W, 3)
-    img_resized = cv2.resize(
-        feature2D_map_pca,
-        (W * feature_rescal_factor, H * feature_rescal_factor),
-        interpolation=cv2.INTER_LINEAR,
-    )  # NOTE: dsize is (W, H)
-    img_colormap = img_resized
-
-    if save_path is not None:
-        cv2.imwrite(save_path, img_colormap)
-
-    # fig, axes = plt.subplots(1, 1, dpi=200)
-    # axes.imshow(img_colormap)
-    # axes.get_yaxis().set_ticks([])
-    # axes.get_xaxis().set_ticks([])
-    # plt.tight_layout(pad=0.5)
-    return feature3D_color, img_resized
-
-
-@torch.no_grad()
-def vis_pca_features(data):
-    """
-    Update:
-        data(dict):{
-        }
-    """
-    B, N, C = data['db_3D_c'].shape
-    assert B == 1
-    query_feature_map_coarse = data["q_b_c"].cpu().numpy()[0] # H*W*C
-    feature3D_coarse = data["db_3D_c"].cpu().numpy()[0]  # N*C
-    query_feature_map_coarse_atten = data["q_atten_c"].cpu().numpy()[0]  # H*W*C
-    feature3D_coarse_atten = data["db_3D_atten_c"].cpu().numpy()[0]  # N*C
-    point_coord = data["keypoints3d"].cpu().numpy()[0]  # N*3
-
-    feature3D_color_before, feature2D_color_before = compute_pca_features(
-        feature3D_coarse, query_feature_map_coarse
-    )
-
-    feature3D_color_after, feature2D_color_after = compute_pca_features(
-        feature3D_coarse_atten, query_feature_map_coarse_atten
-    )
-
-    return {
-        "feature3D_color_before": feature3D_color_before,
-        "feature2D_color_before": feature2D_color_before,
-        "feature3D_color_after": feature3D_color_after,
-        "feature2D_color_after": feature2D_color_after,
-        "point_cloud": point_coord
-    }
 
 def save_demo_image(pose_pred, K, image_path, box3d, draw_box=True, save_path=None):
     """ 

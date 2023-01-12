@@ -5,7 +5,7 @@ import numpy as np
 import natsort
 import pytorch_lightning as pl
 
-from src.NeuralSfM.loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
+from src.KeypointFreeSfM.loftr_for_sfm import LoFTR_for_OnePose_Plus, default_cfg
 from src.utils.colmap.read_write_model import read_model
 from src.utils.data_utils import get_K_crop_resize, get_image_crop_resize
 from src.utils.vis_utils import reproj
@@ -28,7 +28,6 @@ def build_2D_match_model(args):
         for k in list(state_dict.keys()):
             state_dict[k.replace("matcher.", "")] = state_dict.pop(k)
         matcher.load_state_dict(state_dict, strict=True)
-
         matcher.eval()
     else:
         raise NotImplementedError

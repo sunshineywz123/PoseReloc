@@ -26,12 +26,10 @@ class OnePosePlusInferenceDataset(Dataset):
         coarse_scale=1/8,
         n_images=None,  # Used for debug
         demo_mode=False,
-        use_dataloader=False
     ) -> None:
         super().__init__()
 
         self.demo_mode = demo_mode
-        self.use_dataloader = use_dataloader
         self.shape3d = shape3d
         self.num_leaf = num_leaf
         self.pad = pad

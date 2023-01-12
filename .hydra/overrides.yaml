@@ -1,6 +1,4 @@
-- +camera_ready=sfm_loftr_coarse_fine_val_geometric_error
-- use_local_ray=False
-- use_global_ray=False
-- ray.n_workers=7
-- dataset.top_k_obj=null
-- verbose=True
+- +camera_ready=demo
+- data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
+  demo_cam-test
+- sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam

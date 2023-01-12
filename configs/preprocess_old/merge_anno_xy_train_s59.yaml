@@ -1,0 +1,137 @@
+# @package _global_
+
+type: merge_anno
+task_name: loftr_train_geometric
+match_type: 'softmax'
+split: 'train'
+
+data_base_dir: '/cephfs-mvs/3dv-research/hexingyi/arscan_aligned/arscan_data'
+sfm_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_sfm_geometric_error'
+merge_output_dir: '/cephfs-mvs/3dv-research/hexingyi/onepose_merged'
+
+# names: 
+#     - '0410-huiyuan-box'
+#     - '0411-doveshampoo-others'
+#     - '0412-pikachubowl-others'
+#     - '0413-juliecookies-box'
+#     # - '0414-babydiapers-others'
+#     # - '0415-captaincup-others'
+#     - '0416-tongyinoodles-others'
+#     - '0417-kangshifunoodles-others'
+#     - '0418-cookies1-others'
+#     - '0419-cookies2-others'
+#     # - '0420-liuliumei-others'
+#     # - '0421-cannedfish-others'
+#     # - '0422-qvduoduo-box'
+#     # - '0423-oreo-box'
+#     # - '0424-chocbox-box'
+#     # - '0425-vitacare-others'
+#     # - '0426-prunes-others'
+#     # - '0427-raisins-others'
+#     # - '0428-carrotmeat-others'
+#     # - '0430-carrotmeat-others'
+#     # - '0436-sedge-others'
+#     # - '0437-twinings-others'
+#     # - '0443-wheatbear-others'
+#     # - '0444-weizen-others'
+#     # - '0445-pistonhead-others'
+#     # - '0404-koppla-box'
+names:
+    # Train Set
+    - '0410'
+    - '0413'
+    - '0414'
+    - '0415'
+    - '0416'
+    - '0418'
+    - '0420'
+    - '0421'
+    - '0443'
+    - '0445'
+    - '0448'
+    - '0460'
+    - '0461'
+    - '0462'
+    - '0463'
+    - '0464'
+    - '0465'
+    - '0477'
+    - '0479'
+    - '0484'
+    - '0499'
+    - '0506'
+    - '0507'
+    - '0509'
+    - '0512'
+    - '0513'
+    - '0516'
+    - '0529'
+    - '0530'
+    - '0531'
+    - '0532'
+    - '0533'
+    - '0536'
+    - '0542'
+    - '0545'
+    - '0546'
+    - '0549'
+    - '0556'
+    - '0561'
+    - '0562'
+    - '0563'
+    - '0566'
+    - '0567'
+    - '0569'
+    - '0571'
+    - '0572'
+    - '0573'
+    - '0574'
+    - '0575'
+
+    # Some hard objects:
+    # These are known good!
+    # - '0600'
+    # - '0602'
+    # - '0606'
+    # - '0607'
+    # - '0608'
+    # - '0610'
+
+    # - '0612'
+    # - '0613'
+    # - '0614'
+    # - '0615'
+    # - '0616'
+    # - '0617'
+
+    # - '0618'
+    # - '0619'
+    # - '0620'
+    # - '0621'
+    # - '0622'
+    # - '0623'
+    # - '0624'
+    # - '0625'
+
+
+# names: ${data_base_dir}
+# exception_obj_names: 
+#     -
+# top_k_obj: null
+
+
+
+network:
+    detection: loftr
+    matching: loftr
+
+datamodule:
+    data_dir: ${data_base_dir}
+    sfm_dir: ${sfm_dir}
+
+    out_path: ${merge_output_dir}/${task_name}/${split}.json
+
+
+hydra:
+    run:
+        dir: ${work_dir}

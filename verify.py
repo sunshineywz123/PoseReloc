@@ -4,12 +4,13 @@ import glob
 
 import os.path as osp
 import numpy as np
+import natsort
 
 from loguru import logger
 from pathlib import Path
 from omegaconf import DictConfig
 
-from src.sfm_utils import pairs_from_poses_hloc
+from src.sfm_utils import pairs_from_poses_hloc, pairs_exhaustive_all
 
 def align(cfg):
     data_dirs = cfg.dataset.data_dir
@@ -26,6 +27,7 @@ def align(cfg):
         for sub_dir in sub_dirs:
             seq_dir = osp.join(root_dir, sub_dir)
             img_lists += glob.glob(str(Path(seq_dir)) + '/{}/*.png'.format(img_type), recursive=True)
+        img_lists = natsort.natsorted(img_lists)[::cfg.downsample_ratio]
 
         if len(img_lists) == 0:
             logger.info(f'No PNG image in {root_dir}')
@@ -58,14 +60,21 @@ def align_core(cfg, img_lists, outputs_dir_root):
         Path(outputs_dir).mkdir(exist_ok=True, parents=True)
 
         extract_features.main(img_lists, feature_out, cfg)
-        pairs_from_poses_hloc.covis_from_pose(img_lists, covis_pairs_out, covis_num, do_ba=True)
+        if covis_num == -1:
+            logger.warning(f"Exhaustive match all images")
+            pairs_exhaustive_all.exhaustive_all_pairs(img_lists, covis_pairs_out)
+        else:
+            pairs_from_poses_hloc.covis_from_pose(img_lists, covis_pairs_out, covis_num, do_ba=True)
         match_features.main(cfg, feature_out, covis_pairs_out, matches_out, vis_match=False)
         generate_empty.generate_model(img_lists, empty_dir, do_ba=True)
         triangulation.main(deep_sfm_dir, empty_dir, outputs_dir, covis_pairs_out, feature_out,
                            matches_out, image_dir=None)
 
         global_ba.main(deep_sfm_dir, ba_dir)
-        parse_align_pose(ba_dir)
+        if cfg.parse_align_pose:
+            parse_align_pose(ba_dir)
+        else:
+            logger.warning(f"Results are not parsed to data dir!")
 
 @hydra.main(config_path='configs/', config_name='config.yaml')
 def main(cfg: DictConfig):
