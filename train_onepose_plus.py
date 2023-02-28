@@ -43,6 +43,8 @@ def train(config: DictConfig):
     # Init PyTorch Lightning model ⚡
     model: LightningModule = hydra.utils.instantiate(config["model"])
 
+    # src.datamodules.OnePosePlusDataModule
+    # src.datamodules.OnePosePlusDataModule
     # Init PyTorch Lightning datamodule ⚡
     datamodule: LightningModule = hydra.utils.instantiate(config["datamodule"])
     datamodule.setup()

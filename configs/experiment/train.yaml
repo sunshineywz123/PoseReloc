@@ -11,7 +11,7 @@ seed: 12345
 task_name: onepose_plus_train # Note: need to be same with task_name in merge anntation
 exp_name: onepose_plus
 
-merge_output_dir: 'data/merged_anno'
+merge_output_dir: 'data/datasets/merged_anno'
 
 trainer:
     _target_: pytorch_lightning.Trainer
@@ -20,10 +20,10 @@ trainer:
         - 1
         - 2
         - 3
-        - 4
-        - 5
-        - 6
-        - 7
+        # - 4
+        # - 5
+        # - 6
+        # - 7
     num_nodes: 1
     accelerator: 'ddp'
 

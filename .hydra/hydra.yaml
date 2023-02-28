@@ -9,6 +9,7 @@ hydra:
   sweeper:
     _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
     max_batch_size: null
+    params: null
   help:
     app_name: ${hydra.job.name}
     header: '${hydra.help.app_name} is powered by Hydra.
@@ -95,7 +96,7 @@ hydra:
       file:
         class: logging.FileHandler
         formatter: simple
-        filename: ${hydra.job.name}.log
+        filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
     root:
       level: INFO
       handlers:
@@ -103,20 +104,23 @@ hydra:
       - file
     disable_existing_loggers: false
   env: {}
+  mode: RUN
   searchpath: []
   callbacks: {}
   output_subdir: .hydra
   overrides:
-    hydra: []
+    hydra:
+    - hydra.mode=RUN
     task:
     - +experiment=inference_demo
-    - data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
-      demo_cam-test
-    - sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam
+    - data_base_dir=/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/demo/0302-pikaqiu-gtx-ba
+      0302-pikaqiu-gtx-ba-test 0302-pikaqiu-gtx-ba-test-1
+    - sfm_base_dir=/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/0302-pikaqiu-gtx-ba
   job:
     name: demo
-    override_dirname: +experiment=inference_demo,data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
-      demo_cam-test,sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam
+    chdir: null
+    override_dirname: +experiment=inference_demo,data_base_dir=/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/demo/0302-pikaqiu-gtx-ba
+      0302-pikaqiu-gtx-ba-test 0302-pikaqiu-gtx-ba-test-1,sfm_base_dir=/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/0302-pikaqiu-gtx-ba
     id: ???
     num: ???
     config_name: config.yaml
@@ -128,18 +132,20 @@ hydra:
         item_sep: ','
         exclude_keys: []
   runtime:
-    version: 1.1.1
-    cwd: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc
+    version: 1.3.1
+    version_base: '1.1'
+    cwd: /nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc
     config_sources:
     - path: hydra.conf
       schema: pkg
       provider: hydra
-    - path: /cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/configs
+    - path: /nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/configs
       schema: file
       provider: main
     - path: ''
       schema: structured
       provider: schema
+    output_dir: /nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc
     choices:
       experiment: inference_demo
       logger: null

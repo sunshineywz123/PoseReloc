@@ -2,7 +2,9 @@
 
 type: sfm
 work_dir: ${hydra:runtime.cwd}
-data_base_dir: "data/datasets/lowtexture_test_data"
+# data_base_dir: "data/datasets/lowtexture_test_data"
+# data_base_dir: "data/arscan_data"
+data_base_dir: "data/arscan_data"
 output_base_dir: "data/datasets/sfm_output"
 
 match_type: "softmax"
@@ -12,14 +14,14 @@ overwrite_all: True
 overwrite_coarse: True
 overwrite_fine: True
 
-use_global_ray: False
+use_global_ray: True
 use_local_ray: True
 
 ray:
   slurm: False
   n_workers: 4
   n_cpus_per_worker: 5
-  n_gpus_per_worker: 1
+  n_gpus_per_worker: 2
   local_mode: False
 
 dataset:
@@ -30,47 +32,51 @@ dataset:
   top_k_obj: null
   num_seq: 1
   ids:
+    # my
+    - '0603'
+    
     # Test set of OnePose_LowTexture
-    - '0700'
-    - '0701'
-    - '0702'
-    - '0703'
-    - '0706'
-    - '0707'
-    - '0708'
-    - '0710'
-    - '0712'
-    - '0713'
-    - '0714'
-    - '0715'
-    - '0718'
-    - '0719'
-    - '0720'
-    - '0721'
-    - '0722'
-    - '0723'
-    - '0724'
-    - '0725'
-    - '0726'
-    - '0727'
-    - '0728'
-    - '0729'
-    - '0730'
-    - '0731'
-    - '0732'
-    - '0733'
-    - '0734'
-    - '0735'
-    - '0736'
-    - '0737'
-    - '0740'
-    - '0741'
-    - '0742'
-    - '0743'
-    - '0744'
-    - '0745'
-    - '0746'
-    - '0748'
+    # - '0400'
+    # - '0700'
+    # - '0701'
+    # - '0702'
+    # - '0703'
+    # - '0706'
+    # - '0707'
+    # - '0708'
+    # - '0710'
+    # - '0712'
+    # - '0713'
+    # - '0714'
+    # - '0615'
+    # - '0718'
+    # - '0719'
+    # - '0720'
+    # - '0721'
+    # - '0722'
+    # - '0723'
+    # - '0724'
+    # - '0725'
+    # - '0726'
+    # - '0727'
+    # - '0728'
+    # - '0729'
+    # - '0730'
+    # - '0731'
+    # - '0732'
+    # - '0733'
+    # - '0734'
+    # - '0735'
+    # - '0736'
+    # - '0737'
+    # - '0740'
+    # - '0741'
+    # - '0742'
+    # - '0743'
+    # - '0744'
+    # - '0745'
+    # - '0746'
+    # - '0748'
   exception_obj_names:
     -
 

@@ -13,7 +13,7 @@ from src.utils.vis_utils import reproj
 cfgs = {
     "model": {
         "method": "LoFTR",
-        "weight_path": "weight/loftr_w9_no_cat_coarse_auc10=0.685.ckpt",
+        "weight_path": "weight/LoFTR_wsize9.ckpt",
         "seed": 666,
     },
 }
@@ -86,7 +86,7 @@ class LocalFeatureObjectDetector():
                 inliers = np.empty((0))
                 detect_results_dict[idx] = {
                     "inliers": inliers,
-                    "bbox": np.array([0, 0, query["size"][0], query["size"][1]]),
+                    "bbox": np.array([0, 0, query.shape[-1], query.shape[-2]]),
                 }
                 continue
 

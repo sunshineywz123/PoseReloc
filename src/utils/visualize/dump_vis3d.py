@@ -7,7 +7,6 @@ import numpy as np
 import os
 import os.path as osp
 from tqdm import tqdm
-from src.utils.objScanner_utils import get_refine_box, parse_K
 from src.utils.vis_utils import reproj as reproj_
 from src.utils.vis_utils import draw_3d_box
 from ..plot_utils import reproj

@@ -28,6 +28,7 @@ git submodule update --init --recursive
 # Install DeepLM
 cd submodules/DeepLM
 sh example.sh
+cp ${REPO_ROOT}/backup/deeplm_init_backup.py ${REPO_ROOT}/submodules/DeepLM
 ```
 Note that the efficient optimizer DeepLM is used in our SfM refinement phase. If you face difficulty in installation, don't worry. You can still run the code by using our first-order optimizer which is a little slower.
 
@@ -83,8 +84,8 @@ Note that we perform parallel evaluation on a single GPU with two workers by def
 ### Training
 1. Prepare ground-truth annotations. Merge annotations of training/val data:
     ```python
-    python run.py +preprocess=merge_annotation_train.yaml
-    python run.py +preprocess=merge_annotation_val.yaml
+    python merge.py +preprocess=merge_annotation_train.yaml
+    python merge.py +preprocess=merge_annotation_val.yaml
     ```
    
 2. Begin training

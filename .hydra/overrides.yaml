@@ -1,4 +1,4 @@
 - +experiment=inference_demo
-- data_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/demo_cam
-  demo_cam-test
-- sfm_base_dir=/cephfs-mvs/3dv-research/hexingyi/code/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/demo_cam
+- data_base_dir=/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/demo/0302-pikaqiu-gtx-ba
+  0302-pikaqiu-gtx-ba-test 0302-pikaqiu-gtx-ba-test-1
+- sfm_base_dir=/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/demo/sfm_model/outputs_softmax_loftr_loftr/0302-pikaqiu-gtx-ba
