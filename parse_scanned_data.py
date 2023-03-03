@@ -61,15 +61,16 @@ def get_test_default_path(data_dir):
     video_file = osp.join(data_dir, 'Frames.m4v')
 
     box_file = osp.join(data_dir, 'Box.txt')
-    if osp.exists(box_file):
-        os.remove(box_file)
+    # Fixme:why?
+    # if osp.exists(box_file):
+    #     os.remove(box_file)
 
     color_full_dir = osp.join(data_dir, 'color_full')
     Path(color_full_dir).mkdir(parents=True, exist_ok=True)
 
     pose_file = osp.join(data_dir, 'ARposes.txt')
-    if osp.exists(pose_file):
-        os.remove(pose_file)
+    # if osp.exists(pose_file):
+    #     os.remove(pose_file)
 
     orig_intrin_file = osp.join(data_dir, 'Frames.txt')
     final_intrin_file = osp.join(data_dir, 'intrinsics.txt')
@@ -293,6 +294,7 @@ if __name__ == "__main__":
             # Parse scanned test sequence
             print('=> Processing test sequence: ', seq_dir)
             data_process_test(osp.join(data_dir, seq_dir), downsample_rate=1)
+        #only test remove 
         elif '-annotate' in seq_dir:
             print('=> Processing annotate sequence: ', seq_dir)
             data_process_anno(osp.join(data_dir, seq_dir), downsample_rate=1, hw=512)

@@ -38,7 +38,16 @@ def get_pairswise_distances(pose_files):
 
 
 def covis_from_pose(img_lists, covis_pairs_out, num_matched, do_ba=False):
-    pose_lists = [path_utils.get_gt_pose_path_by_color(color_path) for color_path in img_lists]
+    # 通过相机pose选出最近的几个相机pose的图像序列
+    # pose_lists = [path_utils.get_gt_pose_path_by_color(color_path) for color_path in img_lists]
+    img_dir = img_lists[0].split('/')[-2]
+    img_type = img_lists[0][-4:]
+    if do_ba:
+        pose_lists = [img_file.replace(f'/{img_dir}/', '/poses_ba/').replace(img_type, '.txt') for img_file in img_lists]
+    else:
+        pose_lists = [img_file.replace(f'/{img_dir}/', '/poses/').replace(img_type, '.txt')
+                      for img_file in img_lists]
+
     dist, dR, seqs_ids = get_pairswise_distances(pose_lists)
 
     min_rotation = 10

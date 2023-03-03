@@ -10,6 +10,14 @@ from src.utils.colmap.read_write_model import read_model
 from src.utils.data_utils import get_K_crop_resize, get_image_crop_resize
 from src.utils.vis_utils import reproj
 
+import json
+import glob
+from PIL import Image
+
+import ipdb 
+import sys
+import os
+
 cfgs = {
     "model": {
         "method": "LoFTR",
@@ -33,7 +41,93 @@ def build_2D_match_model(args):
         raise NotImplementedError
 
     return matcher
+def get_img_full_path(img_path):
+    return img_path.replace('/color/', '/color_full/')
 
+def get_gt_pose_path(img_path):
+    return img_path.replace('/color/', '/poses/').replace('.png', '.txt')
+
+def get_intrin_path(img_path):
+    return img_path.replace('/color/', '/intrin/').replace('.png', '.txt')
+
+def get_3d_box_path(data_dir):
+    refined_box_path = osp.join(data_dir, 'RefinedBox.txt')
+    box_path = refined_box_path if osp.isfile(refined_box_path) else osp.join(data_dir, 'Box.txt')
+    return box_path
+
+def get_3d_anno(anno_3d_path):
+    """ Read 3d information about this seq """
+    with open(anno_3d_path, 'r') as f:
+        anno_3d = json.load(f)
+    
+    descriptors3d = torch.Tensor(anno_3d['descriptors3d'])[None].cuda()
+    keypoints3d = torch.Tensor(anno_3d['keypoints3d'])[None].cuda()
+    scores3d = torch.Tensor(anno_3d['scores3d'])[None].cuda()
+    anno_3d = {
+        'keypoints3d': keypoints3d,
+        'descriptors3d': descriptors3d,
+        'scores3d': scores3d
+    }
+    return anno_3d
+
+def vis_reproj(paths, img_path, pose_pred, pose_gt):
+    """ Draw 2d box reprojected by 3d box"""
+    from src.utils.objScanner_utils import parse_3d_box, parse_K
+    from src.utils.vis_utils import reproj, draw_3d_box
+
+    box_3d = np.loadtxt(paths["bbox3d_path"])
+
+    intrin_full_path = paths['intrin_full_path']
+    K_full, K_full_homo = parse_K(intrin_full_path)
+
+    image_full_path = get_img_full_path(img_path)
+    image_full = cv2.imread(image_full_path)
+
+    reproj_box_2d_gt = reproj(K_full, pose_gt, box_3d)
+    draw_3d_box(image_full, reproj_box_2d_gt, color='y')
+    if pose_pred is not None:
+        reproj_box_2d_pred = reproj(K_full, pose_pred, box_3d)
+        draw_3d_box(image_full, reproj_box_2d_pred, color='g')
+
+    return image_full
+
+
+def dump_vis3d(idx, paths, image0, image1, image_full,
+               kpts2d, kpts2d_reproj, confidence, inliers,debug):
+    """ Visualize by vis3d """
+    from vis3d import Vis3D
+    vis_dir = osp.join(paths)
+    os.makedirs(vis_dir, exist_ok=True)
+    vis3d = Vis3D(vis_dir, str(debug['id']))
+    vis3d.set_scene_id(idx)
+
+    # property for vis3d
+    reproj_distance = np.linalg.norm(kpts2d_reproj - kpts2d, axis=1)
+    inliers_bool = np.zeros((kpts2d.shape[0], 1), dtype=np.bool)
+    if inliers is not None:
+        inliers_bool[inliers] = True
+        num_inliers = len(inliers)
+    else:
+        num_inliers = 0
+    
+    vis3d.add_keypoint_correspondences(image0, image1, kpts2d, kpts2d_reproj,
+                                       metrics={
+                                           'mconf': confidence.tolist(),
+                                           'reproj_distance': reproj_distance.tolist()
+                                       },
+                                       booleans={
+                                           'inliers': inliers_bool.tolist()
+                                           
+                                       },
+                                       meta={
+                                           'num_inliers': num_inliers,
+                                           'width': image0.size[0],
+                                           'height': image0.size[1],
+                                       },
+                                       name='matches')  
+    image_full_pil = Image.fromarray(cv2.cvtColor(image_full, cv2.COLOR_BGR2RGB))
+    vis3d.add_image(image_full_pil, name='results')
+    
 class LocalFeatureObjectDetector():
     def __init__(self, sfm_ws_dir, n_ref_view=15, output_results=False, detect_save_dir=None, K_crop_save_dir=None):
         matcher = build_2D_match_model(cfgs['model']) 
@@ -72,7 +166,7 @@ class LocalFeatureObjectDetector():
         return db_imgs, db_corners_homo
 
     @torch.no_grad()
-    def match_worker(self, query):
+    def match_worker(self, query,debug):
         detect_results_dict = {}
         for idx, db_img in enumerate(self.db_imgs):
 
@@ -80,7 +174,7 @@ class LocalFeatureObjectDetector():
             self.matcher(match_data)
             mkpts0 = match_data["mkpts0_f"].cpu().numpy()
             mkpts1 = match_data["mkpts1_f"].cpu().numpy()
-
+            mconf = match_data["mconf"].cpu().numpy()
             if mkpts0.shape[0] < 6:
                 affine = None
                 inliers = np.empty((0))
@@ -88,6 +182,30 @@ class LocalFeatureObjectDetector():
                     "inliers": inliers,
                     "bbox": np.array([0, 0, query.shape[-1], query.shape[-2]]),
                 }
+                if 0:
+                    print("\nmkpts0.shape[0] < 6\n")
+                    print(mkpts0.shape[0])
+                    print("\n===============================\n")
+                    # visualize
+                    # image_full = vis_reproj(paths, query_image_path, pose_pred, pose_pred)
+
+                    image0 = db_img[0][0].cpu().numpy()
+                    image1 = query[0][0].cpu().numpy()
+                    
+                    # image_full = image0
+                    
+                    # 复制灰度图像三遍，得到一个有三个通道的图像
+                    img0_rgb = np.repeat(image0[:, :, np.newaxis], 3, axis=2)*255
+                    img1_rgb = np.repeat(image1[:, :, np.newaxis], 3, axis=2)*255
+
+                    image_full = np.uint8(img0_rgb)
+                    
+                    image0_pil = Image.fromarray(cv2.cvtColor(np.uint8(img0_rgb), cv2.COLOR_BGR2RGB))
+                    image1_pil = Image.fromarray(cv2.cvtColor(np.uint8(img1_rgb), cv2.COLOR_BGR2RGB))
+                    
+                    paths = "/nas/users/yuanweizhong/OnePose_Plus_Plus/PoseReloc/data/arscan_data/0306-nio-car/0306-nio-car-test/debug"
+                    dump_vis3d(idx, paths, image0_pil, image1_pil, image_full,
+                            mkpts0, mkpts1, mconf, inliers,debug=debug) 
                 continue
 
             # Estimate affine and warp source image:
@@ -114,10 +232,33 @@ class LocalFeatureObjectDetector():
                 "inliers": inliers,
                 "bbox": np.array([x0, y0, x1, y1]),
             }
+            
+            if 1:
+                # visualize
+                # image_full = vis_reproj(paths, query_image_path, pose_pred, pose_pred)
+
+                image0 = db_img[0][0].cpu().numpy()
+                image1 = query[0][0].cpu().numpy()
+                
+                # image_full = image0
+                
+                # 复制灰度图像三遍，得到一个有三个通道的图像
+                img0_rgb = np.repeat(image0[:, :, np.newaxis], 3, axis=2)*255
+                img1_rgb = np.repeat(image1[:, :, np.newaxis], 3, axis=2)*255
+
+                image_full = np.uint8(img1_rgb)
+                
+                image0_pil = Image.fromarray(cv2.cvtColor(np.uint8(img0_rgb), cv2.COLOR_BGR2RGB))
+                image1_pil = Image.fromarray(cv2.cvtColor(np.uint8(img1_rgb), cv2.COLOR_BGR2RGB))
+                
+                paths = debug['paths']['debug']
+                dump_vis3d(idx, paths, image0_pil, image1_pil, image_full,
+                        mkpts0, mkpts1, mconf, inliers,debug=debug) 
+            
         return detect_results_dict
 
-    def detect_by_matching(self, query):
-        detect_results_dict = self.match_worker(query)
+    def detect_by_matching(self, query, debug):
+        detect_results_dict = self.match_worker(query,debug=debug)
 
         # Sort multiple bbox candidate and use bbox with maxium inliers:
         idx_sorted = [
@@ -166,7 +307,7 @@ class LocalFeatureObjectDetector():
         if self.output_results and self.K_crop_save_dir is not None:
             np.savetxt(osp.join(self.K_crop_save_dir, osp.splitext(osp.basename(query_img_path))[0] + '.txt'), K_crop) # K_crop: 3*3
 
-    def detect(self, query_img, query_img_path, K, crop_size=512):
+    def detect(self, query_img, query_img_path, K, debug, crop_size=512):
         """
         Detect object by local feature matching and crop image.
         Input:
@@ -186,6 +327,7 @@ class LocalFeatureObjectDetector():
         # Detect bbox and crop image:
         bbox = self.detect_by_matching(
             query=query_inp,
+            debug=debug,
         )
         image_crop, K_crop = self.crop_img_by_bbox(query_img_path, bbox, K, crop_size=crop_size)
         self.save_detection(image_crop, query_img_path)

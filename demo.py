@@ -149,6 +149,11 @@ def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
     if osp.exists(vis_dir):
         os.system(f"rm -rf {vis_dir}")
     os.makedirs(vis_dir, exist_ok=True)
+    # Visualize vis debug:
+    vis_debug_dir = osp.join(data_dir, "debug")
+    if osp.exists(vis_debug_dir):
+        os.system(f"rm -rf {vis_debug_dir}")
+    os.makedirs(vis_debug_dir, exist_ok=True)
     paths = {
         "data_root": data_root,
         "data_dir": data_dir,
@@ -162,6 +167,7 @@ def get_default_paths(cfg, data_root, data_dir, sfm_model_dir):
         "det_box_vis_video_path": det_box_vis_video_path,
         "demo_video_path": demo_video_path,
         "vis_dir": vis_dir,
+        "debug": vis_debug_dir,
     }
     return img_lists, paths
 
@@ -198,10 +204,12 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
         query_image = data['query_image']
         query_image_path = data['query_image_path']
 
+        debug = {'id':id,'paths':paths}
+        # bbox, inp_crop, K_crop = local_feature_obj_detector.detect(query_image, query_image_path, K,debug=debug)
         # Detect object:
         if id == 0:
             # Detect object by 2D local feature matching for the first frame:
-            bbox, inp_crop, K_crop = local_feature_obj_detector.detect(query_image, query_image_path, K)
+            bbox, inp_crop, K_crop = local_feature_obj_detector.detect(query_image, query_image_path, K,debug=debug)
         else:
             # Use 3D bbox and previous frame's pose to yield current frame 2D bbox:
             previous_frame_pose, inliers = pred_poses[id - 1]
@@ -210,7 +218,7 @@ def inference_core(cfg, data_root, seq_dir, sfm_model_dir):
                 # Consider previous pose estimation failed, reuse local feature object detector:
                 bbox, inp_crop, K_crop = local_feature_obj_detector.detect(
                     query_image, query_image_path, K
-                )
+                ,debug=debug)
             else:
                 (
                     bbox,
@@ -275,11 +283,12 @@ def inference(cfg):
 
 @hydra.main(config_path="configs/", config_name="config.yaml")
 def main(cfg: DictConfig):
-    try:
-        globals()[cfg.type](cfg)
-    except:
-        type, value, traceback = sys.exc_info()
-        ipdb.post_mortem(traceback)
+    globals()[cfg.type](cfg)
+    # try:
+    #    globals()[cfg.type](cfg)
+    # except:
+    #    type, value, traceback = sys.exc_info()
+    #    ipdb.post_mortem(traceback)
 
 if __name__ == "__main__":
         main()

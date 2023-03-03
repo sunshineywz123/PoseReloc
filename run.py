@@ -3,6 +3,9 @@ import os
 import os.path as osp
 import natsort
 
+import torch
+from src.utils import global_ba
+    
 os.environ["TORCH_USE_RTLD_GLOBAL"] = "TRUE"  # important for DeepLM module
 import hydra
 import math
@@ -15,9 +18,9 @@ from loguru import logger
 from pathlib import Path
 from omegaconf import DictConfig
 
-
+import sys
 from src.utils.ray_utils import ProgressBar, chunks
-
+import ipdb
 def sfm(cfg):
     """ Sparse reconstruction and postprocess (on 3d points and features)"""
     data_dirs = cfg.dataset.data_dir
@@ -214,6 +217,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                     img_lists,
                     covis_pairs_out,
                     covis_num,
+                    do_ba=True,
                 )
             else:
                 raise NotImplementedError
@@ -226,7 +230,7 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
             use_ray=cfg.use_local_ray,
             verbose=cfg.verbose
         )
-        generate_empty.generate_model(img_lists, empty_dir)
+        generate_empty.generate_model(img_lists, empty_dir,do_ba=True)
 
         if cfg.use_global_ray:
             # Need to ask for gpus!
@@ -295,7 +299,14 @@ def sfm_core(cfg, img_lists, outputs_dir_root, obj_name):
                 logger.error("Coarse reconstruction failed!")
     else:
         raise NotImplementedError
-
+    torch.cuda.synchronize()
+    ba_dir = osp.join(deep_sfm_dir, 'ba_model')
+    if osp.exists(ba_dir):
+        os.system(f"rm -rf {ba_dir}")
+    os.makedirs(ba_dir, exist_ok=True)
+    global_ba.main(deep_sfm_dir, ba_dir)
+    global_ba.parse_align_pose(ba_dir)
+    
 def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
     """ Filter points and average feature"""
     from src.sfm_utils.postprocess import filter_points, feature_process, filter_tkl
@@ -396,8 +407,12 @@ def postprocess(cfg, img_lists, root_dir, sub_dirs, outputs_dir_root, obj_name):
 
 @hydra.main(config_path="configs/", config_name="config.yaml")
 def main(cfg: DictConfig):
-    globals()[cfg.type](cfg)
-
+    # globals()[cfg.type](cfg)
+    try:
+       globals()[cfg.type](cfg)
+    except:
+       type, value, traceback = sys.exc_info()
+       ipdb.post_mortem(traceback)
 
 if __name__ == "__main__":
     main()
